@@ -78,7 +78,7 @@ try {
                 <div class="card-body">
                     <div class="row align-items-end">
                         <div class="col-md-5 mb-3 mb-md-0">
-                            <label for="filter_company_id" class="form-label fw-bold">Filter Company</label>
+                            <label for="filter_company_id" class="form-label fw-bold">Filter Companyy</label>
                             <select class="form-select" id="filter_company_id">
                                 <?php if (!$user_company_id): ?>
                                     <option value="">-- All Company --</option>
