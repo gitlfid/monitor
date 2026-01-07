@@ -8,9 +8,9 @@ date_default_timezone_set('Asia/Jakarta');
 
 // 1. Konfigurasi Database
 define('DB_HOST', 'localhost');
-define('DB_USER', 'linksfie_datapoolnew');
+define('DB_USER', 'lfid_monitor');
 define('DB_PASS', 'Kumisan5'); // Password default XAMPP biasanya kosong
-define('DB_NAME', 'linksfie_datapoolnew');
+define('DB_NAME', 'lfid_monitor');
 
 // 2. Konfigurasi Kunci API Telkomsel (Sesuai Poin 6)
 // Diambil dari gambar image_3ce240.png
