@@ -1,0 +1,184 @@
+<?php
+// Mulai session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Jika sudah login, lempar ke index.php
+if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
+    header('Location: index.php');
+    exit;
+}
+
+// Load file-file yang diperlukan
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
+
+$error_message = '';
+$success_message = '';
+
+// Proses form registrasi
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'] ?? '';
+    $password = $_POST['password'] ?? '';
+    $password_confirm = $_POST['password_confirm'] ?? '';
+
+    // Validasi Sederhana
+    if (empty($username) || empty($password) || empty($password_confirm)) {
+        $error_message = 'Semua field wajib diisi!';
+    } elseif ($password !== $password_confirm) {
+        $error_message = 'Password dan Konfirmasi Password tidak cocok!';
+    } elseif (strlen($password) < 6) {
+        $error_message = 'Password minimal harus 6 karakter!';
+    } else {
+        try {
+            $db = db_connect();
+
+            // 1. Cek apakah username sudah ada
+            $stmt = $db->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            
+            if ($stmt->fetch()) {
+                $error_message = 'Username ini sudah terdaftar. Silakan pilih yang lain.';
+            } else {
+                // 2. Username tersedia, hash password (SANGAT PENTING)
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+                // 3. Masukkan ke database
+                $stmt = $db->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
+                $stmt->execute([$username, $hashed_password]);
+
+                // Redirect ke halaman login dengan pesan sukses
+                header('Location: login.php?status=registered');
+                exit;
+            }
+        } catch (PDOException $e) {
+            $error_message = 'Database error: ' . $e->getMessage();
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Registrasi Platform</title>
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+    <link rel="stylesheet" href="adminlte/plugins/fontawesome-free/css/all.min.css">
+    <link rel="stylesheet" href="adminlte/dist/css/adminlte.min.css">
+
+    <style>
+        html, body { height: 100%; }
+        body {
+            background-color: #f4f6f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            display: flex;
+            width: 100%;
+            max-width: 900px;
+            margin: 20px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .login-image-side {
+            width: 50%;
+            padding: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8f9fa;
+        }
+        .login-image-side svg {
+            width: 100%;
+            max-width: 350px;
+            height: auto;
+        }
+        .login-form-side {
+            width: 50%;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .login-form-side h2 {
+            font-weight: 700;
+            margin-bottom: 25px;
+            color: #333;
+        }
+        .form-control {
+            border-radius: 5px;
+            padding: 20px 15px;
+        }
+        .btn-login {
+            border-radius: 5px;
+            padding: 10px;
+            font-weight: 700;
+        }
+        .login-footer {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        @media (max-width: 768px) {
+            .login-container { flex-direction: column; max-width: 400px; }
+            .login-image-side { display: none; }
+            .login-form-side { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <div class="login-image-side">
+            <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#e0e0e0" d="M128 32v160h256V32z"/>
+                <path fill="#c0c0c0" d="M128 192v128h256V192z"/>
+                <path fill="#e0e0e0" d="M128 320v160h256V320z"/>
+                <path fill="#40c0e0" d="M160 352h64v96h-64z"/>
+                <path fill="#f0a000" d="M256 384h96v64h-96z"/>
+                <path fill="#40c0e0"D="M160 224h192v64H160z"/>
+                <path fill="#40e080" d="M160 64h64v96h-64z"/>
+                <path fill="#f0a000" d="M256 96h96v64h-96z"/>
+                <path fill="#c0c0c0" d="M32 32h64v448H32z"/>
+                <path fill="#e0e0e0" d="M416 32h64v448h-64z"/>
+            </svg>
+        </div>
+        
+        <div class="login-form-side">
+            <h2>Create Account</h2>
+            
+            <?php if ($error_message): ?>
+                <div class="alert alert-danger"><?php echo $error_message; ?></div>
+            <?php endif; ?>
+            
+            <form action="register.php" method="post">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Username" name="username" required>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="password" class="form-control" placeholder="Password (min. 6 karakter)" name="password" required>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="password" class="form-control" placeholder="Confirm Password" name="password_confirm" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-block btn-login mt-3">Register</button>
+            </form>
+            <div class="login-footer">
+                <p class="mb-0">Already Have An Account? <a href="login.php">Click Here</a></p>
+            </div>
+        </div>
+    </div>
+
+<script src="adminlte/plugins/jquery/jquery.min.js"></script>
+<script src="adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="adminlte/dist/js/adminlte.min.js"></script>
+</body>
+</html>
