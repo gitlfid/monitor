@@ -25,18 +25,22 @@ $chart_term = [];
 try {
     // 1. Fetch Activations
     $sql_act = "SELECT sa.*, 
-                c.company_name, p.project_name
+                c.company_name, p.project_name,
+                po.po_number as source_po_number, po.batch_name as source_po_batch
                 FROM sim_activations sa
                 LEFT JOIN companies c ON sa.company_id = c.id
                 LEFT JOIN projects p ON sa.project_id = p.id
+                LEFT JOIN sim_tracking_po po ON sa.po_provider_id = po.id
                 ORDER BY sa.activation_date DESC, sa.id DESC";
     
     // 2. Fetch Terminations
     $sql_term = "SELECT st.*, 
-                 c.company_name, p.project_name
+                 c.company_name, p.project_name,
+                 sa.activation_batch as source_activation_batch
                  FROM sim_terminations st
                  LEFT JOIN companies c ON st.company_id = c.id
                  LEFT JOIN projects p ON st.project_id = p.id
+                 LEFT JOIN sim_activations sa ON st.activation_id = sa.id
                  ORDER BY st.termination_date DESC, st.id DESC";
 
     if ($db_type === 'pdo') {
@@ -79,11 +83,8 @@ $clients = []; $projects = []; $provider_pos = [];
 try {
     if ($db_type === 'pdo') {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        // Ambil SEMUA project untuk difilter via JS
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
-        // Fetch Provider POs (Logic: Try to get the LINKED Client Company ID if available, otherwise use the PO's company_id)
-        // Kita join dengan linked client PO agar tahu PO ini milik client/project mana
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                            COALESCE(linked.company_id, st.company_id) as final_company_id, 
                            COALESCE(linked.project_id, st.project_id) as final_project_id
@@ -157,19 +158,28 @@ try {
         font-size: 1rem;
     }
 
-    /* DataTables */
+    /* DataTables & Actions */
     .dataTables_wrapper .row:last-child { padding: 15px 24px; border-top: 1px solid #f1f5f9; align-items: center; }
     .page-link { border-radius: 6px; margin: 0 3px; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; padding: 6px 12px; }
     .page-item.active .page-link { background-color: #435ebe; border-color: #435ebe; color: white; }
     .btn-action-menu { background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; transition: 0.2s; }
     .btn-action-menu:hover { background-color: #f8fafc; color: #1e293b; }
+
+    /* Timeline in Modal */
+    .timeline-item { position: relative; padding-left: 30px; margin-bottom: 20px; }
+    .timeline-item::before { content: ''; position: absolute; left: 0; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: #e2e8f0; border: 2px solid #fff; box-shadow: 0 0 0 2px #e2e8f0; }
+    .timeline-item::after { content: ''; position: absolute; left: 5px; top: 17px; bottom: -25px; width: 2px; background: #e2e8f0; }
+    .timeline-item:last-child::after { display: none; }
+    .timeline-item.active::before { background: #435ebe; box-shadow: 0 0 0 2px #c7d2fe; }
+    .timeline-date { font-size: 0.75rem; color: #64748b; font-weight: 600; margin-bottom: 4px; display: block; }
+    .timeline-content { background: #f8fafc; padding: 10px 15px; border-radius: 8px; border: 1px solid #f1f5f9; }
 </style>
 
 <div class="page-heading mb-4">
     <div class="d-flex justify-content-between align-items-center">
         <div>
             <h3 class="mb-1 text-dark fw-bold">Activation & Termination</h3>
-            <p class="text-muted mb-0 small">Manage SIM Lifecycle Status (Active / Terminated).</p>
+            <p class="text-muted mb-0 small">Manage SIM Lifecycle Status and Sync History.</p>
         </div>
     </div>
 </div>
@@ -231,7 +241,15 @@ try {
                                     <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-success-dark"><?= $active ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Inactive:</span> <span class="stat-val text-muted"><?= $inactive ?></span></div></div></td>
                                     <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['activation_batch'] ?? '') ?></span></td>
                                     <td class="col-action pe-4">
-                                        <div class="dropdown"><button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button><ul class="dropdown-menu dropdown-menu-end shadow border-0"><li><a class="dropdown-item" href="#" onclick='openModal("act", "update", <?= json_encode($row) ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li><li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li></ul></div>
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                                <li><a class="dropdown-item" href="#" onclick='openDetailModal("act", <?= json_encode($row) ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail & History</a></li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><a class="dropdown-item" href="#" onclick='openModal("act", "update", <?= json_encode($row) ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                            </ul>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -274,7 +292,15 @@ try {
                                     <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Terminated:</span> <span class="stat-val text-danger-dark"><?= $term ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-muted"><?= $unterm ?></span></div></div></td>
                                     <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['termination_batch'] ?? '') ?></span></td>
                                     <td class="col-action pe-4">
-                                        <div class="dropdown"><button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button><ul class="dropdown-menu dropdown-menu-end shadow border-0"><li><a class="dropdown-item" href="#" onclick='openModal("term", "update", <?= json_encode($row) ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li><li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li></ul></div>
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                                <li><a class="dropdown-item" href="#" onclick='openDetailModal("term", <?= json_encode($row) ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail & History</a></li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><a class="dropdown-item" href="#" onclick='openModal("term", "update", <?= json_encode($row) ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                            </ul>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -306,7 +332,6 @@ try {
                         <select id="inp_source_po" class="form-select border-success" onchange="fillFromSourcePO()">
                             <option value="">-- Select Source PO --</option>
                             <?php foreach($provider_pos as $po): 
-                                // FIX: Use Null Coalescing Operator to prevent errors on null values
                                 $poNum = htmlspecialchars($po['po_number'] ?? '-');
                                 $poBatch = htmlspecialchars($po['batch_name'] ?? '-');
                                 $poQty = number_format($po['sim_qty'] ?? 0);
@@ -378,6 +403,74 @@ try {
     </div>
 </div>
 
+<div class="modal fade" id="modalDetail" tabindex="-1">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-white border-bottom py-3">
+                <h6 class="modal-title m-0 fw-bold text-dark" id="detailTitle">Batch Details</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-4 bg-light">
+                    <div class="row g-2 text-center mb-3">
+                        <div class="col-6">
+                            <div class="bg-white p-3 rounded border">
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Batch</small>
+                                <span class="fw-bold text-dark h5" id="det_batch">-</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="bg-white p-3 rounded border">
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Total SIM</small>
+                                <span class="fw-bold text-primary h5" id="det_total">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mb-0 border-0 shadow-sm">
+                        <div class="card-body p-3">
+                            <h6 class="text-uppercase text-muted fw-bold small mb-3 border-bottom pb-2">Sync Information</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="small text-muted">Client:</span>
+                                <span class="small fw-bold text-end" id="det_client">-</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="small text-muted">Project:</span>
+                                <span class="small fw-bold text-end" id="det_project">-</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-0">
+                                <span class="small text-muted">Source Data:</span>
+                                <span class="small fw-bold text-end text-success" id="det_source">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4">
+                    <h6 class="text-uppercase text-muted fw-bold small mb-3">Timeline (Change Log)</h6>
+                    <div class="timeline-box">
+                        <div class="timeline-item active">
+                            <span class="timeline-date" id="det_date">-</span>
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold text-dark" id="det_action_title">Created / Updated</span>
+                                    <span class="badge bg-primary" id="det_main_qty">0</span>
+                                </div>
+                                <div class="mt-2 small text-muted">
+                                    Remaining: <span id="det_sub_qty" class="fw-bold">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
@@ -388,7 +481,6 @@ try {
     
     // Data for Logic
     const activationData = <?php echo json_encode($activations); ?>;
-    // Pass ALL projects to JS so we can filter them client-side
     const allProjects = <?php echo json_encode($projects); ?>;
 
     // 1. CHART
@@ -414,18 +506,15 @@ try {
         projSelect.empty().append('<option value="">-- Select Project --</option>');
 
         if (companyId) {
-            // Filter projects matching companyId
             let filteredProjects = allProjects.filter(p => p.company_id == companyId);
-            
             filteredProjects.forEach(p => {
                 let isSelected = (selectedProjectId && p.id == selectedProjectId) ? 'selected' : '';
                 projSelect.append(`<option value="${p.id}" ${isSelected}>${p.project_name}</option>`);
             });
         }
-        // If no company selected, user can't select project (clean UX)
     }
 
-    // 3. MODAL LOGIC
+    // 3. MODAL CREATE/UPDATE LOGIC
     let currentMode = ''; 
 
     function openModal(type, action, data = null) {
@@ -434,12 +523,10 @@ try {
         let headerClass = '';
         let formAction = '';
         
-        // Reset Form
+        // Reset Form & Ensure it's clean
         $('#formUniversal')[0].reset();
         $('#inp_source_act').empty().append('<option value="">-- Select Source Activation Batch --</option>');
-        $('#inp_source_po').val(''); // Reset PO Select
-        
-        // Reset Project Dropdown (Wait for company selection)
+        $('#inp_source_po').val('');
         updateProjectDropdown(null);
 
         if(type === 'act') {
@@ -447,7 +534,6 @@ try {
             headerClass = 'bg-success';
             formAction = (action === 'create') ? 'create_activation' : 'update_activation';
             
-            // Setup Inputs for Activation
             $('#inp_date').attr('name', 'activation_date');
             $('#inp_batch').attr('name', 'activation_batch');
             $('#inp_qty_1').attr('name', 'active_qty'); 
@@ -456,16 +542,15 @@ try {
             $('#lbl_qty_1').text('Active Quantity').removeClass('text-danger').addClass('text-success');
             $('#lbl_qty_2').text('Inactive Quantity').removeClass('text-success').addClass('text-muted');
             
-            $('#div_source_po').show(); // Show PO Linker
-            $('#div_source_act').hide(); // Hide Termination Linker
-            $('#inp_qty_2').prop('readonly', true); // Auto calc from total-active
+            $('#div_source_po').show();
+            $('#div_source_act').hide();
+            $('#inp_qty_2').prop('readonly', true);
         } 
         else {
             modalTitle = (action === 'create') ? 'New Termination' : 'Edit Termination';
             headerClass = 'bg-danger';
             formAction = (action === 'create') ? 'create_termination' : 'update_termination';
             
-            // Setup Inputs for Termination
             $('#inp_date').attr('name', 'termination_date');
             $('#inp_batch').attr('name', 'termination_batch');
             $('#inp_qty_1').attr('name', 'terminated_qty'); 
@@ -491,10 +576,7 @@ try {
         if (data) {
             $('#formId').val(data.id);
             $('#inp_company_id').val(data.company_id);
-            
-            // Trigger project update based on existing company_id
             updateProjectDropdown(data.company_id, data.project_id);
-            
             $('#inp_total').val(data.total_sim);
             
             let dName = (type === 'act') ? 'activation_date' : 'termination_date';
@@ -514,9 +596,52 @@ try {
         new bootstrap.Modal(document.getElementById('modalUniversal')).show();
     }
 
-    // 4. AUTO FILL & CALCULATION LOGIC
+    // 4. NEW FEATURE: DETAIL MODAL
+    function openDetailModal(type, data) {
+        let batchName, totalSim, clientName, projectName, sourceInfo, dateLog, mainQty, subQty, mainLabel, subLabel;
+
+        clientName = data.company_name || '-';
+        projectName = data.project_name || '-';
+        totalSim = parseInt(data.total_sim).toLocaleString();
+
+        if (type === 'act') {
+            batchName = data.activation_batch;
+            // Sync Logic: Show Source PO
+            sourceInfo = (data.source_po_number) ? `Linked to PO: ${data.source_po_number}` : 'Manual Input / No Source Link';
+            dateLog = data.activation_date;
+            mainQty = parseInt(data.active_qty).toLocaleString();
+            subQty = parseInt(data.inactive_qty).toLocaleString();
+            mainLabel = "Active Qty";
+            subLabel = "Inactive Qty";
+            $('#detailTitle').text("Activation Details");
+        } else {
+            batchName = data.termination_batch;
+            // Sync Logic: Show Source Activation
+            sourceInfo = (data.source_activation_batch) ? `Linked to Activation: ${data.source_activation_batch}` : 'Manual Input / No Source Link';
+            dateLog = data.termination_date;
+            mainQty = parseInt(data.terminated_qty).toLocaleString();
+            subQty = parseInt(data.unterminated_qty).toLocaleString();
+            mainLabel = "Terminated Qty";
+            subLabel = "Remaining Active";
+            $('#detailTitle').text("Termination Details");
+        }
+
+        $('#det_batch').text(batchName);
+        $('#det_total').text(totalSim);
+        $('#det_client').text(clientName);
+        $('#det_project').text(projectName);
+        $('#det_source').text(sourceInfo);
+        
+        $('#det_date').text(dateLog);
+        $('#det_action_title').text(mainLabel);
+        $('#det_main_qty').text(mainQty);
+        $('#det_sub_qty').text(subQty);
+
+        new bootstrap.Modal(document.getElementById('modalDetail')).show();
+    }
+
+    // 5. AUTO FILL & CALCULATION LOGIC
     function fillFromSourcePO() {
-        // Logic for Activation (Link to Provider PO)
         let selected = $('#inp_source_po option:selected');
         let qty = selected.data('qty');
         let batch = selected.data('batch');
@@ -526,21 +651,16 @@ try {
         if(qty) {
             $('#inp_total').val(qty);
             $('#inp_batch').val(batch);
-            
             if(comp) {
                 $('#inp_company_id').val(comp);
-                // Important: Trigger project filter because company changed
                 updateProjectDropdown(comp, proj);
             }
-            
-            // Auto fill active qty empty for user to input
             $('#inp_qty_1').val('');
-            $('#inp_qty_2').val(qty); // All inactive initially
+            $('#inp_qty_2').val(qty); 
         }
     }
 
     function fillFromSourceAct() {
-        // Logic for Termination (Link to Activation)
         let selected = $('#inp_source_act option:selected');
         let total = selected.data('total');
         let active = selected.data('active');
@@ -549,13 +669,10 @@ try {
 
         if(total) {
             $('#inp_total').val(total); 
-            
             if(comp) {
                 $('#inp_company_id').val(comp);
-                // Important: Trigger project filter
                 updateProjectDropdown(comp, proj);
             }
-
             $('#inp_qty_1').data('max-active', active); 
             $('#inp_qty_1').val(0); 
             $('#inp_qty_2').val(active); 
@@ -567,18 +684,16 @@ try {
         let qty1 = parseInt($('#inp_qty_1').val()) || 0;
 
         if(currentMode === 'act') {
-            // Activation: Total - Active = Inactive
             let inactive = total - qty1;
             $('#inp_qty_2').val(inactive < 0 ? 0 : inactive);
         } else {
-            // Termination: Initial Active - Terminated = Remaining
             let initialActive = $('#inp_qty_1').data('max-active') || total;
             let remaining = initialActive - qty1;
             $('#inp_qty_2').val(remaining < 0 ? 0 : remaining);
         }
     }
 
-    // 5. DATATABLES
+    // 6. DATATABLES
     $(document).ready(function() {
         var tableAct = $('#table-activation').DataTable({
             language: { search: '', searchPlaceholder: '' },
