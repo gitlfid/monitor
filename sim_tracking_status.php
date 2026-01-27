@@ -82,7 +82,7 @@ if ($db) {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
-        // QUERY UPDATE: Menggunakan SUM(total_sim) agar menghitung Active + Inactive sebagai "Used"
+        // QUERY: Ambil data PO beserta hitungan 'Used' (Total SIM yang sudah dikaitkan ke PO ini)
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                     COALESCE(linked.company_id, st.company_id) as final_company_id, 
                     COALESCE(linked.project_id, st.project_id) as final_project_id,
@@ -311,17 +311,21 @@ if ($db) {
                     <div class="col-12" id="div_source_po" style="display:none;">
                         <label class="form-label fw-bold small text-uppercase text-success"><i class="bi bi-link-45deg"></i> Link to Provider PO (Source)</label>
                         <select id="inp_source_po" class="form-select border-success" onchange="fillFromSourcePO()">
-                            <option value="">-- Manual Input (No Link) --</option>
+                            <option value="">-- Select Source PO --</option>
                             <?php foreach($provider_pos as $po): 
                                 $poNum = htmlspecialchars($po['po_number'] ?? '-');
                                 $poBatch = htmlspecialchars($po['batch_name'] ?? '-');
                                 $poQty = number_format($po['sim_qty'] ?? 0);
                                 $rawQty = $po['sim_qty'] ?? 0;
-                                $usedQty = $po['total_used'] ?? 0; // UPDATED: Total Allocated (Active + Inactive)
+                                $usedQty = $po['total_used'] ?? 0; 
                                 $remaining = $rawQty - $usedQty;
                                 
                                 $compId = $po['final_company_id'] ?? '';
                                 $projId = $po['final_project_id'] ?? '';
+                                
+                                // UPDATE: TAMPILKAN USED & REMAINING DI OPTION TEXT
+                                $displayUsed = number_format($usedQty);
+                                $displayRem = number_format($remaining);
                             ?>
                                 <option value="<?= $po['id'] ?>" 
                                     data-batch="<?= $poBatch ?>" 
@@ -330,7 +334,7 @@ if ($db) {
                                     data-remaining="<?= $remaining ?>"
                                     data-comp="<?= $compId ?>" 
                                     data-proj="<?= $projId ?>">
-                                    PO: <?= $poNum ?> - Batch: <?= $poBatch ?> (Qty: <?= $poQty ?>)
+                                    PO: <?= $poNum ?> - Batch: <?= $poBatch ?> (Qty: <?= $poQty ?> | Used: <?= $displayUsed ?> | Rem: <?= $displayRem ?>)
                                 </option>
                             <?php endforeach; ?>
                         </select>
