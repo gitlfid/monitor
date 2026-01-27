@@ -82,11 +82,11 @@ if ($db) {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
-        // QUERY UPDATE: Hitung jumlah yang sudah terpakai (used) di tabel sim_activations
+        // QUERY UPDATE: Menggunakan SUM(total_sim) agar menghitung Active + Inactive sebagai "Used"
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                     COALESCE(linked.company_id, st.company_id) as final_company_id, 
                     COALESCE(linked.project_id, st.project_id) as final_project_id,
-                    (SELECT COALESCE(SUM(active_qty), 0) FROM sim_activations WHERE po_provider_id = st.id) as total_used
+                    (SELECT COALESCE(SUM(total_sim), 0) FROM sim_activations WHERE po_provider_id = st.id) as total_used
                     FROM sim_tracking_po st 
                     LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
                     WHERE st.type='provider' 
@@ -317,7 +317,7 @@ if ($db) {
                                 $poBatch = htmlspecialchars($po['batch_name'] ?? '-');
                                 $poQty = number_format($po['sim_qty'] ?? 0);
                                 $rawQty = $po['sim_qty'] ?? 0;
-                                $usedQty = $po['total_used'] ?? 0; // Data dari Query baru
+                                $usedQty = $po['total_used'] ?? 0; // UPDATED: Total Allocated (Active + Inactive)
                                 $remaining = $rawQty - $usedQty;
                                 
                                 $compId = $po['final_company_id'] ?? '';
@@ -495,7 +495,7 @@ if ($db) {
 
     // --- LOGIC: CREATE / EDIT ---
     let currentMode = ''; 
-    let maxAvailable = 0; // NEW GLOBAL VARIABLE FOR STOCK LIMIT
+    let maxAvailable = 0; 
 
     function safeOpenModal(modalId, type, action, data = null) {
         currentMode = type;
@@ -640,7 +640,6 @@ if ($db) {
             $('#inp_qty_1').val(''); 
             $('#inp_qty_2').val(qty); 
             
-            // TAMPILKAN INFO STOCK DAN SIMPAN BATAS MAKSIMAL
             maxAvailable = remaining;
             $('#qty_info_text')
                 .html(`<i class="bi bi-info-circle"></i> Source: <b>${qty.toLocaleString()}</b> | Used: <b class="text-danger">${used.toLocaleString()}</b> | Available: <b class="text-success">${remaining.toLocaleString()}</b>`)
@@ -674,11 +673,12 @@ if ($db) {
             
             // 1. Validasi berdasarkan STOCK jika link PO dipilih (maxAvailable > 0)
             if (maxAvailable > 0 && inputQty > maxAvailable) {
-                inputQty = maxAvailable;
-                $('#inp_qty_1').val(maxAvailable); // Koreksi ke max available
+                // Warning logic could go here
+                // For now, allow input but cap logic if needed, or just let user override manually if they insist
             } 
+            
             // 2. Validasi standar berdasarkan total jika manual input
-            else if (inputQty > total) {
+            if (inputQty > total) {
                 inputQty = total; 
                 $('#inp_qty_1').val(total); 
             }
