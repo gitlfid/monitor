@@ -30,7 +30,6 @@ $sql_act = "SELECT sa.*,
             ORDER BY sa.activation_date DESC, sa.id DESC";
 
 // 2. Fetch Terminations
-// Kita hapus referensi ke 'activation_id' karena kolom tersebut tidak ada di database Anda.
 $sql_term = "SELECT st.*, 
              c.company_name, p.project_name
              FROM sim_terminations st
@@ -94,12 +93,15 @@ if ($db) {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
+        // FIX: TAMBAHKAN GROUP BY AGAR TIDAK DOUBLE/DUPLIKAT
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                     COALESCE(linked.company_id, st.company_id) as final_company_id, 
                     COALESCE(linked.project_id, st.project_id) as final_project_id
                     FROM sim_tracking_po st 
                     LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
-                    WHERE st.type='provider' ORDER BY st.id DESC";
+                    WHERE st.type='provider' 
+                    GROUP BY st.po_number, st.batch_name 
+                    ORDER BY st.id DESC";
         $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
         // Ignore error dropdown
@@ -628,7 +630,10 @@ if ($db) {
             $('#inp_total').val(qty);
             $('#inp_batch').val(sel.data('batch'));
             $('#inp_company_id').val(sel.data('comp'));
+            
+            // Sync: Update Project Dropdown based on company
             updateProjectDropdown(sel.data('comp'), sel.data('proj'));
+            
             $('#inp_qty_1').val(''); 
             $('#inp_qty_2').val(qty); 
         }
@@ -640,47 +645,28 @@ if ($db) {
         if(active) {
             $('#inp_total').val(sel.data('total'));
             $('#inp_company_id').val(sel.data('comp'));
+            
+            // Sync: Update Project Dropdown
             updateProjectDropdown(sel.data('comp'), sel.data('proj'));
+            
             $('#inp_qty_1').val(0); 
             $('#inp_qty_2').val(active); 
             $('#inp_qty_1').data('max', active); 
         }
     }
 
-    // --- FIXED CALCULATION LOGIC ---
     function calculateRemaining() {
-        // Ambil nilai integer, default 0 jika kosong
         let total = parseInt($('#inp_total').val()) || 0;
-        let inputQty = parseInt($('#inp_qty_1').val()) || 0;
-
+        let qty1 = parseInt($('#inp_qty_1').val()) || 0;
         if (currentMode === 'act') {
-            // MODE ACTIVATION
-            // Qty 1 = Active, Qty 2 = Inactive (Stock)
-            
-            // Validasi: Active tidak boleh lebih dari Total
-            if (inputQty > total) {
-                inputQty = total; 
-                $('#inp_qty_1').val(total); // Auto koreksi input user
-            }
-            
-            let remaining = total - inputQty;
-            $('#inp_qty_2').val(remaining); // Isi otomatis Inactive
-        } 
-        else {
-            // MODE TERMINATION
-            // Qty 1 = Terminated, Qty 2 = Remaining Active
-            
-            // Ambil stok awal (dari dropdown source jika ada)
+            // Activation: Input Active, Calc Inactive
+            if (qty1 > total) { qty1 = total; $('#inp_qty_1').val(total); }
+            $('#inp_qty_2').val(Math.max(0, total - qty1));
+        } else {
+            // Termination: Input Terminated, Calc Remaining
             let maxActive = $('#inp_qty_1').data('max') || total; 
-            
-            // Validasi: Terminated tidak boleh lebih dari yang Aktif
-            if (inputQty > maxActive) {
-                inputQty = maxActive;
-                $('#inp_qty_1').val(maxActive);
-            }
-            
-            let remaining = maxActive - inputQty;
-            $('#inp_qty_2').val(remaining);
+            if (qty1 > maxActive) { qty1 = maxActive; $('#inp_qty_1').val(maxActive); }
+            $('#inp_qty_2').val(Math.max(0, maxActive - qty1));
         }
     }
 
