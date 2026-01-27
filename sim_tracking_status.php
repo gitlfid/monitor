@@ -82,7 +82,7 @@ if ($db) {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
-        // QUERY UPDATE: Hitung total penggunaan berdasarkan alokasi (total_sim) bukan active_qty
+        // QUERY UPDATE: Hitung total penggunaan berdasarkan alokasi (total_sim)
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                     COALESCE(linked.company_id, st.company_id) as final_company_id, 
                     COALESCE(linked.project_id, st.project_id) as final_project_id,
@@ -130,11 +130,14 @@ if ($db) {
     .page-item.active .page-link { background-color: #435ebe; border-color: #435ebe; color: white; }
     .btn-action-menu { background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; transition: 0.2s; }
     .btn-action-menu:hover { background-color: #f8fafc; color: #1e293b; }
-    .timeline-box { position: relative; padding-left: 20px; border-left: 2px solid #e2e8f0; margin-left: 10px; }
-    .timeline-item { position: relative; margin-bottom: 15px; }
-    .timeline-item::before { content: ''; position: absolute; left: -26px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: #435ebe; border: 3px solid #fff; box-shadow: 0 0 0 1px #e2e8f0; }
-    .timeline-date { font-size: 0.75rem; color: #64748b; font-weight: bold; margin-bottom: 2px; display: block; }
-    .timeline-content { background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #f1f5f9; }
+    
+    /* TIMELINE STYLES (RESTORED) */
+    .timeline-box { position: relative; padding-left: 25px; border-left: 2px solid #e2e8f0; margin-left: 10px; margin-top: 15px; }
+    .timeline-item { position: relative; margin-bottom: 20px; }
+    .timeline-item:last-child { margin-bottom: 0; }
+    .timeline-item::before { content: ''; position: absolute; left: -31px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: #435ebe; border: 3px solid #fff; box-shadow: 0 0 0 1px #e2e8f0; }
+    .timeline-date { font-size: 0.8rem; color: #64748b; font-weight: bold; margin-bottom: 4px; display: block; }
+    .timeline-content { background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
 </style>
 
 <div class="page-heading mb-4">
@@ -311,7 +314,7 @@ if ($db) {
                     <div class="col-12" id="div_source_po" style="display:none;">
                         <label class="form-label fw-bold small text-uppercase text-success"><i class="bi bi-link-45deg"></i> Link to Provider PO (Source)</label>
                         <select id="inp_source_po" class="form-select border-success" onchange="fillFromSourcePO()">
-                            <option value="">-- Manual Input (No Link) --</option>
+                            <option value="">-- Select Source PO --</option>
                             <?php foreach($provider_pos as $po): 
                                 $poNum = htmlspecialchars($po['po_number'] ?? '-');
                                 $poBatch = htmlspecialchars($po['batch_name'] ?? '-');
@@ -397,43 +400,40 @@ if ($db) {
 <div class="modal fade" id="modalDetail" tabindex="-1">
     <div class="modal-dialog modal-md">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-light border-bottom py-3">
+            <div class="modal-header bg-light border-bottom py-3 d-flex justify-content-between align-items-center">
                 <h6 class="modal-title m-0 fw-bold text-dark" id="detailTitle">Batch Details</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-0">
-                <div class="p-4">
-                    <div class="row g-2 text-center mb-4">
-                        <div class="col-6"><div class="p-3 rounded border bg-white"><small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.7rem">Batch Name</small><span class="fw-bold text-dark h5" id="det_batch">-</span></div></div>
-                        <div class="col-6"><div class="p-3 rounded border bg-white"><small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.7rem">Total SIM</small><span class="fw-bold text-primary h5" id="det_total">-</span></div></div>
+            <div class="modal-body p-0 bg-light">
+                <div class="p-4 bg-white border-bottom">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <small class="text-muted text-uppercase fw-bold" style="font-size:0.7rem">BATCH NAME</small>
+                            <h4 class="mb-0 fw-bold text-dark" id="det_batch">-</h4>
+                        </div>
+                        <button id="btn_add_to_batch" class="btn btn-sm btn-outline-success fw-bold">
+                            <i class="bi bi-plus-lg me-1"></i> Add to this Batch
+                        </button>
                     </div>
                     
-                    <div class="mb-4">
-                        <h6 class="text-uppercase text-muted fw-bold small mb-2 border-bottom pb-1">Information</h6>
-                        <div class="d-flex justify-content-between mb-1"><span class="small text-muted">Client</span><span class="small fw-bold text-end" id="det_client">-</span></div>
-                        <div class="d-flex justify-content-between mb-1"><span class="small text-muted">Project</span><span class="small fw-bold text-end" id="det_project">-</span></div>
-                        <div class="d-flex justify-content-between mb-1"><span class="small text-muted">Source Link</span><span class="small fw-bold text-end text-success" id="det_source">-</span></div>
-                    </div>
-
-                    <div class="timeline-box">
-                        <div class="timeline-item">
-                            <span class="timeline-date" id="det_date">-</span>
-                            <div class="timeline-content">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="fw-bold text-dark" id="det_action_title">-</span>
-                                    <span class="badge bg-primary" id="det_main_qty">0</span>
-                                </div>
-                                <div class="mt-2 small text-muted d-flex justify-content-between">
-                                    <span id="det_sub_label">Inactive</span> 
-                                    <span id="det_sub_qty" class="fw-bold">0</span>
-                                </div>
-                            </div>
+                    <div class="row g-2">
+                        <div class="col-6"><small class="text-muted d-block">Total SIM</small><span class="fw-bold text-primary h5" id="det_total">-</span></div>
+                        <div class="col-6 text-end">
+                            <small class="text-muted d-block">Client / Project</small>
+                            <span class="fw-bold text-dark small d-block" id="det_client">-</span>
+                            <span class="text-muted small d-block" id="det_project">-</span>
                         </div>
                     </div>
                 </div>
+
+                <div class="p-4">
+                    <h6 class="text-uppercase text-muted fw-bold small mb-3">Activity History</h6>
+                    <div id="timeline_container" class="timeline-box">
+                        </div>
+                </div>
             </div>
-            <div class="modal-footer bg-light py-2">
-                <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Close</button>
+            <div class="modal-footer bg-white py-2">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -472,7 +472,7 @@ if ($db) {
         }
     }
 
-    // --- CHART LOGIC ---
+    // --- CHART LOGIC (Wrapped in try-catch to prevent JS crash) ---
     document.addEventListener('DOMContentLoaded', function () {
         try {
             if (!chartLabels || chartLabels.length === 0) {
@@ -500,9 +500,10 @@ if ($db) {
     let currentMode = ''; 
     let maxAvailable = 0; 
 
-    function safeOpenModal(modalId, type, action, data = null) {
+    // ADDED 'PRESET' ARGUMENT
+    function safeOpenModal(modalId, type, action, data = null, preset = null) {
         currentMode = type;
-        maxAvailable = 0; // Reset
+        maxAvailable = 0; 
         
         // Reset Form
         $('#formUniversal')[0].reset();
@@ -510,9 +511,9 @@ if ($db) {
         $('#inp_source_po').val(''); 
         $('#inp_date').val(new Date().toISOString().split('T')[0]);
         $('#formId').val('');
-        $('#qty_info_text').hide().text(''); // Reset Info Text
+        $('#qty_info_text').hide().text(''); 
         
-        // RESET FIELDS TO EDITABLE (Default)
+        // RESET FIELDS: Default Editable
         $('#inp_total, #inp_batch, #inp_company_id, #inp_project_id').prop('readonly', false).removeClass('bg-light').css('pointer-events', 'auto');
         
         updateProjectDropdown(null);
@@ -576,46 +577,96 @@ if ($db) {
                 $('#inp_qty_2').val(data.unterminated_qty);
             }
         }
+        else if (preset) {
+            // APPLY PRESET (FROM ADD TO BATCH)
+            $('#inp_batch').val(preset.batch);
+            $('#inp_company_id').val(preset.company_id);
+            updateProjectDropdown(preset.company_id, preset.project_id);
+            
+            // FIX: SELECT PO & TRIGGER FILL (LOCKING)
+            if (preset.po_id) {
+                $('#inp_source_po').val(preset.po_id);
+                fillFromSourcePO(); // Loads stock info & Locks fields
+            }
+        }
 
         // Open Modal Safely
         safeOpenModalInstance(modalId);
     }
 
-    // --- LOGIC: DETAIL VIEW ---
+    // --- LOGIC: DETAIL VIEW (RESTORED) ---
     function safeOpenDetail(type, data) {
-        let title, date, mainQty, subQty, mainLabel, subLabel, source;
+        let batchName = (type === 'act') ? data.activation_batch : data.termination_batch;
         
-        $('#det_batch').text(type === 'act' ? data.activation_batch : data.termination_batch);
-        $('#det_total').text(parseInt(data.total_sim).toLocaleString());
+        $('#det_batch').text(batchName);
         $('#det_client').text(data.company_name || '-');
         $('#det_project').text(data.project_name || '-');
-
+        
+        let history = [];
         if (type === 'act') {
-            title = "Activation Details";
-            date = data.activation_date;
-            mainQty = parseInt(data.active_qty).toLocaleString();
-            subQty = parseInt(data.inactive_qty).toLocaleString();
-            mainLabel = "Active Qty";
-            subLabel = "Inactive";
-            source = data.source_po_number ? 'PO: ' + data.source_po_number : 'Manual / No Link';
+            // Filter all data with same batch name
+            history = activationData.filter(item => item.activation_batch === batchName);
+            $('#detailTitle').text("Activation Batch History");
+            
+            // CONFIGURE BUTTON (RESTORED)
+            $('#btn_add_to_batch').show().off('click').on('click', function() {
+                // Close current modal via Bootstrap Instance
+                var el = document.getElementById('modalDetail');
+                var modal = bootstrap.Modal.getInstance(el);
+                if(modal) modal.hide();
+                
+                setTimeout(() => {
+                    // Pass PRESET data including PO ID
+                    safeOpenModal('modalUniversal', 'act', 'create', null, { 
+                        batch: batchName, 
+                        company_id: data.company_id, 
+                        project_id: data.project_id,
+                        po_id: data.po_provider_id // PASSING PO ID for Locking
+                    });
+                }, 300);
+            });
         } else {
-            title = "Termination Details";
-            date = data.termination_date;
-            mainQty = parseInt(data.terminated_qty).toLocaleString();
-            subQty = parseInt(data.unterminated_qty).toLocaleString();
-            mainLabel = "Terminated Qty";
-            subLabel = "Remaining Active";
-            source = data.source_activation_batch ? 'ACT Batch: ' + data.source_activation_batch : 'Manual / No Link';
+            history = [data]; 
+            $('#detailTitle').text("Termination Details");
+            $('#btn_add_to_batch').hide();
         }
 
-        $('#detailTitle').text(title);
-        $('#det_date').text(date);
-        $('#det_action_title').text(mainLabel);
-        $('#det_main_qty').text(mainQty);
-        $('#det_sub_label').text(subLabel);
-        $('#det_sub_qty').text(subQty);
-        $('#det_source').text(source);
+        // Sort Descending
+        history.sort((a, b) => new Date(b.activation_date || b.termination_date) - new Date(a.activation_date || a.termination_date));
+        
+        // Calculate Total
+        let grandTotal = history.reduce((sum, item) => sum + parseInt(item.total_sim), 0);
+        $('#det_total').text(grandTotal.toLocaleString());
 
+        // Render Timeline
+        let html = '';
+        history.forEach(item => {
+            let dateVal = (type === 'act') ? item.activation_date : item.termination_date;
+            let qty1 = (type === 'act') ? item.active_qty : item.terminated_qty;
+            let qty2 = (type === 'act') ? item.inactive_qty : item.unterminated_qty;
+            let total = item.total_sim;
+            let source = (type === 'act') ? (item.po_provider_id ? 'PO Linked' : 'Manual') : (item.activation_id ? 'Act Linked' : 'Manual');
+            let label1 = (type === 'act') ? 'Active' : 'Terminated';
+            let label2 = (type === 'act') ? 'Inactive' : 'Remaining';
+            let badgeClass = (type === 'act') ? 'bg-success' : 'bg-danger';
+
+            html += `
+            <div class="timeline-item">
+                <span class="timeline-date">${dateVal}</span>
+                <div class="timeline-content">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge ${badgeClass} me-2">${label1}: ${parseInt(qty1).toLocaleString()}</span>
+                        <span class="text-muted small">${source}</span>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted border-top pt-2">
+                        <span>Total: <b>${parseInt(total).toLocaleString()}</b></span>
+                        <span>${label2}: <b>${parseInt(qty2).toLocaleString()}</b></span>
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        $('#timeline_container').html(html);
         safeOpenModalInstance('modalDetail');
     }
 
@@ -638,7 +689,6 @@ if ($db) {
         let used = sel.data('used');
         let remaining = sel.data('remaining');
         
-        // Data for Locking
         let comp = sel.data('comp');
         let proj = sel.data('proj');
 
@@ -647,7 +697,6 @@ if ($db) {
             $('#inp_total').val(qty).prop('readonly', true).addClass('bg-light');
             $('#inp_company_id').val(comp).prop('readonly', true).addClass('bg-light').css('pointer-events', 'none'); 
             
-            // Sync project & lock it
             updateProjectDropdown(comp, proj);
             $('#inp_project_id').prop('readonly', true).addClass('bg-light').css('pointer-events', 'none');
 
@@ -659,7 +708,7 @@ if ($db) {
                 .html(`<i class="bi bi-info-circle"></i> Source: <b>${qty.toLocaleString()}</b> | Used: <b class="text-danger">${used.toLocaleString()}</b> | Available: <b class="text-success">${remaining.toLocaleString()}</b>`)
                 .show();
         } else {
-            // -- MANUAL INPUT (UNLOCK) --
+            // -- UNLOCK IF MANUAL --
             $('#inp_total').val('').prop('readonly', false).removeClass('bg-light');
             $('#inp_company_id').prop('readonly', false).removeClass('bg-light').css('pointer-events', 'auto');
             $('#inp_project_id').prop('readonly', false).removeClass('bg-light').css('pointer-events', 'auto');
@@ -687,7 +736,6 @@ if ($db) {
             $('#inp_qty_1').data('max', active); 
             $('#qty_info_text').hide(); 
         } else {
-             // Unlock if needed
              $('#inp_total').prop('readonly', false).removeClass('bg-light');
              $('#inp_company_id').prop('readonly', false).removeClass('bg-light').css('pointer-events', 'auto');
              $('#inp_project_id').prop('readonly', false).removeClass('bg-light').css('pointer-events', 'auto');
@@ -699,15 +747,11 @@ if ($db) {
         let inputQty = parseInt($('#inp_qty_1').val()) || 0;
 
         if (currentMode === 'act') {
-            // MODE ACTIVATION
-            
-            // 1. Validasi berdasarkan STOCK jika link PO dipilih (maxAvailable > 0)
+            // 1. Validate against STOCK Limit
             if (maxAvailable > 0 && inputQty > maxAvailable) {
-                // Warning logic could go here
-                // For now, allow input but cap logic if needed, or just let user override manually if they insist
+                // You can add visual warning here
             } 
-            
-            // 2. Validasi standar berdasarkan total jika manual input
+            // 2. Validate against TOTAL
             if (inputQty > total) {
                 inputQty = total; 
                 $('#inp_qty_1').val(total); 
@@ -715,16 +759,14 @@ if ($db) {
             
             let remaining = total - inputQty;
             $('#inp_qty_2').val(remaining); 
-        } 
-        else {
-            // MODE TERMINATION
+        } else {
             let maxActive = $('#inp_qty_1').data('max') || total; 
             if (inputQty > maxActive) { inputQty = maxActive; $('#inp_qty_1').val(maxActive); }
             $('#inp_qty_2').val(Math.max(0, maxActive - inputQty));
         }
     }
 
-    // --- DATATABLES ---
+    // --- DATATABLES (Only if library exists) ---
     $(document).ready(function() {
         if ($.fn.DataTable) {
             var tAct = $('#table-activation').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
