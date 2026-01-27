@@ -1,20 +1,17 @@
 <?php
 // =========================================================================
-// 1. SETUP & LOGIC PHP
+// 1. SETUP & DATABASE CONNECTION
 // =========================================================================
-ini_set('display_errors', 0); // Matikan error display agar tidak merusak JSON JS
+ini_set('display_errors', 0); // Hide warning PHP native agar JSON tidak rusak
 error_reporting(E_ALL);
-$current_page = 'sim_tracking_status.php';
 
-if (file_exists('includes/config.php')) require_once 'includes/config.php';
+require_once 'includes/config.php';
+require_once 'includes/functions.php'; // Wajib load functions untuk db_connect()
 require_once 'includes/header.php'; 
 require_once 'includes/sidebar.php'; 
 
-// Database Connection
-$db = null; $db_type = '';
-$candidates = ['pdo', 'conn', 'db', 'link', 'mysqli'];
-foreach ($candidates as $var) { if (isset($$var)) { if ($$var instanceof PDO) { $db = $$var; $db_type = 'pdo'; break; } if ($$var instanceof mysqli) { $db = $$var; $db_type = 'mysqli'; break; } } if (isset($GLOBALS[$var])) { if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } } }
-if (!$db && defined('DB_HOST')) { try { $db = new PDO("mysql:host=".DB_HOST.";dbname=".DB_NAME, DB_USER, DB_PASS); $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); $db_type = 'pdo'; } catch (Exception $e) {} }
+// GUNAKAN KONEKSI STANDAR (Sama seperti login.php)
+$db = db_connect();
 
 // --- FETCH DATA ---
 $activations = [];
@@ -22,87 +19,74 @@ $terminations = [];
 $chart_data_act = []; 
 $chart_data_term = [];
 
-try {
-    // 1. Fetch Activations
-    $sql_act = "SELECT sa.*, 
-                c.company_name, p.project_name,
-                po.po_number as source_po_number, po.batch_name as source_po_batch
-                FROM sim_activations sa
-                LEFT JOIN companies c ON sa.company_id = c.id
-                LEFT JOIN projects p ON sa.project_id = p.id
-                LEFT JOIN sim_tracking_po po ON sa.po_provider_id = po.id
-                ORDER BY sa.activation_date DESC, sa.id DESC";
-    
-    // 2. Fetch Terminations
-    $sql_term = "SELECT st.*, 
-                 c.company_name, p.project_name,
-                 sa.activation_batch as source_activation_batch
-                 FROM sim_terminations st
-                 LEFT JOIN companies c ON st.company_id = c.id
-                 LEFT JOIN projects p ON st.project_id = p.id
-                 LEFT JOIN sim_activations sa ON st.activation_id = sa.id
-                 ORDER BY st.termination_date DESC, st.id DESC";
+// 1. Fetch Activations
+$sql_act = "SELECT sa.*, 
+            c.company_name, p.project_name,
+            po.po_number as source_po_number, po.batch_name as source_po_batch
+            FROM sim_activations sa
+            LEFT JOIN companies c ON sa.company_id = c.id
+            LEFT JOIN projects p ON sa.project_id = p.id
+            LEFT JOIN sim_tracking_po po ON sa.po_provider_id = po.id
+            ORDER BY sa.activation_date DESC, sa.id DESC";
 
-    if ($db_type === 'pdo') {
-        $stmtA = $db->query($sql_act); if($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
-        $stmtT = $db->query($sql_term); if($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $r1 = mysqli_query($db, $sql_act); if($r1) while($row = mysqli_fetch_assoc($r1)) $activations[] = $row;
-        $r2 = mysqli_query($db, $sql_term); if($r2) while($row = mysqli_fetch_assoc($r2)) $terminations[] = $row;
-    }
+// 2. Fetch Terminations
+$sql_term = "SELECT st.*, 
+             c.company_name, p.project_name,
+             sa.activation_batch as source_activation_batch
+             FROM sim_terminations st
+             LEFT JOIN companies c ON st.company_id = c.id
+             LEFT JOIN projects p ON st.project_id = p.id
+             LEFT JOIN sim_activations sa ON st.activation_id = sa.id
+             ORDER BY st.termination_date DESC, st.id DESC";
 
-    // --- CHART LOGIC (ALL TIME) ---
-    foreach ($activations as $row) {
-        $d = date('Y-m-d', strtotime($row['activation_date']));
-        if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
-        $chart_data_act[$d] += (int)$row['active_qty'];
-    }
-    foreach ($terminations as $row) {
-        $d = date('Y-m-d', strtotime($row['termination_date']));
-        if(!isset($chart_data_term[$d])) $chart_data_term[$d] = 0;
-        $chart_data_term[$d] += (int)$row['terminated_qty'];
-    }
+// Eksekusi Query (Tanpa Try-Catch agar data asli keluar)
+if ($db) {
+    $stmtA = $db->query($sql_act);
+    if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
 
-    $all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term)));
-    sort($all_dates); // Urutkan tanggal
+    $stmtT = $db->query($sql_term);
+    if ($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+}
 
-    $js_labels = [];
-    $js_series_act = [];
-    $js_series_term = [];
-    
-    foreach ($all_dates as $dateKey) {
-        $js_labels[] = date('d M Y', strtotime($dateKey));
-        $js_series_act[] = isset($chart_data_act[$dateKey]) ? $chart_data_act[$dateKey] : 0;
-        $js_series_term[] = isset($chart_data_term[$dateKey]) ? $chart_data_term[$dateKey] : 0;
-    }
+// --- CHART LOGIC (ALL TIME) ---
+foreach ($activations as $row) {
+    $d = date('Y-m-d', strtotime($row['activation_date']));
+    if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
+    $chart_data_act[$d] += (int)$row['active_qty'];
+}
+foreach ($terminations as $row) {
+    $d = date('Y-m-d', strtotime($row['termination_date']));
+    if(!isset($chart_data_term[$d])) $chart_data_term[$d] = 0;
+    $chart_data_term[$d] += (int)$row['terminated_qty'];
+}
 
-} catch (Exception $e) {}
+// Gabungkan Tanggal & Urutkan
+$all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term)));
+sort($all_dates); 
 
-// DROPDOWN DATA
+$js_labels = [];
+$js_series_act = [];
+$js_series_term = [];
+
+foreach ($all_dates as $dateKey) {
+    $js_labels[] = date('d M Y', strtotime($dateKey));
+    $js_series_act[] = isset($chart_data_act[$dateKey]) ? $chart_data_act[$dateKey] : 0;
+    $js_series_term[] = isset($chart_data_term[$dateKey]) ? $chart_data_term[$dateKey] : 0;
+}
+
+// DROPDOWN DATA (CLIENTS & PROJECTS)
 $clients = []; $projects = []; $provider_pos = [];
-try {
-    if ($db_type === 'pdo') {
-        $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
-                           COALESCE(linked.company_id, st.company_id) as final_company_id, 
-                           COALESCE(linked.project_id, st.project_id) as final_project_id
-                    FROM sim_tracking_po st 
-                    LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
-                    WHERE st.type='provider' ORDER BY st.id DESC";
-        $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $r1 = mysqli_query($db, "SELECT id, company_name FROM companies ORDER BY company_name ASC"); if($r1) while($x=mysqli_fetch_assoc($r1)) $clients[]=$x;
-        $r2 = mysqli_query($db, "SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC"); if($r2) while($x=mysqli_fetch_assoc($r2)) $projects[]=$x;
-        $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
-                           COALESCE(linked.company_id, st.company_id) as final_company_id, 
-                           COALESCE(linked.project_id, st.project_id) as final_project_id
-                    FROM sim_tracking_po st 
-                    LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
-                    WHERE st.type='provider' ORDER BY st.id DESC";
-        $r3 = mysqli_query($db, $sql_pos); if($r3) while($x=mysqli_fetch_assoc($r3)) $provider_pos[]=$x;
-    }
-} catch (Exception $e) {}
+if ($db) {
+    $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
+                COALESCE(linked.company_id, st.company_id) as final_company_id, 
+                COALESCE(linked.project_id, st.project_id) as final_project_id
+                FROM sim_tracking_po st 
+                LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
+                WHERE st.type='provider' ORDER BY st.id DESC";
+    $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
+}
 ?>
 
 <style>
@@ -196,32 +180,36 @@ try {
                         <table class="table-custom" id="table-activation">
                             <thead><tr><th class="col-date ps-4">Date</th><th class="col-info">Company / Project</th><th>Source Info</th><th class="col-stats">Status (Calc)</th><th class="col-batch">Batch</th><th class="col-action pe-4">Action</th></tr></thead>
                             <tbody>
-                                <?php foreach ($activations as $row): 
-                                    $date = date('d M Y', strtotime($row['activation_date']));
-                                    $total = number_format($row['total_sim']);
-                                    $active = number_format($row['active_qty']);
-                                    $inactive = number_format($row['inactive_qty']);
-                                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
-                                ?>
-                                <tr>
-                                    <td class="col-date ps-4 text-secondary fw-bold"><?= $date ?></td>
-                                    <td><div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div><div class="small text-muted text-uppercase"><?= htmlspecialchars($row['project_name'] ?? '-') ?></div></td>
-                                    <td><div class="small text-muted text-uppercase"><?php if($row['po_provider_id']): ?>Src: PO #<?= $row['source_po_number'] ?? $row['po_provider_id'] ?><?php else: ?>Manual Input<?php endif; ?></div></td>
-                                    <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-success-dark"><?= $active ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Inactive:</span> <span class="stat-val text-muted"><?= $inactive ?></span></div></div></td>
-                                    <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['activation_batch'] ?? '') ?></span></td>
-                                    <td class="col-action pe-4">
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-                                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenDetail("act", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenModal("modalUniversal", "act", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
-                                                <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
-                                            </ul>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
+                                <?php if(empty($activations)): ?>
+                                    <tr><td colspan="6" class="text-center py-4 text-muted">No activation data found.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($activations as $row): 
+                                        $date = date('d M Y', strtotime($row['activation_date']));
+                                        $total = number_format($row['total_sim']);
+                                        $active = number_format($row['active_qty']);
+                                        $inactive = number_format($row['inactive_qty']);
+                                        $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                                    ?>
+                                    <tr>
+                                        <td class="col-date ps-4 text-secondary fw-bold"><?= $date ?></td>
+                                        <td><div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div><div class="small text-muted text-uppercase"><?= htmlspecialchars($row['project_name'] ?? '-') ?></div></td>
+                                        <td><div class="small text-muted text-uppercase"><?php if($row['po_provider_id']): ?>Src: PO #<?= $row['source_po_number'] ?? $row['po_provider_id'] ?><?php else: ?>Manual Input<?php endif; ?></div></td>
+                                        <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-success-dark"><?= $active ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Inactive:</span> <span class="stat-val text-muted"><?= $inactive ?></span></div></div></td>
+                                        <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['activation_batch'] ?? '') ?></span></td>
+                                        <td class="col-action pe-4">
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenDetail("act", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenModal("modalUniversal", "act", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                    <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -250,32 +238,36 @@ try {
                         <table class="table-custom" id="table-termination">
                             <thead><tr><th class="col-date ps-4">Date</th><th class="col-info">Company / Project</th><th>Source Info</th><th class="col-stats">Status (Calc)</th><th class="col-batch">Batch</th><th class="col-action pe-4">Action</th></tr></thead>
                             <tbody>
-                                <?php foreach ($terminations as $row): 
-                                    $date = date('d M Y', strtotime($row['termination_date']));
-                                    $total = number_format($row['total_sim']);
-                                    $term = number_format($row['terminated_qty']);
-                                    $unterm = number_format($row['unterminated_qty']);
-                                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
-                                ?>
-                                <tr>
-                                    <td class="col-date ps-4 text-secondary fw-bold"><?= $date ?></td>
-                                    <td><div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div><div class="small text-muted text-uppercase"><?= htmlspecialchars($row['project_name'] ?? '-') ?></div></td>
-                                    <td><div class="small text-muted text-uppercase"><?php if($row['activation_id']): ?>Src: ACT #<?= $row['source_activation_batch'] ?? $row['activation_id'] ?><?php else: ?>Manual Input<?php endif; ?></div></td>
-                                    <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Terminated:</span> <span class="stat-val text-danger-dark"><?= $term ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-muted"><?= $unterm ?></span></div></div></td>
-                                    <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['termination_batch'] ?? '') ?></span></td>
-                                    <td class="col-action pe-4">
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-                                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenDetail("term", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenModal("modalUniversal", "term", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
-                                                <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
-                                            </ul>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
+                                <?php if(empty($terminations)): ?>
+                                    <tr><td colspan="6" class="text-center py-4 text-muted">No termination data found.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($terminations as $row): 
+                                        $date = date('d M Y', strtotime($row['termination_date']));
+                                        $total = number_format($row['total_sim']);
+                                        $term = number_format($row['terminated_qty']);
+                                        $unterm = number_format($row['unterminated_qty']);
+                                        $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                                    ?>
+                                    <tr>
+                                        <td class="col-date ps-4 text-secondary fw-bold"><?= $date ?></td>
+                                        <td><div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div><div class="small text-muted text-uppercase"><?= htmlspecialchars($row['project_name'] ?? '-') ?></div></td>
+                                        <td><div class="small text-muted text-uppercase"><?php if($row['activation_id']): ?>Src: ACT #<?= $row['source_activation_batch'] ?? $row['activation_id'] ?><?php else: ?>Manual Input<?php endif; ?></div></td>
+                                        <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Terminated:</span> <span class="stat-val text-danger-dark"><?= $term ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-muted"><?= $unterm ?></span></div></div></td>
+                                        <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['termination_batch'] ?? '') ?></span></td>
+                                        <td class="col-action pe-4">
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenDetail("term", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenModal("modalUniversal", "term", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                    <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
