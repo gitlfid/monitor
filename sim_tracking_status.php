@@ -29,7 +29,7 @@ $sql_act = "SELECT sa.*,
             LEFT JOIN sim_tracking_po po ON sa.po_provider_id = po.id
             ORDER BY sa.activation_date DESC, sa.id DESC";
 
-// 2. Fetch Terminations (FIXED: MENGHAPUS JOIN KE AKTIVASI YANG MENYEBABKAN ERROR)
+// 2. Fetch Terminations
 // Kita hapus referensi ke 'activation_id' karena kolom tersebut tidak ada di database Anda.
 $sql_term = "SELECT st.*, 
              c.company_name, p.project_name
@@ -44,7 +44,7 @@ if ($db) {
         $stmtA = $db->query($sql_act);
         if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
-        // Fallback jika query aktivasi juga bermasalah, ambil raw data saja
+        // Fallback jika query aktivasi bermasalah
         $fallbackAct = "SELECT * FROM sim_activations ORDER BY id DESC";
         $stmtA = $db->query($fallbackAct);
         if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
@@ -94,7 +94,6 @@ if ($db) {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
-        // Cek dulu apakah tabel sim_tracking_po ada
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                     COALESCE(linked.company_id, st.company_id) as final_company_id, 
                     COALESCE(linked.project_id, st.project_id) as final_project_id
@@ -103,7 +102,7 @@ if ($db) {
                     WHERE st.type='provider' ORDER BY st.id DESC";
         $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
-        // Ignore error dropdown jika tabel belum siap
+        // Ignore error dropdown
     }
 }
 ?>
@@ -209,7 +208,6 @@ if ($db) {
                                         $inactive = number_format($row['inactive_qty']);
                                         $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                                         
-                                        // Safe check for source info columns
                                         $sourceInfo = "Manual Input";
                                         if (isset($row['po_provider_id']) && $row['po_provider_id']) {
                                             $sourceInfo = "Src: PO #" . ($row['source_po_number'] ?? $row['po_provider_id']);
@@ -273,7 +271,6 @@ if ($db) {
                                         $unterm = number_format($row['unterminated_qty']);
                                         $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
 
-                                        // Safe Source Info (Avoid 'activation_id' error)
                                         $sourceInfo = "Manual Input";
                                         if (isset($row['activation_id']) && $row['activation_id']) {
                                             $sourceInfo = "Src: ACT #" . ($row['source_activation_batch'] ?? $row['activation_id']);
@@ -373,7 +370,7 @@ if ($db) {
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold small text-uppercase">Total SIM</label>
-                        <input type="number" name="total_sim" id="inp_total" class="form-control" required>
+                        <input type="number" name="total_sim" id="inp_total" class="form-control" required oninput="calculateRemaining()">
                     </div>
 
                     <div class="col-md-6">
@@ -650,14 +647,40 @@ if ($db) {
         }
     }
 
+    // --- FIXED CALCULATION LOGIC ---
     function calculateRemaining() {
+        // Ambil nilai integer, default 0 jika kosong
         let total = parseInt($('#inp_total').val()) || 0;
-        let qty1 = parseInt($('#inp_qty_1').val()) || 0;
+        let inputQty = parseInt($('#inp_qty_1').val()) || 0;
+
         if (currentMode === 'act') {
-            $('#inp_qty_2').val(Math.max(0, total - qty1));
-        } else {
+            // MODE ACTIVATION
+            // Qty 1 = Active, Qty 2 = Inactive (Stock)
+            
+            // Validasi: Active tidak boleh lebih dari Total
+            if (inputQty > total) {
+                inputQty = total; 
+                $('#inp_qty_1').val(total); // Auto koreksi input user
+            }
+            
+            let remaining = total - inputQty;
+            $('#inp_qty_2').val(remaining); // Isi otomatis Inactive
+        } 
+        else {
+            // MODE TERMINATION
+            // Qty 1 = Terminated, Qty 2 = Remaining Active
+            
+            // Ambil stok awal (dari dropdown source jika ada)
             let maxActive = $('#inp_qty_1').data('max') || total; 
-            $('#inp_qty_2').val(Math.max(0, maxActive - qty1));
+            
+            // Validasi: Terminated tidak boleh lebih dari yang Aktif
+            if (inputQty > maxActive) {
+                inputQty = maxActive;
+                $('#inp_qty_1').val(maxActive);
+            }
+            
+            let remaining = maxActive - inputQty;
+            $('#inp_qty_2').val(remaining);
         }
     }
 
@@ -676,4 +699,3 @@ if ($db) {
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
-}
