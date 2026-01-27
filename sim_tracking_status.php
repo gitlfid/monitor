@@ -2,7 +2,7 @@
 // =========================================================================
 // 1. SETUP & DATABASE CONNECTION
 // =========================================================================
-ini_set('display_errors', 0); // Matikan error display agar UI tidak berantakan
+ini_set('display_errors', 0); 
 error_reporting(E_ALL);
 
 require_once 'includes/config.php';
@@ -19,7 +19,7 @@ $terminations = [];
 $chart_data_act = []; 
 $chart_data_term = [];
 
-// 1. Fetch Activations (Cek apakah kolom po_provider_id ada atau tidak, kita gunakan try-catch safe query)
+// 1. Fetch Activations 
 $sql_act = "SELECT sa.*, 
             c.company_name, p.project_name,
             po.po_number as source_po_number, po.batch_name as source_po_batch
@@ -42,25 +42,15 @@ if ($db) {
     try {
         $stmtA = $db->query($sql_act);
         if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        // Fallback jika query aktivasi bermasalah
-        $fallbackAct = "SELECT * FROM sim_activations ORDER BY id DESC";
-        $stmtA = $db->query($fallbackAct);
-        if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
-    }
+    } catch (Exception $e) {}
 
     try {
         $stmtT = $db->query($sql_term);
         if ($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        // Fallback
-        $fallbackTerm = "SELECT * FROM sim_terminations ORDER BY id DESC";
-        $stmtT = $db->query($fallbackTerm);
-        if ($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
-    }
+    } catch (Exception $e) {}
 }
 
-// --- CHART LOGIC (ALL TIME) ---
+// --- CHART LOGIC ---
 foreach ($activations as $row) {
     $d = date('Y-m-d', strtotime($row['activation_date']));
     if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -72,7 +62,6 @@ foreach ($terminations as $row) {
     $chart_data_term[$d] += (int)$row['terminated_qty'];
 }
 
-// Gabungkan Tanggal & Urutkan
 $all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term)));
 sort($all_dates); 
 
@@ -86,26 +75,25 @@ foreach ($all_dates as $dateKey) {
     $js_series_term[] = isset($chart_data_term[$dateKey]) ? $chart_data_term[$dateKey] : 0;
 }
 
-// DROPDOWN DATA (CLIENTS & PROJECTS)
+// DROPDOWN DATA (CLIENTS & PROJECTS & POS)
 $clients = []; $projects = []; $provider_pos = [];
 if ($db) {
     try {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         
-        // FIX: TAMBAHKAN GROUP BY AGAR TIDAK DOUBLE/DUPLIKAT
+        // QUERY UPDATE: Hitung jumlah yang sudah terpakai (used) di tabel sim_activations
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                     COALESCE(linked.company_id, st.company_id) as final_company_id, 
-                    COALESCE(linked.project_id, st.project_id) as final_project_id
+                    COALESCE(linked.project_id, st.project_id) as final_project_id,
+                    (SELECT COALESCE(SUM(active_qty), 0) FROM sim_activations WHERE po_provider_id = st.id) as total_used
                     FROM sim_tracking_po st 
                     LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
                     WHERE st.type='provider' 
-                    GROUP BY st.po_number, st.batch_name 
+                    GROUP BY st.id, st.po_number, st.batch_name 
                     ORDER BY st.id DESC";
         $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        // Ignore error dropdown
-    }
+    } catch (Exception $e) {}
 }
 ?>
 
@@ -329,10 +317,19 @@ if ($db) {
                                 $poBatch = htmlspecialchars($po['batch_name'] ?? '-');
                                 $poQty = number_format($po['sim_qty'] ?? 0);
                                 $rawQty = $po['sim_qty'] ?? 0;
+                                $usedQty = $po['total_used'] ?? 0; // Data dari Query baru
+                                $remaining = $rawQty - $usedQty;
+                                
                                 $compId = $po['final_company_id'] ?? '';
                                 $projId = $po['final_project_id'] ?? '';
                             ?>
-                                <option value="<?= $po['id'] ?>" data-batch="<?= $poBatch ?>" data-qty="<?= $rawQty ?>" data-comp="<?= $compId ?>" data-proj="<?= $projId ?>">
+                                <option value="<?= $po['id'] ?>" 
+                                    data-batch="<?= $poBatch ?>" 
+                                    data-qty="<?= $rawQty ?>" 
+                                    data-used="<?= $usedQty ?>" 
+                                    data-remaining="<?= $remaining ?>"
+                                    data-comp="<?= $compId ?>" 
+                                    data-proj="<?= $projId ?>">
                                     PO: <?= $poNum ?> - Batch: <?= $poBatch ?> (Qty: <?= $poQty ?>)
                                 </option>
                             <?php endforeach; ?>
@@ -378,6 +375,7 @@ if ($db) {
                     <div class="col-md-6">
                         <label class="form-label fw-bold small text-uppercase text-success" id="lbl_qty_1">Active Qty</label>
                         <input type="number" name="qty_1" id="inp_qty_1" class="form-control" required oninput="calculateRemaining()">
+                        <div id="qty_info_text" class="form-text text-muted small mt-1" style="display:none;"></div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-bold small text-uppercase text-danger" id="lbl_qty_2">Inactive Qty</label>
@@ -471,7 +469,7 @@ if ($db) {
         }
     }
 
-    // --- CHART LOGIC (Wrapped in try-catch to prevent JS crash) ---
+    // --- CHART LOGIC ---
     document.addEventListener('DOMContentLoaded', function () {
         try {
             if (!chartLabels || chartLabels.length === 0) {
@@ -497,8 +495,11 @@ if ($db) {
 
     // --- LOGIC: CREATE / EDIT ---
     let currentMode = ''; 
+    let maxAvailable = 0; // NEW GLOBAL VARIABLE FOR STOCK LIMIT
+
     function safeOpenModal(modalId, type, action, data = null) {
         currentMode = type;
+        maxAvailable = 0; // Reset
         
         // Reset Form
         $('#formUniversal')[0].reset();
@@ -506,6 +507,7 @@ if ($db) {
         $('#inp_source_po').val(''); 
         $('#inp_date').val(new Date().toISOString().split('T')[0]);
         $('#formId').val('');
+        $('#qty_info_text').hide().text(''); // Reset Info Text
         updateProjectDropdown(null);
 
         // UI Configuration
@@ -626,16 +628,26 @@ if ($db) {
     function fillFromSourcePO() {
         let sel = $('#inp_source_po option:selected');
         let qty = sel.data('qty');
+        let used = sel.data('used');
+        let remaining = sel.data('remaining');
+
         if(qty) {
             $('#inp_total').val(qty);
             $('#inp_batch').val(sel.data('batch'));
             $('#inp_company_id').val(sel.data('comp'));
-            
-            // Sync: Update Project Dropdown based on company
             updateProjectDropdown(sel.data('comp'), sel.data('proj'));
             
             $('#inp_qty_1').val(''); 
             $('#inp_qty_2').val(qty); 
+            
+            // TAMPILKAN INFO STOCK DAN SIMPAN BATAS MAKSIMAL
+            maxAvailable = remaining;
+            $('#qty_info_text')
+                .html(`<i class="bi bi-info-circle"></i> Source: <b>${qty.toLocaleString()}</b> | Used: <b class="text-danger">${used.toLocaleString()}</b> | Available: <b class="text-success">${remaining.toLocaleString()}</b>`)
+                .show();
+        } else {
+            $('#qty_info_text').hide();
+            maxAvailable = 0;
         }
     }
 
@@ -645,32 +657,44 @@ if ($db) {
         if(active) {
             $('#inp_total').val(sel.data('total'));
             $('#inp_company_id').val(sel.data('comp'));
-            
-            // Sync: Update Project Dropdown
             updateProjectDropdown(sel.data('comp'), sel.data('proj'));
-            
             $('#inp_qty_1').val(0); 
             $('#inp_qty_2').val(active); 
             $('#inp_qty_1').data('max', active); 
+            $('#qty_info_text').hide(); // Hide info text for termination mode
         }
     }
 
     function calculateRemaining() {
         let total = parseInt($('#inp_total').val()) || 0;
-        let qty1 = parseInt($('#inp_qty_1').val()) || 0;
+        let inputQty = parseInt($('#inp_qty_1').val()) || 0;
+
         if (currentMode === 'act') {
-            // Activation: Input Active, Calc Inactive
-            if (qty1 > total) { qty1 = total; $('#inp_qty_1').val(total); }
-            $('#inp_qty_2').val(Math.max(0, total - qty1));
-        } else {
-            // Termination: Input Terminated, Calc Remaining
+            // MODE ACTIVATION
+            
+            // 1. Validasi berdasarkan STOCK jika link PO dipilih (maxAvailable > 0)
+            if (maxAvailable > 0 && inputQty > maxAvailable) {
+                inputQty = maxAvailable;
+                $('#inp_qty_1').val(maxAvailable); // Koreksi ke max available
+            } 
+            // 2. Validasi standar berdasarkan total jika manual input
+            else if (inputQty > total) {
+                inputQty = total; 
+                $('#inp_qty_1').val(total); 
+            }
+            
+            let remaining = total - inputQty;
+            $('#inp_qty_2').val(remaining); 
+        } 
+        else {
+            // MODE TERMINATION
             let maxActive = $('#inp_qty_1').data('max') || total; 
-            if (qty1 > maxActive) { qty1 = maxActive; $('#inp_qty_1').val(maxActive); }
-            $('#inp_qty_2').val(Math.max(0, maxActive - qty1));
+            if (inputQty > maxActive) { inputQty = maxActive; $('#inp_qty_1').val(maxActive); }
+            $('#inp_qty_2').val(Math.max(0, maxActive - inputQty));
         }
     }
 
-    // --- DATATABLES (Only if library exists) ---
+    // --- DATATABLES ---
     $(document).ready(function() {
         if ($.fn.DataTable) {
             var tAct = $('#table-activation').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
