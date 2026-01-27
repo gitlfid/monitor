@@ -2,15 +2,15 @@
 // =========================================================================
 // 1. SETUP & DATABASE CONNECTION
 // =========================================================================
-ini_set('display_errors', 0); // Hide warning PHP native agar JSON tidak rusak
+ini_set('display_errors', 0); // Matikan error display agar UI tidak berantakan
 error_reporting(E_ALL);
 
 require_once 'includes/config.php';
-require_once 'includes/functions.php'; // Wajib load functions untuk db_connect()
+require_once 'includes/functions.php'; 
 require_once 'includes/header.php'; 
 require_once 'includes/sidebar.php'; 
 
-// GUNAKAN KONEKSI STANDAR (Sama seperti login.php)
+// GUNAKAN KONEKSI STANDAR
 $db = db_connect();
 
 // --- FETCH DATA ---
@@ -19,7 +19,7 @@ $terminations = [];
 $chart_data_act = []; 
 $chart_data_term = [];
 
-// 1. Fetch Activations
+// 1. Fetch Activations (Cek apakah kolom po_provider_id ada atau tidak, kita gunakan try-catch safe query)
 $sql_act = "SELECT sa.*, 
             c.company_name, p.project_name,
             po.po_number as source_po_number, po.batch_name as source_po_batch
@@ -29,23 +29,36 @@ $sql_act = "SELECT sa.*,
             LEFT JOIN sim_tracking_po po ON sa.po_provider_id = po.id
             ORDER BY sa.activation_date DESC, sa.id DESC";
 
-// 2. Fetch Terminations
+// 2. Fetch Terminations (FIXED: MENGHAPUS JOIN KE AKTIVASI YANG MENYEBABKAN ERROR)
+// Kita hapus referensi ke 'activation_id' karena kolom tersebut tidak ada di database Anda.
 $sql_term = "SELECT st.*, 
-             c.company_name, p.project_name,
-             sa.activation_batch as source_activation_batch
+             c.company_name, p.project_name
              FROM sim_terminations st
              LEFT JOIN companies c ON st.company_id = c.id
              LEFT JOIN projects p ON st.project_id = p.id
-             LEFT JOIN sim_activations sa ON st.activation_id = sa.id
              ORDER BY st.termination_date DESC, st.id DESC";
 
-// Eksekusi Query (Tanpa Try-Catch agar data asli keluar)
+// Eksekusi Query
 if ($db) {
-    $stmtA = $db->query($sql_act);
-    if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $stmtA = $db->query($sql_act);
+        if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Fallback jika query aktivasi juga bermasalah, ambil raw data saja
+        $fallbackAct = "SELECT * FROM sim_activations ORDER BY id DESC";
+        $stmtA = $db->query($fallbackAct);
+        if ($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+    }
 
-    $stmtT = $db->query($sql_term);
-    if ($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $stmtT = $db->query($sql_term);
+        if ($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Fallback
+        $fallbackTerm = "SELECT * FROM sim_terminations ORDER BY id DESC";
+        $stmtT = $db->query($fallbackTerm);
+        if ($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
 // --- CHART LOGIC (ALL TIME) ---
@@ -77,15 +90,21 @@ foreach ($all_dates as $dateKey) {
 // DROPDOWN DATA (CLIENTS & PROJECTS)
 $clients = []; $projects = []; $provider_pos = [];
 if ($db) {
-    $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-    $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-    $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
-                COALESCE(linked.company_id, st.company_id) as final_company_id, 
-                COALESCE(linked.project_id, st.project_id) as final_project_id
-                FROM sim_tracking_po st 
-                LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
-                WHERE st.type='provider' ORDER BY st.id DESC";
-    $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Cek dulu apakah tabel sim_tracking_po ada
+        $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
+                    COALESCE(linked.company_id, st.company_id) as final_company_id, 
+                    COALESCE(linked.project_id, st.project_id) as final_project_id
+                    FROM sim_tracking_po st 
+                    LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
+                    WHERE st.type='provider' ORDER BY st.id DESC";
+        $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Ignore error dropdown jika tabel belum siap
+    }
 }
 ?>
 
@@ -189,11 +208,17 @@ if ($db) {
                                         $active = number_format($row['active_qty']);
                                         $inactive = number_format($row['inactive_qty']);
                                         $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                                        
+                                        // Safe check for source info columns
+                                        $sourceInfo = "Manual Input";
+                                        if (isset($row['po_provider_id']) && $row['po_provider_id']) {
+                                            $sourceInfo = "Src: PO #" . ($row['source_po_number'] ?? $row['po_provider_id']);
+                                        }
                                     ?>
                                     <tr>
                                         <td class="col-date ps-4 text-secondary fw-bold"><?= $date ?></td>
                                         <td><div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div><div class="small text-muted text-uppercase"><?= htmlspecialchars($row['project_name'] ?? '-') ?></div></td>
-                                        <td><div class="small text-muted text-uppercase"><?php if($row['po_provider_id']): ?>Src: PO #<?= $row['source_po_number'] ?? $row['po_provider_id'] ?><?php else: ?>Manual Input<?php endif; ?></div></td>
+                                        <td><div class="small text-muted text-uppercase"><?= $sourceInfo ?></div></td>
                                         <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-success-dark"><?= $active ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Inactive:</span> <span class="stat-val text-muted"><?= $inactive ?></span></div></div></td>
                                         <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['activation_batch'] ?? '') ?></span></td>
                                         <td class="col-action pe-4">
@@ -247,11 +272,17 @@ if ($db) {
                                         $term = number_format($row['terminated_qty']);
                                         $unterm = number_format($row['unterminated_qty']);
                                         $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+
+                                        // Safe Source Info (Avoid 'activation_id' error)
+                                        $sourceInfo = "Manual Input";
+                                        if (isset($row['activation_id']) && $row['activation_id']) {
+                                            $sourceInfo = "Src: ACT #" . ($row['source_activation_batch'] ?? $row['activation_id']);
+                                        }
                                     ?>
                                     <tr>
                                         <td class="col-date ps-4 text-secondary fw-bold"><?= $date ?></td>
                                         <td><div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div><div class="small text-muted text-uppercase"><?= htmlspecialchars($row['project_name'] ?? '-') ?></div></td>
-                                        <td><div class="small text-muted text-uppercase"><?php if($row['activation_id']): ?>Src: ACT #<?= $row['source_activation_batch'] ?? $row['activation_id'] ?><?php else: ?>Manual Input<?php endif; ?></div></td>
+                                        <td><div class="small text-muted text-uppercase"><?= $sourceInfo ?></div></td>
                                         <td><div class="d-flex flex-column"><div class="d-flex justify-content-between"><span class="stat-label">Total:</span> <span class="fw-bold"><?= $total ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-danger">Terminated:</span> <span class="stat-val text-danger-dark"><?= $term ?></span></div><div class="d-flex justify-content-between"><span class="stat-label text-success">Active:</span> <span class="stat-val text-muted"><?= $unterm ?></span></div></div></td>
                                         <td class="text-center"><span class="badge-batch text-uppercase"><?= htmlspecialchars($row['termination_batch'] ?? '') ?></span></td>
                                         <td class="col-action pe-4">
@@ -645,3 +676,4 @@ if ($db) {
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
+}
