@@ -2,7 +2,7 @@
 // =========================================================================
 // 1. SETUP & LOGIC PHP
 // =========================================================================
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // Matikan error display agar tidak merusak JSON JS
 error_reporting(E_ALL);
 $current_page = 'sim_tracking_status.php';
 
@@ -44,14 +44,14 @@ try {
                  ORDER BY st.termination_date DESC, st.id DESC";
 
     if ($db_type === 'pdo') {
-        $activations = $db->query($sql_act)->fetchAll(PDO::FETCH_ASSOC);
-        $terminations = $db->query($sql_term)->fetchAll(PDO::FETCH_ASSOC);
+        $stmtA = $db->query($sql_act); if($stmtA) $activations = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+        $stmtT = $db->query($sql_term); if($stmtT) $terminations = $stmtT->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $r1 = mysqli_query($db, $sql_act); while($row = mysqli_fetch_assoc($r1)) $activations[] = $row;
-        $r2 = mysqli_query($db, $sql_term); while($row = mysqli_fetch_assoc($r2)) $terminations[] = $row;
+        $r1 = mysqli_query($db, $sql_act); if($r1) while($row = mysqli_fetch_assoc($r1)) $activations[] = $row;
+        $r2 = mysqli_query($db, $sql_term); if($r2) while($row = mysqli_fetch_assoc($r2)) $terminations[] = $row;
     }
 
-    // --- CHART LOGIC (FIXED: ALL DATES / NO LIMIT) ---
+    // --- CHART LOGIC (ALL TIME) ---
     foreach ($activations as $row) {
         $d = date('Y-m-d', strtotime($row['activation_date']));
         if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -63,17 +63,14 @@ try {
         $chart_data_term[$d] += (int)$row['terminated_qty'];
     }
 
-    // Gabungkan semua tanggal unik dari kedua data
     $all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term)));
-    // Urutkan dari terlama ke terbaru (Ascending)
-    sort($all_dates);
+    sort($all_dates); // Urutkan tanggal
 
     $js_labels = [];
     $js_series_act = [];
     $js_series_term = [];
     
     foreach ($all_dates as $dateKey) {
-        // Format Label (Tgl Bulan Tahun)
         $js_labels[] = date('d M Y', strtotime($dateKey));
         $js_series_act[] = isset($chart_data_act[$dateKey]) ? $chart_data_act[$dateKey] : 0;
         $js_series_term[] = isset($chart_data_term[$dateKey]) ? $chart_data_term[$dateKey] : 0;
@@ -87,28 +84,23 @@ try {
     if ($db_type === 'pdo') {
         $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-        
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                            COALESCE(linked.company_id, st.company_id) as final_company_id, 
                            COALESCE(linked.project_id, st.project_id) as final_project_id
                     FROM sim_tracking_po st 
                     LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
-                    WHERE st.type='provider' 
-                    ORDER BY st.id DESC";
+                    WHERE st.type='provider' ORDER BY st.id DESC";
         $provider_pos = $db->query($sql_pos)->fetchAll(PDO::FETCH_ASSOC);
-
     } else {
-        $r1 = mysqli_query($db, "SELECT id, company_name FROM companies ORDER BY company_name ASC"); while($x=mysqli_fetch_assoc($r1)) $clients[]=$x;
-        $r2 = mysqli_query($db, "SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC"); while($x=mysqli_fetch_assoc($r2)) $projects[]=$x;
-        
+        $r1 = mysqli_query($db, "SELECT id, company_name FROM companies ORDER BY company_name ASC"); if($r1) while($x=mysqli_fetch_assoc($r1)) $clients[]=$x;
+        $r2 = mysqli_query($db, "SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC"); if($r2) while($x=mysqli_fetch_assoc($r2)) $projects[]=$x;
         $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty, 
                            COALESCE(linked.company_id, st.company_id) as final_company_id, 
                            COALESCE(linked.project_id, st.project_id) as final_project_id
                     FROM sim_tracking_po st 
                     LEFT JOIN sim_tracking_po linked ON st.link_client_po_id = linked.id
-                    WHERE st.type='provider' 
-                    ORDER BY st.id DESC";
-        $r3 = mysqli_query($db, $sql_pos); while($x=mysqli_fetch_assoc($r3)) $provider_pos[]=$x;
+                    WHERE st.type='provider' ORDER BY st.id DESC";
+        $r3 = mysqli_query($db, $sql_pos); if($r3) while($x=mysqli_fetch_assoc($r3)) $provider_pos[]=$x;
     }
 } catch (Exception $e) {}
 ?>
@@ -117,49 +109,35 @@ try {
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #f8f9fa; }
     .card { border: 1px solid #eef2f6; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-bottom: 24px; background: #fff; }
     .card-header { background: #fff; border-bottom: 1px solid #f1f5f9; padding: 20px 25px; border-radius: 10px 10px 0 0 !important; }
-    
-    /* Tabs */
     .nav-tabs { border-bottom: 2px solid #f1f5f9; }
     .nav-link { border: none; color: #64748b; font-weight: 600; padding: 12px 24px; font-size: 0.9rem; transition: 0.2s; }
     .nav-link:hover { color: #435ebe; background: #f8fafc; }
     .nav-link.active { color: #435ebe; border-bottom: 2px solid #435ebe; background: transparent; }
     .tab-content { padding-top: 20px; }
-
-    /* Table */
     .table-custom { width: 100%; border-collapse: collapse; }
     .table-custom th { background-color: #f9fafb; color: #64748b; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
     .table-custom td { padding: 18px 24px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; color: #334155; }
     .table-custom tr:hover td { background-color: #f8fafc; }
-
-    /* Columns */
     .col-date   { width: 130px; min-width: 130px; }
     .col-info   { min-width: 200px; }
     .col-stats  { width: 180px; }
     .col-batch  { width: 100px; text-align: center; }
     .col-action { width: 80px; text-align: center; }
-
-    /* Components */
     .badge-batch { background-color: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; display: inline-block; }
     .stat-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
     .stat-val { font-weight: 700; font-size: 0.95rem; }
     .text-success-dark { color: #059669; }
     .text-danger-dark { color: #dc2626; }
-    
-    /* Filter & Search */
     .filter-box { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px; border: 1px solid #e9ecef; }
     .form-control-sm, .form-select-sm { border-radius: 6px; border-color: #e2e8f0; height: 38px; } 
     .search-wrapper { position: relative; width: 100%; }
     .search-wrapper input { padding-right: 40px; }
     .search-icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; font-size: 1rem; }
-
-    /* Actions */
     .dataTables_wrapper .row:last-child { padding: 15px 24px; border-top: 1px solid #f1f5f9; align-items: center; }
     .page-link { border-radius: 6px; margin: 0 3px; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; padding: 6px 12px; }
     .page-item.active .page-link { background-color: #435ebe; border-color: #435ebe; color: white; }
     .btn-action-menu { background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; transition: 0.2s; }
     .btn-action-menu:hover { background-color: #f8fafc; color: #1e293b; }
-
-    /* Detail Modal Styles */
     .timeline-box { position: relative; padding-left: 20px; border-left: 2px solid #e2e8f0; margin-left: 10px; }
     .timeline-item { position: relative; margin-bottom: 15px; }
     .timeline-item::before { content: ''; position: absolute; left: -26px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: #435ebe; border: 3px solid #fff; box-shadow: 0 0 0 1px #e2e8f0; }
@@ -171,7 +149,7 @@ try {
     <div class="d-flex justify-content-between align-items-center">
         <div>
             <h3 class="mb-1 text-dark fw-bold">Activation & Termination</h3>
-            <p class="text-muted mb-0 small">Manage SIM Lifecycle Status and History.</p>
+            <p class="text-muted mb-0 small">Manage SIM Lifecycle Status (All Time Data).</p>
         </div>
     </div>
 </div>
@@ -198,7 +176,7 @@ try {
                 <div class="tab-pane fade show active" id="activation" role="tabpanel">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="fw-bold text-dark m-0">Activation Data</h6>
-                        <button type="button" class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="openModal('act', 'create')"><i class="bi bi-plus me-1"></i> New Activation</button>
+                        <button type="button" class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="safeOpenModal('modalUniversal', 'act', 'create')"><i class="bi bi-plus me-1"></i> New Activation</button>
                     </div>
                     
                     <div class="filter-box">
@@ -223,7 +201,6 @@ try {
                                     $total = number_format($row['total_sim']);
                                     $active = number_format($row['active_qty']);
                                     $inactive = number_format($row['inactive_qty']);
-                                    // Prepare safe JSON for JS
                                     $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                                 ?>
                                 <tr>
@@ -236,9 +213,9 @@ try {
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='openDetailModal("act", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
+                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenDetail("act", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
                                                 <li><hr class="dropdown-divider"></li>
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='openModal("act", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenModal("modalUniversal", "act", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
                                                 <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
                                             </ul>
                                         </div>
@@ -253,7 +230,7 @@ try {
                 <div class="tab-pane fade" id="termination" role="tabpanel">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="fw-bold text-dark m-0">Termination Data</h6>
-                        <button type="button" class="btn btn-danger btn-sm px-4 fw-bold shadow-sm" onclick="openModal('term', 'create')"><i class="bi bi-plus me-1"></i> New Termination</button>
+                        <button type="button" class="btn btn-danger btn-sm px-4 fw-bold shadow-sm" onclick="safeOpenModal('modalUniversal', 'term', 'create')"><i class="bi bi-plus me-1"></i> New Termination</button>
                     </div>
                     
                     <div class="filter-box">
@@ -290,9 +267,9 @@ try {
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='openDetailModal("term", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
+                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenDetail("term", <?= $rowJson ?>)'><i class="bi bi-eye me-2 text-info"></i> View Detail</a></li>
                                                 <li><hr class="dropdown-divider"></li>
-                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='openModal("term", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                <li><a class="dropdown-item" href="javascript:void(0)" onclick='safeOpenModal("modalUniversal", "term", "update", <?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
                                                 <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
                                             </ul>
                                         </div>
@@ -316,7 +293,7 @@ try {
             
             <div class="modal-header text-white py-3" id="modalHeader">
                 <h6 class="modal-title m-0 fw-bold" id="modalTitle">Title</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             
             <div class="modal-body p-4">
@@ -333,11 +310,7 @@ try {
                                 $compId = $po['final_company_id'] ?? '';
                                 $projId = $po['final_project_id'] ?? '';
                             ?>
-                                <option value="<?= $po['id'] ?>" 
-                                    data-batch="<?= $poBatch ?>" 
-                                    data-qty="<?= $rawQty ?>"
-                                    data-comp="<?= $compId ?>"
-                                    data-proj="<?= $projId ?>">
+                                <option value="<?= $po['id'] ?>" data-batch="<?= $poBatch ?>" data-qty="<?= $rawQty ?>" data-comp="<?= $compId ?>" data-proj="<?= $projId ?>">
                                     PO: <?= $poNum ?> - Batch: <?= $poBatch ?> (Qty: <?= $poQty ?>)
                                 </option>
                             <?php endforeach; ?>
@@ -403,7 +376,7 @@ try {
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-light border-bottom py-3">
                 <h6 class="modal-title m-0 fw-bold text-dark" id="detailTitle">Batch Details</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-0">
                 <div class="p-4">
@@ -444,70 +417,81 @@ try {
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
-    // PREPARE DATA FROM PHP
-    const chartLabels = <?php echo json_encode($js_labels); ?>;
-    const seriesAct = <?php echo json_encode($js_series_act); ?>;
-    const seriesTerm = <?php echo json_encode($js_series_term); ?>;
-    const activationData = <?php echo json_encode($activations); ?>;
-    const allProjects = <?php echo json_encode($projects); ?>;
+    // PREPARE DATA FROM PHP (SAFE MODE)
+    const chartLabels = <?php echo json_encode($js_labels ?? []); ?>;
+    const seriesAct = <?php echo json_encode($js_series_act ?? []); ?>;
+    const seriesTerm = <?php echo json_encode($js_series_term ?? []); ?>;
+    const activationData = <?php echo json_encode($activations ?? []); ?>;
+    const allProjects = <?php echo json_encode($projects ?? []); ?>;
 
-    // 1. CHART (FIXED: Handles All Dates correctly)
-    document.addEventListener('DOMContentLoaded', function () {
-        var options = {
-            series: [{ name: 'Activations', data: seriesAct }, { name: 'Terminations', data: seriesTerm }],
-            chart: { type: 'area', height: 300, toolbar: { show: true }, fontFamily: 'Inter, sans-serif' }, // Toolbar enabled to zoom if too many data points
-            stroke: { curve: 'smooth', width: 2 },
-            colors: ['#198754', '#dc3545'],
-            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.1 } },
-            xaxis: { categories: chartLabels, labels: { style: { fontSize: '11px', fontWeight: 'bold' } } },
-            grid: { borderColor: '#f1f5f9' },
-            dataLabels: { enabled: false },
-            noData: { text: 'No Data' }
-        };
-        new ApexCharts(document.querySelector('#lifecycleChart'), options).render();
-    });
+    // --- FIX 1: UNIVERSAL MODAL OPENER (Supports BS4 & BS5) ---
+    function safeOpenModalInstance(modalId) {
+        var el = document.getElementById(modalId);
+        if (!el) return console.error('Modal not found:', modalId);
 
-    // 2. MODAL LOGIC (FIXED: Improved Initialization)
-    function updateProjectDropdown(companyId, selectedProjectId = null) {
-        let projSelect = $('#inp_project_id');
-        projSelect.empty().append('<option value="">-- Select Project --</option>');
-        if (companyId) {
-            let filtered = allProjects.filter(p => p.company_id == companyId);
-            filtered.forEach(p => {
-                let sel = (selectedProjectId && p.id == selectedProjectId) ? 'selected' : '';
-                projSelect.append(`<option value="${p.id}" ${sel}>${p.project_name}</option>`);
-            });
+        // Try Bootstrap 5
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            try {
+                var modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+                modal.show();
+                return;
+            } catch(e) { console.log('BS5 failed, trying jQuery...'); }
+        }
+        
+        // Try Bootstrap 4 / jQuery
+        if (typeof jQuery !== 'undefined' && jQuery.fn.modal) {
+            $(el).modal('show');
+        } else {
+            alert('Error: Bootstrap Library not loaded properly.');
         }
     }
 
-    let currentMode = ''; 
+    // --- CHART LOGIC (Wrapped in try-catch to prevent JS crash) ---
+    document.addEventListener('DOMContentLoaded', function () {
+        try {
+            if (!chartLabels || chartLabels.length === 0) {
+                document.querySelector("#lifecycleChart").innerHTML = '<div class="text-center py-5 text-muted small">No data available for chart.</div>';
+                return;
+            }
 
-    function openModal(type, action, data = null) {
+            var options = {
+                series: [{ name: 'Activations', data: seriesAct }, { name: 'Terminations', data: seriesTerm }],
+                chart: { type: 'area', height: 300, toolbar: { show: true }, fontFamily: 'Inter, sans-serif' },
+                stroke: { curve: 'smooth', width: 2 },
+                colors: ['#198754', '#dc3545'],
+                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.1 } },
+                xaxis: { categories: chartLabels, labels: { style: { fontSize: '11px', fontWeight: 'bold' } } },
+                grid: { borderColor: '#f1f5f9' },
+                dataLabels: { enabled: false }
+            };
+            new ApexCharts(document.querySelector('#lifecycleChart'), options).render();
+        } catch (e) {
+            console.error("Chart Error:", e);
+        }
+    });
+
+    // --- LOGIC: CREATE / EDIT ---
+    let currentMode = ''; 
+    function safeOpenModal(modalId, type, action, data = null) {
         currentMode = type;
         
-        // Reset Form Values
+        // Reset Form
         $('#formUniversal')[0].reset();
         $('#inp_source_act').empty().append('<option value="">-- Manual Input (No Link) --</option>');
         $('#inp_source_po').val(''); 
-        
-        // Set Defaults
         $('#inp_date').val(new Date().toISOString().split('T')[0]);
         $('#formId').val('');
         updateProjectDropdown(null);
 
-        // Configure UI based on Type
+        // UI Configuration
         if(type === 'act') {
             $('#modalTitle').text(action === 'create' ? 'New Activation' : 'Edit Activation');
             $('#modalHeader').removeClass('bg-danger').addClass('bg-success');
             $('#formAction').val(action === 'create' ? 'create_activation' : 'update_activation');
             
-            // Names
             $('#inp_date').attr('name', 'activation_date');
             $('#inp_batch').attr('name', 'activation_batch');
             $('#inp_qty_1').attr('name', 'active_qty'); 
@@ -536,14 +520,13 @@ try {
             $('#div_source_act').show();
             $('#inp_qty_2').prop('readonly', true);
             
-            // Populate Source Activation
             activationData.forEach(act => {
                 let lbl = `${act.activation_batch} - ${act.company_name} (Active: ${act.active_qty})`;
                 $('#inp_source_act').append(`<option value="${act.id}" data-total="${act.total_sim}" data-active="${act.active_qty}" data-comp="${act.company_id}" data-proj="${act.project_id}">${lbl}</option>`);
             });
         }
 
-        // Load Data if Editing
+        // Fill Data if Edit
         if (data) {
             $('#formId').val(data.id);
             $('#inp_company_id').val(data.company_id);
@@ -563,14 +546,12 @@ try {
             }
         }
 
-        // Direct initialization to ensure it opens
-        var myModalEl = document.getElementById('modalUniversal');
-        var modal = bootstrap.Modal.getInstance(myModalEl) || new bootstrap.Modal(myModalEl);
-        modal.show();
+        // Open Modal Safely
+        safeOpenModalInstance(modalId);
     }
 
-    // 3. DETAIL MODAL LOGIC
-    function openDetailModal(type, data) {
+    // --- LOGIC: DETAIL VIEW ---
+    function safeOpenDetail(type, data) {
         let title, date, mainQty, subQty, mainLabel, subLabel, source;
         
         $('#det_batch').text(type === 'act' ? data.activation_batch : data.termination_batch);
@@ -604,12 +585,22 @@ try {
         $('#det_sub_qty').text(subQty);
         $('#det_source').text(source);
 
-        var myModalEl = document.getElementById('modalDetail');
-        var modal = bootstrap.Modal.getInstance(myModalEl) || new bootstrap.Modal(myModalEl);
-        modal.show();
+        safeOpenModalInstance('modalDetail');
     }
 
-    // 4. AUTO FILL
+    // --- HELPER FUNCTIONS ---
+    function updateProjectDropdown(companyId, selectedProjectId = null) {
+        let projSelect = $('#inp_project_id');
+        projSelect.empty().append('<option value="">-- Select Project --</option>');
+        if (companyId) {
+            let filtered = allProjects.filter(p => p.company_id == companyId);
+            filtered.forEach(p => {
+                let sel = (selectedProjectId && p.id == selectedProjectId) ? 'selected' : '';
+                projSelect.append(`<option value="${p.id}" ${sel}>${p.project_name}</option>`);
+            });
+        }
+    }
+
     function fillFromSourcePO() {
         let sel = $('#inp_source_po option:selected');
         let qty = sel.data('qty');
@@ -618,7 +609,7 @@ try {
             $('#inp_batch').val(sel.data('batch'));
             $('#inp_company_id').val(sel.data('comp'));
             updateProjectDropdown(sel.data('comp'), sel.data('proj'));
-            $('#inp_qty_1').val(''); // User input active
+            $('#inp_qty_1').val(''); 
             $('#inp_qty_2').val(qty); 
         }
     }
@@ -630,33 +621,34 @@ try {
             $('#inp_total').val(sel.data('total'));
             $('#inp_company_id').val(sel.data('comp'));
             updateProjectDropdown(sel.data('comp'), sel.data('proj'));
-            $('#inp_qty_1').val(0); // Terminating 0 initially
-            $('#inp_qty_2').val(active); // All remains active
-            $('#inp_qty_1').data('max', active); // Store max
+            $('#inp_qty_1').val(0); 
+            $('#inp_qty_2').val(active); 
+            $('#inp_qty_1').data('max', active); 
         }
     }
 
     function calculateRemaining() {
         let total = parseInt($('#inp_total').val()) || 0;
         let qty1 = parseInt($('#inp_qty_1').val()) || 0;
-        
         if (currentMode === 'act') {
             $('#inp_qty_2').val(Math.max(0, total - qty1));
         } else {
-            let maxActive = $('#inp_qty_1').data('max') || total; // Use max active from source if avail
+            let maxActive = $('#inp_qty_1').data('max') || total; 
             $('#inp_qty_2').val(Math.max(0, maxActive - qty1));
         }
     }
 
-    // 5. DATATABLES
+    // --- DATATABLES (Only if library exists) ---
     $(document).ready(function() {
-        var tAct = $('#table-activation').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
-        $('#searchAct').on('keyup', function() { tAct.search(this.value).draw(); });
-        $('#filterClientAct').on('change', function() { tAct.column(1).search(this.value).draw(); });
+        if ($.fn.DataTable) {
+            var tAct = $('#table-activation').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
+            $('#searchAct').on('keyup', function() { tAct.search(this.value).draw(); });
+            $('#filterClientAct').on('change', function() { tAct.column(1).search(this.value).draw(); });
 
-        var tTerm = $('#table-termination').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
-        $('#searchTerm').on('keyup', function() { tTerm.search(this.value).draw(); });
-        $('#filterClientTerm').on('change', function() { tTerm.column(1).search(this.value).draw(); });
+            var tTerm = $('#table-termination').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
+            $('#searchTerm').on('keyup', function() { tTerm.search(this.value).draw(); });
+            $('#filterClientTerm').on('change', function() { tTerm.column(1).search(this.value).draw(); });
+        }
     });
 </script>
 
