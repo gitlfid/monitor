@@ -140,7 +140,9 @@ try {
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($data_receive as $row): ?>
+                                <?php foreach ($data_receive as $row): 
+                                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                                ?>
                                 <tr>
                                     <td><span class="fw-bold text-secondary"><?= date('d M Y', strtotime($row['logistic_date'])) ?></span></td>
                                     <td>
@@ -158,7 +160,7 @@ try {
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                                <li><a class="dropdown-item" href="#" onclick='editReceive(<?= json_encode($row) ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                <li><a class="dropdown-item" href="#" onclick='editReceive(<?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
                                                 <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_logistic&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
                                             </ul>
                                         </div>
@@ -252,6 +254,10 @@ try {
             <input type="hidden" name="action" id="recv_action" value="create_logistic">
             <input type="hidden" name="type" value="receive">
             <input type="hidden" name="id" id="recv_id">
+            
+            <input type="hidden" name="status" value="Delivered">
+            <input type="hidden" name="courier" value="-">
+            <input type="hidden" name="awb" value="-">
 
             <div class="modal-header bg-success text-white py-3">
                 <h6 class="modal-title m-0 fw-bold">Inbound / Receive</h6>
