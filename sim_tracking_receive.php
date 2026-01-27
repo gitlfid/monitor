@@ -155,7 +155,7 @@ try {
                                         <div class="fw-bold text-dark"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div>
                                         <div class="small text-muted">PO: <?= htmlspecialchars($row['po_number']) ?></div>
                                     </td>
-                                    <td><span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill">+ <?= number_format($row['qty']) ?></span></td>
+                                    <td><span class="badge bg-success text-white px-3 py-2 rounded-pill">+ <?= number_format($row['qty']) ?></span></td>
                                     <td>
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
@@ -195,7 +195,7 @@ try {
                                     $badgeClass = 'bg-secondary';
                                     if(strpos($st, 'process')!==false) $badgeClass='bg-warning text-dark';
                                     if(strpos($st, 'shipped')!==false) $badgeClass='bg-info text-white';
-                                    if(strpos($st, 'delivered')!==false) $badgeClass='bg-success';
+                                    if(strpos($st, 'delivered')!==false) $badgeClass='bg-success text-white';
                                     
                                     // JSON safe for JS
                                     $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
