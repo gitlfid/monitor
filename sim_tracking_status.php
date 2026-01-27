@@ -51,8 +51,7 @@ try {
         $r2 = mysqli_query($db, $sql_term); while($row = mysqli_fetch_assoc($r2)) $terminations[] = $row;
     }
 
-    // --- CHART LOGIC (FIXED: ALWAYS SHOW LAST 10 DAYS) ---
-    // Prepare Data Arrays indexed by Date
+    // --- CHART LOGIC (FIXED: ALL DATES / NO LIMIT) ---
     foreach ($activations as $row) {
         $d = date('Y-m-d', strtotime($row['activation_date']));
         if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -64,16 +63,18 @@ try {
         $chart_data_term[$d] += (int)$row['terminated_qty'];
     }
 
-    // Generate Last 10 Days Labels (Empty or Not)
+    // Gabungkan semua tanggal unik dari kedua data
+    $all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term)));
+    // Urutkan dari terlama ke terbaru (Ascending)
+    sort($all_dates);
+
     $js_labels = [];
     $js_series_act = [];
     $js_series_term = [];
     
-    for ($i = 9; $i >= 0; $i--) {
-        $dateKey = date('Y-m-d', strtotime("-$i days"));
-        $label = date('d M', strtotime($dateKey));
-        
-        $js_labels[] = $label;
+    foreach ($all_dates as $dateKey) {
+        // Format Label (Tgl Bulan Tahun)
+        $js_labels[] = date('d M Y', strtotime($dateKey));
         $js_series_act[] = isset($chart_data_act[$dateKey]) ? $chart_data_act[$dateKey] : 0;
         $js_series_term[] = isset($chart_data_term[$dateKey]) ? $chart_data_term[$dateKey] : 0;
     }
@@ -178,7 +179,7 @@ try {
 <section>
     <div class="card shadow-sm mb-4 border-0">
         <div class="card-body pt-4">
-            <h6 class="text-primary fw-bold mb-3 ms-2"><i class="bi bi-bar-chart-line me-2"></i>Lifecycle Analysis (Last 10 Days)</h6>
+            <h6 class="text-primary fw-bold mb-3 ms-2"><i class="bi bi-bar-chart-line me-2"></i>Lifecycle Analysis (All Time)</h6>
             <div id="lifecycleChart" style="height: 300px;"></div>
         </div>
     </div>
@@ -456,11 +457,11 @@ try {
     const activationData = <?php echo json_encode($activations); ?>;
     const allProjects = <?php echo json_encode($projects); ?>;
 
-    // 1. CHART
+    // 1. CHART (FIXED: Handles All Dates correctly)
     document.addEventListener('DOMContentLoaded', function () {
         var options = {
             series: [{ name: 'Activations', data: seriesAct }, { name: 'Terminations', data: seriesTerm }],
-            chart: { type: 'area', height: 300, toolbar: { show: false }, fontFamily: 'Inter, sans-serif' },
+            chart: { type: 'area', height: 300, toolbar: { show: true }, fontFamily: 'Inter, sans-serif' }, // Toolbar enabled to zoom if too many data points
             stroke: { curve: 'smooth', width: 2 },
             colors: ['#198754', '#dc3545'],
             fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.1 } },
@@ -472,15 +473,7 @@ try {
         new ApexCharts(document.querySelector('#lifecycleChart'), options).render();
     });
 
-    // 2. MODAL LOGIC (FIXED)
-    let modalUniversal;
-    let modalDetail;
-
-    document.addEventListener('DOMContentLoaded', function() {
-        modalUniversal = new bootstrap.Modal(document.getElementById('modalUniversal'));
-        modalDetail = new bootstrap.Modal(document.getElementById('modalDetail'));
-    });
-
+    // 2. MODAL LOGIC (FIXED: Improved Initialization)
     function updateProjectDropdown(companyId, selectedProjectId = null) {
         let projSelect = $('#inp_project_id');
         projSelect.empty().append('<option value="">-- Select Project --</option>');
@@ -570,7 +563,10 @@ try {
             }
         }
 
-        modalUniversal.show();
+        // Direct initialization to ensure it opens
+        var myModalEl = document.getElementById('modalUniversal');
+        var modal = bootstrap.Modal.getInstance(myModalEl) || new bootstrap.Modal(myModalEl);
+        modal.show();
     }
 
     // 3. DETAIL MODAL LOGIC
@@ -608,7 +604,9 @@ try {
         $('#det_sub_qty').text(subQty);
         $('#det_source').text(source);
 
-        modalDetail.show();
+        var myModalEl = document.getElementById('modalDetail');
+        var modal = bootstrap.Modal.getInstance(myModalEl) || new bootstrap.Modal(myModalEl);
+        modal.show();
     }
 
     // 4. AUTO FILL
