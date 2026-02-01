@@ -22,7 +22,8 @@ if ($db) {
     // 1. Fetch Activations
     $sql_act = "SELECT sa.*, 
                 c.company_name, p.project_name,
-                po.po_number as source_po_number, po.batch_name as source_po_batch
+                po.po_number as source_po_number, po.batch_name as source_po_batch,
+                sa.po_provider_id -- Pastikan kolom ini terambil
                 FROM sim_activations sa
                 LEFT JOIN companies c ON sa.company_id = c.id
                 LEFT JOIN projects p ON sa.project_id = p.id
@@ -68,7 +69,7 @@ if ($db) {
     $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     
-    // QUERY HITUNG SISA STOK PO
+    // Hitung sisa stok (Initial - Used)
     $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty as initial_qty,
                 COALESCE(linked.company_id, st.company_id) as final_company_id, 
                 COALESCE(linked.project_id, st.project_id) as final_project_id,
@@ -83,7 +84,7 @@ if ($db) {
 ?>
 
 <style>
-    /* CSS DEFAULT (FONT BAWAAN) */
+    /* RESET FONT (Pakai Default Template) */
     
     /* Card Styles */
     .card { border: 1px solid #eef2f6; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-bottom: 20px; background: #fff; }
@@ -96,7 +97,7 @@ if ($db) {
     .field-locked {
         background-color: #e9ecef !important; /* Abu-abu */
         pointer-events: none; /* Tidak bisa diklik */
-        border-color: #dee2e6;
+        border-color: #ced4da;
         color: #495057;
         cursor: not-allowed;
     }
@@ -245,7 +246,7 @@ if ($db) {
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-bold text-success small m-0"><i class="bi bi-link-45deg"></i> SYNC WITH PROVIDER PO (SOURCE)</label>
-                            <button type="button" class="btn btn-xs btn-outline-secondary py-0" onclick="resetSync()" title="Reset to Manual Mode" style="font-size: 0.7rem;">Reset Manual</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="resetSync()" style="font-size: 0.7rem;">Reset Manual</button>
                         </div>
                         
                         <select id="inp_source_po" name="po_provider_id" class="form-select border-success shadow-none" onchange="syncWithPO()">
@@ -359,11 +360,11 @@ if ($db) {
         if(chartLabels.length > 0){
             new ApexCharts(document.querySelector('#lifecycleChart'), {
                 series: [{ name: 'Activations', data: seriesAct }, { name: 'Terminations', data: seriesTerm }],
-                chart: { type: 'area', height: 300, toolbar: { show: false } },
+                chart: { type: 'area', height: 300, toolbar: { show: false }, fontFamily: 'sans-serif' },
                 colors: ['#198754', '#dc3545'],
                 fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.1 } },
                 stroke: { curve: 'smooth', width: 2 },
-                xaxis: { categories: chartLabels },
+                xaxis: { categories: chartLabels, labels: { style: { fontSize: '11px' } } },
                 dataLabels: { enabled: false }
             }).render();
         }
@@ -395,6 +396,8 @@ if ($db) {
     // 3. SYNC LOGIC (IMPROVED & FIXED)
     let maxAllocation = 0; 
     let currentMode = 'act';
+    let isEditingSync = false; // Flag khusus edit
+    let savedTotalForEdit = 0; // Simpan total lama untuk adjustment
 
     function resetSync() {
         $('#inp_source_po').val('').trigger('change');
@@ -425,9 +428,16 @@ if ($db) {
         let projId = $sel.data('proj');
         let batch = $sel.data('batch');
 
-        maxAllocation = rem; // Set Limit
+        // C. LOGIKA ALOKASI (PENTING: Handle Edit Mode)
+        // Jika sedang edit, kita harus "mengembalikan" kuota data ini agar bisa dipakai lagi
+        let effectiveRem = rem;
+        if(isEditingSync) {
+            effectiveRem = rem + savedTotalForEdit; 
+        }
+        
+        maxAllocation = effectiveRem; // Set Max Limit
 
-        // C. UPDATE VISUALS
+        // D. UPDATE VISUALS
         $('#stock_indicator').slideDown();
         let percent = Math.round((used / initial) * 100);
         let barColor = (percent > 90) ? 'bg-danger' : (percent > 70 ? 'bg-warning' : 'bg-success');
@@ -435,28 +445,36 @@ if ($db) {
         $('#stock_text').text(`${used.toLocaleString()} Used / ${rem.toLocaleString()} Remaining`);
         $('#po_batch_badge').text('BATCH: ' + batch);
 
-        // D. AUTO FILL & LOCK (URUTAN PENTING!)
+        // E. AUTO FILL & LOCK (URUTAN PENTING!)
         
         // 1. Lock Client & Set Value
-        $('#inp_company_id').val(compId).trigger('change'); // Trigger change event might be safer
+        $('#inp_company_id').val(compId).trigger('change'); 
         $('#inp_company_id').addClass('field-locked');
         $('#status_client').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Synced</span>');
 
         // 2. Generate Project Options & Set Value
-        updateProjectDropdown(compId); // Generate option list for this company
+        updateProjectDropdown(compId); 
         setTimeout(() => {
-            $('#inp_project_id').val(projId); // Select the project
-            $('#inp_project_id').addClass('field-locked'); // Lock it
+            $('#inp_project_id').val(projId); 
+            $('#inp_project_id').addClass('field-locked'); 
             $('#status_project').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Synced</span>');
-        }, 50); // Small delay to ensure DOM update
+        }, 50); 
 
-        // 3. Suggest Batch & Total
+        // 3. Suggest Batch (Only if empty)
         if($('#inp_batch').val() === '') $('#inp_batch').val(batch);
         
-        $('#inp_total').val(rem);
-        $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Max: ${rem.toLocaleString()}</span>`);
+        // 4. Fill Total (Only if NOT editing, or force update on dropdown change)
+        // Kalau edit, biarkan nilai lama (savedTotalForEdit) tampil, jangan ditimpa rem
+        if(!isEditingSync) {
+            $('#inp_total').val(effectiveRem); 
+        } else {
+            // Kalau edit, pastikan max-nya benar tapi valuenya tetap data lama
+            // (User bisa ubah, tapi max dibatasi effectiveRem)
+        }
         
-        // Hitung ulang sisa
+        $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Max: ${effectiveRem.toLocaleString()}</span>`);
+        
+        // Hitung ulang sisa inactive
         calculateRemaining();
     }
 
@@ -482,15 +500,17 @@ if ($db) {
         $('#inp_qty_2').val(totalVal - activeVal);
     }
 
-    // 5. OPEN MODAL
+    // 5. OPEN MODAL (FIXED SYNC TRIGGER)
     function openModal(type, action, data = null) {
         currentMode = type;
         $('#formUniversal')[0].reset();
         
-        // Setup UI
-        resetSync(); // Clear previous sync state
+        // Setup UI Defaults
+        resetSync(); 
         $('#div_source_po_wrapper').toggle(type === 'act'); 
-        
+        isEditingSync = false; // Reset flag
+        savedTotalForEdit = 0;
+
         let title = (action === 'create' ? 'New ' : 'Edit ') + (type === 'act' ? 'Activation' : 'Termination');
         let color = (type === 'act' ? 'bg-success' : 'bg-danger');
         let act = (action === 'create' ? `create_${type === 'act' ? 'activation' : 'termination'}` : `update_${type === 'act' ? 'activation' : 'termination'}`);
@@ -517,17 +537,36 @@ if ($db) {
         }
 
         if(data) {
-            // Edit Mode - Load Data
+            // --- EDIT MODE ---
             $('#formId').val(data.id);
             $('#inp_date').val(type === 'act' ? data.activation_date : data.termination_date);
             $('#inp_batch').val(type === 'act' ? data.activation_batch : data.termination_batch);
             $('#inp_total').val(data.total_sim);
             $('#inp_qty_1').val(type === 'act' ? data.active_qty : data.terminated_qty);
             $('#inp_qty_2').val(type === 'act' ? data.inactive_qty : data.unterminated_qty);
+            
+            // MANUAL PRE-FILL CLIENT/PROJECT
             $('#inp_company_id').val(data.company_id);
             updateProjectDropdown(data.company_id, data.project_id);
+
+            // --- SMART SYNC CHECK (FIXED) ---
+            if(type === 'act' && data.po_provider_id) {
+                // Set flag bahwa kita sedang edit data yg tersinkron
+                isEditingSync = true;
+                savedTotalForEdit = parseInt(data.total_sim); // Simpan total lama
+
+                // Pilih PO di dropdown
+                $('#inp_source_po').val(data.po_provider_id);
+                
+                // Trigger logic sync (Locking fields, bar, calculation)
+                // Timeout kecil agar dropdown PO sempat ter-render valuenya
+                setTimeout(() => {
+                    syncWithPO(); 
+                }, 100);
+            }
+
         } else {
-            // Create Mode
+            // --- CREATE MODE ---
             $('#inp_date').val(new Date().toISOString().split('T')[0]);
         }
 
