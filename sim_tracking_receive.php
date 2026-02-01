@@ -14,6 +14,11 @@ require_once 'includes/sidebar.php';
 // GUNAKAN KONEKSI STANDAR
 $db = db_connect();
 
+// --- HANDLE FILTERS (PHP) ---
+$filter_search = $_GET['search_track'] ?? '';
+$filter_courier = $_GET['filter_courier'] ?? '';
+$filter_status = $_GET['filter_status'] ?? '';
+
 // --- FETCH DATA LOGISTICS ---
 $logistics = [];
 try {
@@ -23,7 +28,20 @@ try {
             FROM sim_tracking_logistics l
             LEFT JOIN sim_tracking_po po ON l.po_id = po.id
             LEFT JOIN companies c ON po.company_id = c.id
-            ORDER BY l.logistic_date DESC, l.id DESC";
+            WHERE 1=1";
+    
+    // Apply Filter jika ada
+    if(!empty($filter_search)) {
+        $sql .= " AND (l.awb LIKE '%$filter_search%' OR l.pic_name LIKE '%$filter_search%')";
+    }
+    if(!empty($filter_courier)) {
+        $sql .= " AND l.courier = '$filter_courier'";
+    }
+    if(!empty($filter_status)) {
+        $sql .= " AND l.status = '$filter_status'";
+    }
+
+    $sql .= " ORDER BY l.logistic_date DESC, l.id DESC";
 
     if ($db) {
         $stmt = $db->query($sql);
@@ -31,12 +49,14 @@ try {
     }
 } catch (Exception $e) {}
 
+// Pisahkan Data Receive & Delivery
 $data_receive = array_filter($logistics, function($item) { return $item['type'] === 'receive'; });
 $data_delivery = array_filter($logistics, function($item) { return $item['type'] === 'delivery'; });
 
-// --- FETCH PO OPTIONS ---
+// --- FETCH OPTIONS FOR DROPDOWN ---
 $provider_pos = [];
 $client_pos = [];
+$opt_couriers = []; // Untuk filter
 try {
     $sql_po = "SELECT po.id, po.po_number, po.batch_name, po.type,
                COALESCE(c.company_name, po.manual_company_name) as company_name
@@ -53,32 +73,55 @@ try {
                 else $client_pos[] = $po;
             }
         }
+        
+        // Get Distinct Couriers for Filter
+        $stmtCour = $db->query("SELECT DISTINCT courier FROM sim_tracking_logistics WHERE type='delivery' AND courier != ''");
+        if($stmtCour) $opt_couriers = $stmtCour->fetchAll(PDO::FETCH_COLUMN);
     }
 } catch (Exception $e) {}
 ?>
 
 <style>
-    /* UI SYNC WITH ACTIVATION PAGE */
+    /* BASE STYLES */
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #f8f9fa; }
     
-    /* Cards */
+    /* CARDS & TABS */
     .card { border: 1px solid #eef2f6; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-bottom: 24px; background: #fff; }
     .card-header { background: #fff; border-bottom: 1px solid #f1f5f9; padding: 20px 25px; border-radius: 10px 10px 0 0 !important; }
-    
-    /* Tabs */
     .nav-tabs { border-bottom: 2px solid #f1f5f9; }
     .nav-link { border: none; color: #64748b; font-weight: 600; padding: 12px 24px; font-size: 0.9rem; transition: 0.2s; }
     .nav-link:hover { color: #435ebe; background: #f8fafc; }
     .nav-link.active { color: #435ebe; border-bottom: 2px solid #435ebe; background: transparent; }
     .tab-content { padding-top: 20px; }
 
-    /* Tables */
-    .table-custom { width: 100%; border-collapse: collapse; }
-    .table-custom th { background-color: #f9fafb; color: #64748b; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
-    .table-custom td { padding: 18px 24px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; color: #334155; }
-    .table-custom tr:hover td { background-color: #f8fafc; }
-
-    /* Buttons & Actions */
+    /* --- MODERN TABLE STYLE (CLONED FROM DELIVERY_LIST) --- */
+    .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .table-modern thead th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        background-color: #f8f9fa;
+        color: #64748b;
+        font-weight: 700;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 16px 12px;
+        white-space: nowrap;
+    }
+    .table-modern tbody td {
+        font-size: 0.9rem;
+        padding: 14px 12px;
+        vertical-align: middle;
+        color: #334155;
+        border-bottom: 1px solid #f1f5f9;
+        background: #fff;
+    }
+    .table-modern tr:hover td { background-color: #f8fafc; }
+    
+    /* Filter Card Style */
+    .filter-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .text-label { font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-bottom: 6px; display: block; text-transform: uppercase; }
+    
+    /* Components */
     .btn-action-menu { background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.85rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; transition: 0.2s; }
     .btn-action-menu:hover { background-color: #f8fafc; color: #1e293b; }
     
@@ -89,7 +132,6 @@ try {
     .track-step.active::before { background: #435ebe; border-color: #435ebe; box-shadow: 0 0 0 3px #e0e7ff; }
     .track-step.completed::before { background: #10b981; border-color: #10b981; }
     .track-step.completed { border-left-color: #10b981; }
-    
     .track-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 2px; }
     .track-date { font-size: 0.75rem; color: #64748b; }
 </style>
@@ -129,7 +171,7 @@ try {
                         <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="openReceiveModal()"><i class="bi bi-plus me-1"></i> Add Receive</button>
                     </div>
                     <div class="table-responsive">
-                        <table class="table-custom" id="table-receive">
+                        <table class="table-modern" id="table-receive">
                             <thead>
                                 <tr>
                                     <th>Date</th>
@@ -147,8 +189,8 @@ try {
                                     <td><span class="fw-bold text-secondary"><?= date('d M Y', strtotime($row['logistic_date'])) ?></span></td>
                                     <td>
                                         <div class="d-flex align-items-center">
-                                            <div class="avatar avatar-sm bg-light-success me-2 text-success rounded-circle"><i class="bi bi-person"></i></div>
-                                            <span class="fw-bold text-dark"><?= htmlspecialchars($row['pic_name'] ?? '-') ?></span>
+                                            <div class="avatar avatar-sm bg-light-success me-2 text-success rounded-circle d-flex align-items-center justify-content-center" style="width:30px;height:30px"><i class="bi bi-person"></i></div>
+                                            <span class="fw-bold text-dark ms-2"><?= htmlspecialchars($row['pic_name'] ?? '-') ?></span>
                                         </div>
                                     </td>
                                     <td>
@@ -173,71 +215,121 @@ try {
                 </div>
 
                 <div class="tab-pane fade" id="delivery">
+                    
+                    <div class="filter-card shadow-sm">
+                        <form method="GET" action="sim_tracking_receive.php">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="text-label">Search Tracking / PIC</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                        <input type="text" name="search_track" class="form-control border-start-0" placeholder="AWB or Name..." value="<?= htmlspecialchars($filter_search) ?>">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="text-label">Courier</label>
+                                    <select name="filter_courier" class="form-select form-select-sm">
+                                        <option value="">- All Couriers -</option>
+                                        <?php foreach($opt_couriers as $c): ?>
+                                            <option value="<?= $c ?>" <?= ($filter_courier == $c) ? 'selected' : '' ?>><?= strtoupper($c) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="text-label">Status</label>
+                                    <select name="filter_status" class="form-select form-select-sm">
+                                        <option value="">- All Status -</option>
+                                        <option value="On Process" <?= ($filter_status == 'On Process') ? 'selected' : '' ?>>On Process</option>
+                                        <option value="Shipped" <?= ($filter_status == 'Shipped') ? 'selected' : '' ?>>Shipped</option>
+                                        <option value="Delivered" <?= ($filter_status == 'Delivered') ? 'selected' : '' ?>>Delivered</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">Filter</button>
+                                        <a href="sim_tracking_receive.php" class="btn btn-outline-secondary btn-sm w-100">Reset</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="fw-bold text-dark m-0">Outbound Data</h6>
+                        <h6 class="fw-bold text-dark m-0">Outbound Data List</h6>
                         <button class="btn btn-primary btn-sm px-4 fw-bold shadow-sm" onclick="openDeliveryModal()"><i class="bi bi-plus me-1"></i> Add Delivery</button>
                     </div>
+
                     <div class="table-responsive">
-                        <table class="table-custom" id="table-delivery">
+                        <table class="table-modern" id="table-delivery">
                             <thead>
                                 <tr>
-                                    <th>Date</th>
+                                    <th>Sent Date</th>
                                     <th>Destination</th>
-                                    <th>Courier / AWB</th>
+                                    <th>Tracking Info</th>
                                     <th>Status</th>
                                     <th>Received By</th>
-                                    <th>Action</th>
+                                    <th class="text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($data_delivery as $row): 
-                                    $st = strtolower($row['status'] ?? '');
-                                    $badgeClass = 'bg-secondary';
-                                    if(strpos($st, 'process')!==false) $badgeClass='bg-warning text-dark';
-                                    if(strpos($st, 'shipped')!==false) $badgeClass='bg-info text-white';
-                                    if(strpos($st, 'delivered')!==false) $badgeClass='bg-success text-white';
-                                    
-                                    // JSON safe for JS
-                                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
-                                ?>
-                                <tr>
-                                    <td><span class="fw-bold text-secondary"><?= date('d M Y', strtotime($row['logistic_date'])) ?></span></td>
-                                    <td>
-                                        <div class="fw-bold text-dark"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div>
-                                        <div class="small text-muted text-truncate" style="max-width: 200px;"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($row['delivery_address'] ?? '-') ?></div>
-                                        <div class="small text-muted"><i class="bi bi-person me-1"></i><?= htmlspecialchars($row['pic_name'] ?? '-') ?> (<?= htmlspecialchars($row['pic_phone'] ?? '') ?>)</div>
-                                    </td>
-                                    <td>
-                                        <div class="d-flex align-items-center justify-content-between bg-light rounded p-2 border" style="width: 180px;">
-                                            <div>
-                                                <div class="fw-bold text-uppercase text-primary" style="font-size:0.75rem"><?= htmlspecialchars($row['courier']) ?></div>
-                                                <div class="small text-dark font-monospace"><?= htmlspecialchars($row['awb']) ?></div>
+                                <?php if(empty($data_delivery)): ?>
+                                    <tr><td colspan="6" class="text-center py-5 text-muted">Data tidak ditemukan.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($data_delivery as $row): 
+                                        $st = strtolower($row['status'] ?? '');
+                                        $badgeClass = 'bg-secondary';
+                                        if(strpos($st, 'process')!==false) $badgeClass='bg-warning text-dark';
+                                        if(strpos($st, 'shipped')!==false) $badgeClass='bg-info text-white';
+                                        if(strpos($st, 'delivered')!==false) $badgeClass='bg-success text-white';
+                                        
+                                        $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <span class="fw-bold text-secondary"><?= date('d M Y', strtotime($row['logistic_date'])) ?></span>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark text-uppercase"><?= htmlspecialchars($row['company_name'] ?? '-') ?></div>
+                                            <div class="small text-muted text-truncate" style="max-width: 200px;"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($row['delivery_address'] ?? '-') ?></div>
+                                            <div class="small text-muted"><i class="bi bi-person me-1"></i><?= htmlspecialchars($row['pic_name'] ?? '-') ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-primary"><?= htmlspecialchars($row['courier']) ?></div>
+                                            <div class="input-group input-group-sm mt-1" style="width: 160px;">
+                                                <input type="text" class="form-control form-control-sm bg-white" value="<?= htmlspecialchars($row['awb']) ?>" readonly>
+                                                <button class="btn btn-outline-primary" type="button" onclick='openTrackingModal(<?= $rowJson ?>)' title="Track Package">
+                                                    <i class="bi bi-search"></i>
+                                                </button>
                                             </div>
-                                            <button class="btn btn-sm btn-white border shadow-sm text-primary" onclick='openTrackingModal(<?= $rowJson ?>)' title="Track Live">
-                                                <i class="bi bi-crosshair"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                    <td><span class="badge <?= $badgeClass ?> px-3 py-1 rounded-pill text-uppercase" style="font-size: 0.7rem;"><?= htmlspecialchars($row['status']) ?></span></td>
-                                    <td>
-                                        <?php if($row['receiver_name']): ?>
-                                            <div class="fw-bold text-dark"><?= htmlspecialchars($row['receiver_name']) ?></div>
-                                            <div class="small text-muted"><?= date('d/m/y', strtotime($row['received_date'])) ?></div>
-                                        <?php else: ?>
-                                            <span class="text-muted small fst-italic">Pending</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
-                                            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                                <li><a class="dropdown-item" href="#" onclick='editDelivery(<?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
-                                                <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_logistic&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
-                                            </ul>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
+                                        </td>
+                                        <td>
+                                            <span class="badge <?= $badgeClass ?> px-3 py-1 rounded-pill text-uppercase" style="font-size: 0.7rem;"><?= htmlspecialchars($row['status']) ?></span>
+                                        </td>
+                                        <td>
+                                            <?php if($row['receiver_name']): ?>
+                                                <div class="d-flex align-items-center text-success">
+                                                    <i class="bi bi-check-circle-fill me-2"></i>
+                                                    <div>
+                                                        <div class="fw-bold small"><?= htmlspecialchars($row['receiver_name']) ?></div>
+                                                        <div class="small text-muted" style="font-size:0.7rem;"><?= date('d M Y', strtotime($row['received_date'])) ?></div>
+                                                    </div>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="text-muted small fst-italic">- Pending -</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-action-menu" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                                    <li><a class="dropdown-item" href="#" onclick='editDelivery(<?= $rowJson ?>)'><i class="bi bi-pencil me-2 text-warning"></i> Edit</a></li>
+                                                    <li><a class="dropdown-item text-danger" href="process_sim_tracking.php?action=delete_logistic&id=<?= $row['id'] ?>" onclick="return confirm('Delete?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -254,7 +346,6 @@ try {
             <input type="hidden" name="action" id="recv_action" value="create_logistic">
             <input type="hidden" name="type" value="receive">
             <input type="hidden" name="id" id="recv_id">
-            
             <input type="hidden" name="status" value="Delivered">
             <input type="hidden" name="courier" value="-">
             <input type="hidden" name="awb" value="-">
@@ -435,9 +526,10 @@ try {
 
 <script>
     $(document).ready(function() {
-        // Init DataTable with matching style
+        // Init DataTable
+        // Note: Delivery tab uses standard PHP loop filters now, so DataTables search can be secondary or we disable it to avoid confusion
         $('#table-receive').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
-        $('#table-delivery').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10 });
+        $('#table-delivery').DataTable({ dom: 't<"row px-4 py-3"<"col-6"i><"col-6"p>>', pageLength: 10, searching: false }); // Disable client-side search since we have server-side filter card
     });
 
     // OPEN MODALS
@@ -519,20 +611,17 @@ try {
         // Generate Smart Link
         let url = '#';
         if(awb) {
-            // General Aggregator (Works for JNE, J&T, SiCepat, etc)
             url = `https://berdu.id/cek-resi?courier=${courier.toLowerCase()}&resi=${awb}`;
         }
         $('#btn_track_external').attr('href', url);
 
-        // Timeline Logic (Simulated based on Internal Status)
+        // Timeline Logic
         $('.track-step').removeClass('active completed');
         $('#date_process, #date_shipped, #date_delivered').text('-');
 
-        // Step 1: Processed
         $('#step_process').addClass('completed');
         $('#date_process').text(dateSent);
 
-        // Step 2: Shipped
         if(status.includes('ship') || status.includes('deliver') || status.includes('receiv')) {
             $('#step_shipped').addClass('completed');
             $('#date_shipped').text('In Transit');
@@ -540,9 +629,8 @@ try {
             $('#step_shipped').addClass('active');
         }
 
-        // Step 3: Delivered
         if(status.includes('deliver') || status.includes('receiv') || dateRecv) {
-            $('#step_shipped').addClass('completed'); // Ensure previous is done
+            $('#step_shipped').addClass('completed');
             $('#step_delivered').addClass('completed');
             $('#date_delivered').text(dateRecv || 'Delivered');
         }
