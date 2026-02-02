@@ -164,15 +164,13 @@ if ($db) {
                                     $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                                     $src = $row['source_po_number'] ? "<span class='badge bg-info text-dark bg-opacity-25 border border-info'><i class='bi bi-link-45deg'></i> ".$row['source_po_number']."</span>" : "<span class='badge bg-light text-secondary border'>Manual</span>";
                                     
-                                    // PREPARE NEXT BATCH DATA
-                                    // Regex untuk menaikkan angka batch (Batch 1 -> Batch 2)
+                                    // Generate Next Batch Name Logic
                                     $nextBatchName = "BATCH 2"; 
                                     if(preg_match('/(\d+)/', $row['activation_batch'], $m)) {
                                         $nextBatchName = preg_replace('/(\d+)/', intval($m[0])+1, $row['activation_batch']);
                                     }
                                     
-                                    // Data khusus untuk tombol Add Next Batch
-                                    // Kita kirim ID PO, Nama Batch Baru, dan ID Client/Project untuk autolock
+                                    // Data for "Add Next Batch" Button
                                     $nextBatchData = [
                                         'po_id' => $row['po_provider_id'],
                                         'batch_name' => $nextBatchName,
@@ -190,7 +188,7 @@ if ($db) {
                                     <td class="text-center">
                                         <div class="btn-group btn-action-group">
                                             <?php if($row['po_provider_id']): ?>
-                                            <button class="btn btn-outline-success" onclick='openModal("act", "create", null, <?= $nextBatchJson ?>)' title="Add Next Batch (Same PO)"><i class="bi bi-plus-lg"></i></button>
+                                            <button class="btn btn-outline-success" onclick='openModal("act", "create", null, <?= $nextBatchJson ?>)' title="Add Next Batch"><i class="bi bi-plus-lg"></i></button>
                                             <?php endif; ?>
                                             
                                             <button class="btn btn-outline-secondary" onclick='openModal("act", "update", <?= $rowJson ?>)' title="Edit"><i class="bi bi-pencil-square"></i></button>
@@ -299,22 +297,14 @@ if ($db) {
                                 <span class="text-muted">PO Capacity</span>
                                 <span class="text-dark" id="stock_text_top">0 / 0</span>
                             </div>
-                            
                             <div class="progress mb-2" style="height: 14px; background-color: #e9ecef;">
                                 <div id="bar_others" class="progress-bar bg-secondary opacity-50" role="progressbar" style="width: 0%" title="Used by Others"></div>
                                 <div id="bar_this" class="progress-bar bg-primary" role="progressbar" style="width: 0%" title="Your Allocation"></div>
                                 <div id="bar_free" class="progress-bar bg-success opacity-25" role="progressbar" style="width: 0%" title="Free Space"></div>
                             </div>
-                            
                             <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted" style="font-size:0.7rem">
-                                    <i class="bi bi-square-fill text-secondary opacity-50"></i> Used by Others &nbsp; 
-                                    <i class="bi bi-square-fill text-primary"></i> This Batch &nbsp;
-                                    <i class="bi bi-square-fill text-success opacity-25"></i> Free
-                                </small>
-                                <div class="text-end">
-                                    <span class="badge bg-light text-dark border" id="po_batch_badge">BATCH: -</span>
-                                </div>
+                                <small class="text-muted" style="font-size:0.7rem"><i class="bi bi-square-fill text-secondary opacity-50"></i> Used by Others &nbsp; <i class="bi bi-square-fill text-primary"></i> This Batch &nbsp; <i class="bi bi-square-fill text-success opacity-25"></i> Free</small>
+                                <span class="badge bg-light text-dark border" id="po_batch_badge">BATCH: -</span>
                             </div>
                         </div>
                     </div>
@@ -425,23 +415,19 @@ if ($db) {
     let savedTotalForEdit = 0; 
 
     function resetSync() {
-        $('#inp_source_po').val('').trigger('change');
+        $('#inp_source_po').val('').trigger('change').prop('disabled', false); 
+        $('#btn_reset_sync').show();
     }
 
     // --- 1. SYNC LOGIC ---
-    // Dipanggil saat dropdown PO berubah (Create Mode) atau manual trigger (Edit Mode)
     function syncWithPO() {
-        // Tentukan sumber PO ID: Dropdown (Create) atau Hidden Input (Edit)
         let poId = '';
         let $sel = null;
 
         if(isEditingSync) {
-            // Jika Edit, ambil data dari hidden field (atau preset data)
             poId = $('#inp_po_hidden_edit').val();
-            // Cari data atribut dari dropdown (meski hidden) untuk kalkulasi
             $sel = $(`#inp_source_po option[value="${poId}"]`); 
         } else {
-            // Jika Create, ambil dari dropdown
             $sel = $('#inp_source_po option:selected');
             poId = $('#inp_source_po').val();
         }
@@ -449,7 +435,7 @@ if ($db) {
         // RESET UI
         $('#stock_indicator').slideUp();
         $('#status_client, #status_project, #status_total').html('');
-        $('#inp_company_id, #inp_project_id, #inp_total').removeClass('field-locked').prop('readonly', false);
+        $('#inp_company_id, #inp_project_id, #inp_total').removeClass('field-locked').prop('readonly', false).removeClass('is-invalid');
 
         if (!poId || !$sel || $sel.length === 0) {
             maxAllocation = 999999999; 
@@ -463,17 +449,16 @@ if ($db) {
         let compId = $sel.data('comp');
         let projId = $sel.data('proj');
 
-        // CALCULATE USAGE
+        // CALCULATE
         poUsedByOthers = dbUsed;
         if (isEditingSync) {
-            // Jika edit, kurangi data lama saya dari "used" agar kuota kembali
             poUsedByOthers = dbUsed - savedTotalForEdit;
         }
         maxAllocation = poInitial - poUsedByOthers;
 
-        // SHOW VISUALS
+        // VISUALS
         $('#stock_indicator').slideDown();
-        $('#po_batch_badge').text('PO: ' + $sel.data('label'));
+        $('#po_batch_badge').text('PO: ' + ($sel.data('label') || 'Selected'));
 
         // LOCK FIELDS
         $('#inp_company_id').val(compId).trigger('change').addClass('field-locked');
@@ -485,16 +470,21 @@ if ($db) {
             $('#status_project').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked</span>');
         }, 50); 
 
-        // AUTO FILL BATCH (Jika kosong)
-        if($('#inp_batch').val() === '') $('#inp_batch').val(batch);
+        // AUTO FILL BATCH (Create Only)
+        if(!isEditingSync && $('#inp_batch').val() === '') $('#inp_batch').val(batch);
         
-        // AUTO FILL TOTAL (Strict 1 PO = 1 Batch Request)
-        // Saat Create Baru, otomatis isi sisa kuota ke Total SIM
+        // --- LOGIC PERBAIKAN TOTAL SIM ---
         if (!isEditingSync) {
-            $('#inp_total').val(maxAllocation); 
+            // Jika Create Baru dan ada sisa, isi maxAllocation
+            // Jika sisa 0 (PO penuh), biarkan kosong agar user bisa ketik
+            if(maxAllocation > 0) {
+                $('#inp_total').val(maxAllocation); 
+            } else {
+                $('#inp_total').val(''); 
+            }
         }
         
-        $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Max: ${maxAllocation.toLocaleString()}</span>`);
+        $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Remaining: ${maxAllocation.toLocaleString()}</span>`);
         
         updateReactiveBar();
         calculateRemaining();
@@ -502,8 +492,10 @@ if ($db) {
 
     // --- 2. BAR UPDATE ---
     function updateReactiveBar() {
+        if (!$('#inp_source_po').val() && !$('#inp_po_hidden_edit').val()) return;
+
         let myInput = parseInt($('#inp_total').val()) || 0;
-        let visualInput = (myInput > maxAllocation) ? maxAllocation : myInput;
+        let visualInput = (myInput > maxAllocation && maxAllocation > 0) ? maxAllocation : myInput;
 
         let pctOthers = (poInitial > 0) ? (poUsedByOthers / poInitial) * 100 : 0;
         let pctMy = (poInitial > 0) ? (visualInput / poInitial) * 100 : 0;
@@ -517,18 +509,25 @@ if ($db) {
         );
     }
 
-    // --- 3. CALCULATION ---
+    // --- 3. CALCULATION & VALIDATION (REMOVED BLOCKING) ---
     function calculateRemaining() {
         let totalVal = parseInt($('#inp_total').val()) || 0;
         let activeVal = parseInt($('#inp_qty_1').val()) || 0;
 
-        // Validation Rule 1: Max PO limit
-        if (currentMode === 'act' && maxAllocation > 0 && totalVal > maxAllocation) {
-            // Optional: alert(`Max allocation available is ${maxAllocation}`);
-            $('#inp_total').val(maxAllocation);
-            totalVal = maxAllocation;
-            updateReactiveBar();
+        // Validation Rule 1: Max PO limit (SOFT WARNING - NO BLOCKING)
+        if (currentMode === 'act' && maxAllocation >= 0 && totalVal > maxAllocation) {
+            $('#inp_total').addClass('is-invalid');
+            $('#status_total').html(`<span class="text-danger fw-bold small"><i class="bi bi-exclamation-triangle"></i> Over Capacity! (Limit: ${maxAllocation.toLocaleString()})</span>`);
+        } else {
+            $('#inp_total').removeClass('is-invalid');
+            // Restore normal status text if we are in sync mode
+            if((currentMode === 'act' && $('#inp_source_po').val()) || isEditingSync){
+                 $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Remaining: ${maxAllocation.toLocaleString()}</span>`);
+            }
         }
+        
+        // Update visual bar anyway
+        updateReactiveBar();
 
         // Validation Rule 2: Active <= Total
         if (activeVal > totalVal) {
@@ -539,25 +538,22 @@ if ($db) {
         $('#inp_qty_2').val(totalVal - activeVal);
     }
 
-    // --- 4. OPEN MODAL (FIXED & IMPROVED) ---
+    // --- 4. OPEN MODAL (STRICT 1-to-1 EDIT) ---
     function openModal(type, action, data = null, preset = null) {
         currentMode = type;
         $('#formUniversal')[0].reset();
         
-        // RESET VARIABLES
+        // UI RESET
+        resetSync(); 
+        $('#div_source_po_wrapper').toggle(type === 'act'); 
+        $('#ui_po_create_mode').show(); 
+        $('#ui_po_edit_mode').hide();   
+        
         isEditingSync = false; 
         savedTotalForEdit = 0;
         poInitial = 0; poUsedByOthers = 0; maxAllocation = 0; 
 
-        // UI RESET
-        $('#div_source_po_wrapper').toggle(type === 'act'); 
-        $('#ui_po_create_mode').show(); // Default show dropdown
-        $('#ui_po_edit_mode').hide();   // Default hide readonly
-        $('#stock_indicator').slideUp();
-        $('#status_client, #status_project, #status_total').html('');
-        $('#inp_company_id, #inp_project_id, #inp_total').removeClass('field-locked').prop('readonly', false);
-        $('#inp_source_po').val(''); // Reset dropdown
-
+        // Titles
         let title = (action === 'create' ? 'New ' : 'Edit ') + (type === 'act' ? 'Activation' : 'Termination');
         let color = (type === 'act' ? 'bg-success' : 'bg-danger');
         let act = (action === 'create' ? `create_${type === 'act' ? 'activation' : 'termination'}` : `update_${type === 'act' ? 'activation' : 'termination'}`);
@@ -566,7 +562,7 @@ if ($db) {
         $('#modalHeader').removeClass('bg-success bg-danger').addClass(color);
         $('#formAction').val(act);
         
-        // NAME MAPPING
+        // Names
         if(type === 'act') {
             $('#inp_date').attr('name', 'activation_date'); $('#inp_batch').attr('name', 'activation_batch');
             $('#inp_qty_1').attr('name', 'active_qty'); $('#inp_qty_2').attr('name', 'inactive_qty');
@@ -589,31 +585,27 @@ if ($db) {
             $('#inp_company_id').val(data.company_id);
             updateProjectDropdown(data.company_id, data.project_id);
 
-            // SPECIAL: EDIT WITH PO SYNC
+            // SPECIAL: EDIT WITH PO SYNC (STRICT LOCK)
             if(type === 'act' && data.po_provider_id) {
                 isEditingSync = true;
                 savedTotalForEdit = parseInt(data.total_sim); 
                 
-                // 1. Hide Dropdown, Show Readonly Text
+                // Hide Dropdown, Show Readonly Text
                 $('#ui_po_create_mode').hide();
                 $('#ui_po_edit_mode').show();
                 
-                // 2. Set Readonly Text (Name of PO)
-                // Cari nama PO dari dropdown option yg tersembunyi
-                let poName = $(`#inp_source_po option[value="${data.po_provider_id}"]`).data('label') || "PO #" + data.po_provider_id;
-                $('#inp_po_display_readonly').val(poName);
-                
-                // 3. Set Hidden Value for logic
+                // Set Display Text
+                let poName = $(`#inp_source_po option[value="${data.po_provider_id}"]`).text() || "PO #" + data.po_provider_id;
+                $('#inp_po_display_readonly').val(poName.trim());
                 $('#inp_po_hidden_edit').val(data.po_provider_id);
 
-                // 4. Trigger Sync Logic
                 setTimeout(() => { syncWithPO(); }, 100);
             }
         } else {
             // --- CREATE MODE ---
             $('#inp_date').val(new Date().toISOString().split('T')[0]);
             
-            // PRESET LOGIC (From Add Next Batch Button)
+            // PRESET LOGIC (From Add Next Batch)
             if(preset) {
                 $('#inp_batch').val(preset.batch_name).addClass('highlight-input');
                 
