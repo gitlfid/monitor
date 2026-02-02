@@ -12,14 +12,37 @@ require_once 'includes/sidebar.php';
 
 $db = db_connect();
 
-// --- FETCH DATA (ACTIVATIONS & TERMINATIONS) ---
+// --- A. PREPARE SMART DATA (LATEST BATCH LOGIC) ---
+$last_act = [];
+$next_batch_suggestion = "BATCH 1"; // Default
+$last_po_id_suggestion = "";
+
+if ($db) {
+    // Ambil data aktivasi terakhir untuk logic "Next Batch"
+    $q_last = $db->query("SELECT * FROM sim_activations ORDER BY id DESC LIMIT 1");
+    if($q_last && $q_last->rowCount() > 0) {
+        $last_act = $q_last->fetch(PDO::FETCH_ASSOC);
+        
+        // Logic Increment Nama Batch (Misal: BATCH 1 -> BATCH 2)
+        if (preg_match('/(\d+)/', $last_act['activation_batch'], $matches)) {
+            $num = intval($matches[0]) + 1;
+            $next_batch_suggestion = preg_replace('/(\d+)/', $num, $last_act['activation_batch']);
+        } else {
+            $next_batch_suggestion = $last_act['activation_batch'] . " (NEXT)";
+        }
+        
+        $last_po_id_suggestion = $last_act['po_provider_id'];
+    }
+}
+
+// --- B. FETCH DATA (ACTIVATIONS & TERMINATIONS) ---
 $activations = [];
 $terminations = [];
 $chart_data_act = []; 
 $chart_data_term = [];
 
 if ($db) {
-    // 1. Fetch Activations (Pastikan kolom po_provider_id terpanggil)
+    // 1. Fetch Activations 
     $sql_act = "SELECT sa.*, 
                 c.company_name, p.project_name,
                 po.po_number as source_po_number, po.batch_name as source_po_batch,
@@ -43,7 +66,7 @@ if ($db) {
     if($stmt) $terminations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// --- CHART DATA ---
+// --- C. CHART DATA GENERATION ---
 foreach ($activations as $row) {
     $d = date('Y-m-d', strtotime($row['activation_date']));
     if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -63,14 +86,13 @@ foreach ($all_dates as $dateKey) {
     $js_series_term[] = $chart_data_term[$dateKey] ?? 0;
 }
 
-// --- SYNC DATA (FETCH PO PROVIDER + REMAINING STOCK) ---
+// --- D. SYNC DATA (PO PROVIDER + REMAINING STOCK CALCULATION) ---
 $clients = []; $projects = []; $provider_pos = [];
 if ($db) {
     $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     
-    // HITUNG SISA STOK
-    // Initial Qty - Used Qty = Remaining
+    // HITUNG SISA STOK PO (Initial - Used)
     $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty as initial_qty,
                 COALESCE(linked.company_id, st.company_id) as final_company_id, 
                 COALESCE(linked.project_id, st.project_id) as final_project_id,
@@ -91,19 +113,20 @@ if ($db) {
     
     /* Locked Input Style */
     .field-locked {
-        background-color: #e9ecef !important;
+        background-color: #f8f9fa !important;
         pointer-events: none;
         border-color: #dee2e6;
-        color: #495057;
+        color: #6c757d;
+        font-weight: 600;
         cursor: not-allowed;
     }
     
     /* Sync Badge */
-    .sync-badge { font-size: 0.7rem; font-weight: 700; margin-top: 5px; display: inline-block; padding: 2px 6px; border-radius: 4px; }
-    .sync-active { color: #0d6efd; background: #cfe2ff; } 
+    .sync-badge { font-size: 0.7rem; font-weight: 700; margin-top: 5px; display: inline-block; padding: 3px 8px; border-radius: 4px; }
+    .sync-active { color: #0f5132; background: #d1e7dd; border: 1px solid #badbcc; } 
     
     /* Progress Bar */
-    .progress-bar { transition: width 0.4s ease; }
+    .progress-bar { transition: width 0.4s ease; font-size: 0.7rem; line-height: 14px; }
     
     /* Tables & Tabs */
     .nav-tabs { border-bottom: 2px solid #f1f5f9; }
@@ -111,6 +134,10 @@ if ($db) {
     .nav-link:hover { color: #435ebe; background: #f8fafc; }
     .nav-link.active { color: #435ebe; border-bottom: 2px solid #435ebe; background: transparent; }
     .badge-batch { background-color: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; }
+    
+    /* Animation for Auto Fill */
+    .highlight-input { animation: highlightFade 1.5s ease-out; }
+    @keyframes highlightFade { 0% { background-color: #d1e7dd; } 100% { background-color: white; } }
 </style>
 
 <div class="page-heading mb-4">
@@ -143,7 +170,14 @@ if ($db) {
                 <div class="tab-pane fade show active" id="activation">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="fw-bold text-dark m-0">Activation Data</h6>
-                        <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="openModal('act', 'create')"><i class="bi bi-plus me-1"></i> New Activation</button>
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm px-3 fw-bold me-2" onclick="autoNextBatch()" title="Continue previous sequence">
+                                <i class="bi bi-magic me-1"></i> Auto Next Batch
+                            </button>
+                            <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="openModal('act', 'create')">
+                                <i class="bi bi-plus me-1"></i> New Activation
+                            </button>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-hover w-100" id="table-activation">
@@ -231,7 +265,7 @@ if ($db) {
                         </div>
                         
                         <select id="inp_source_po" name="po_provider_id" class="form-select border-success shadow-none" onchange="syncWithPO()">
-                            <option value="">-- Select Source PO to Sync --</option>
+                            <option value="">-- Select Source PO --</option>
                             <?php foreach($provider_pos as $po): 
                                 $initial = (int)$po['initial_qty'];
                                 $used = (int)$po['total_used'];
@@ -254,21 +288,25 @@ if ($db) {
                         
                         <div id="stock_indicator" class="mt-3 bg-white p-3 rounded border" style="display:none;">
                             <div class="d-flex justify-content-between small mb-1 fw-bold">
-                                <span class="text-muted">PO Utilization</span>
+                                <span class="text-muted">PO Capacity</span>
                                 <span class="text-dark" id="stock_text_top">0 / 0</span>
                             </div>
-                            <div class="progress" style="height: 14px; background-color: #e9ecef;">
+                            
+                            <div class="progress mb-2" style="height: 14px; background-color: #e9ecef;">
                                 <div id="bar_others" class="progress-bar bg-secondary opacity-50" role="progressbar" style="width: 0%" title="Used by Others"></div>
                                 <div id="bar_this" class="progress-bar bg-primary" role="progressbar" style="width: 0%" title="This Batch"></div>
-                                <div id="bar_free" class="progress-bar bg-success opacity-25" role="progressbar" style="width: 0%" title="Remaining Free"></div>
+                                <div id="bar_free" class="progress-bar bg-success opacity-25" role="progressbar" style="width: 0%" title="Free Space"></div>
                             </div>
-                            <div class="d-flex justify-content-between mt-2 align-items-center">
+                            
+                            <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted" style="font-size:0.7rem">
                                     <i class="bi bi-square-fill text-secondary opacity-50"></i> Used by Others &nbsp; 
                                     <i class="bi bi-square-fill text-primary"></i> This Batch &nbsp;
                                     <i class="bi bi-square-fill text-success opacity-25"></i> Free
                                 </small>
-                                <span class="badge bg-light text-dark border" id="po_batch_badge">BATCH: -</span>
+                                <div class="text-end">
+                                    <span class="badge bg-light text-dark border" id="po_batch_badge">BATCH: -</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -372,7 +410,7 @@ if ($db) {
 
     // --- VARIABLES FOR SYNC LOGIC ---
     let poInitial = 0;
-    let poUsedByOthers = 0; // Usage by OTHER batches (Total Used DB - My Saved Value)
+    let poUsedByOthers = 0; 
     let maxAllocation = 0; 
     let currentMode = 'act';
     let isEditingSync = false; 
@@ -407,8 +445,6 @@ if ($db) {
         let batch = $sel.data('batch');
 
         // CALCULATE "USED BY OTHERS"
-        // If editing: Used by others = Total Used in DB - My current saved value
-        // If creating: Used by others = Total Used in DB
         poUsedByOthers = dbUsed;
         if (isEditingSync) {
             poUsedByOthers = dbUsed - savedTotalForEdit;
@@ -423,20 +459,24 @@ if ($db) {
 
         // AUTO FILL & LOCK
         $('#inp_company_id').val(compId).trigger('change').addClass('field-locked');
-        $('#status_client').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked by PO</span>');
+        $('#status_client').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked</span>');
 
         updateProjectDropdown(compId); 
         setTimeout(() => {
             $('#inp_project_id').val(projId).addClass('field-locked'); 
-            $('#status_project').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked by PO</span>');
+            $('#status_project').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked</span>');
         }, 50); 
 
+        // Suggest Batch Name (Only if empty or Auto mode)
         if($('#inp_batch').val() === '') $('#inp_batch').val(batch);
         
-        // FILL TOTAL ONLY IF CREATING NEW
+        // --- LOGIC PERUBAHAN UTAMA DI SINI ---
+        // Jika mode Create, JANGAN isi total_sim otomatis. Biarkan user input sendiri.
+        // Tapi tetap kunci maksimalnya di maxAllocation.
         if (!isEditingSync) {
-            $('#inp_total').val(maxAllocation); 
+            $('#inp_total').val(''); // Clear it, let user type
         }
+        // Jika Edit, biarkan nilai lama
         
         $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Max Alloc: ${maxAllocation.toLocaleString()}</span>`);
         
@@ -445,30 +485,23 @@ if ($db) {
         calculateRemaining();
     }
 
-    // --- 2. REACTIVE BAR UPDATE (Runs on Input Change) ---
+    // --- 2. REACTIVE BAR UPDATE ---
     function updateReactiveBar() {
-        // Only run if Sync is Active
         if (!$('#inp_source_po').val()) return;
 
         let myInput = parseInt($('#inp_total').val()) || 0;
-        
-        // Capping Logic visually
-        if (myInput > maxAllocation) myInput = maxAllocation;
+        let visualInput = (myInput > maxAllocation) ? maxAllocation : myInput;
 
-        let remainingFree = poInitial - poUsedByOthers - myInput;
-        if (remainingFree < 0) remainingFree = 0;
-
-        // Calculate Percentages
         let pctOthers = (poUsedByOthers / poInitial) * 100;
-        let pctMy = (myInput / poInitial) * 100;
-        // let pctFree = (remainingFree / poInitial) * 100; // Not needed for CSS width if using flex/stack
+        let pctMy = (visualInput / poInitial) * 100;
+        // let pctFree = 100 - pctOthers - pctMy;
 
         $('#bar_others').css('width', pctOthers + '%');
         $('#bar_this').css('width', pctMy + '%');
-        $('#bar_free').css('width', (100 - pctOthers - pctMy) + '%'); // Optional if using bg color
+        $('#bar_free').css('width', (100 - pctOthers - pctMy) + '%'); 
 
         $('#stock_text_top').html(
-            `${poInitial.toLocaleString()} Total &bull; <span class="text-primary">${myInput.toLocaleString()} Allocated</span>`
+            `${poInitial.toLocaleString()} Total &bull; <span class="text-primary fw-bold">${visualInput.toLocaleString()} Allocated</span>`
         );
     }
 
@@ -479,10 +512,10 @@ if ($db) {
 
         // Validation Rule 1: Max PO limit
         if (currentMode === 'act' && maxAllocation > 0 && totalVal > maxAllocation) {
-            // alert(`Max allocation available is ${maxAllocation.toLocaleString()}`);
+            alert(`Maximum allocation available is ${maxAllocation.toLocaleString()}`);
             $('#inp_total').val(maxAllocation);
             totalVal = maxAllocation;
-            updateReactiveBar(); // Update bar back to max
+            updateReactiveBar();
         }
 
         // Validation Rule 2: Active <= Total
@@ -494,7 +527,32 @@ if ($db) {
         $('#inp_qty_2').val(totalVal - activeVal);
     }
 
-    // --- 4. OPEN MODAL HANDLER ---
+    // --- 4. AUTO NEXT BATCH FEATURE ---
+    function autoNextBatch() {
+        // Data dari PHP
+        let suggestedName = "<?php echo $next_batch_suggestion; ?>";
+        let suggestedPO = "<?php echo $last_po_id_suggestion; ?>";
+
+        // Open Modal Create
+        openModal('act', 'create');
+
+        // Animation Effect
+        $('#inp_batch').addClass('highlight-input').val(suggestedName);
+        
+        // Try selecting previous PO
+        if(suggestedPO) {
+            let $opt = $(`#inp_source_po option[value="${suggestedPO}"]`);
+            // Cek apakah PO itu masih ada di list (artinya masih ada sisa)
+            if($opt.length > 0 && !$opt.prop('disabled')) {
+                $('#inp_source_po').val(suggestedPO).trigger('change'); // Trigger Sync
+            } else {
+                // Jika PO habis, biarkan manual tapi kasih tahu user
+                // alert("Previous PO is full. Please select a new PO for this next batch.");
+            }
+        }
+    }
+
+    // --- 5. OPEN MODAL HANDLER ---
     function openModal(type, action, data = null) {
         currentMode = type;
         $('#formUniversal')[0].reset();
@@ -503,7 +561,7 @@ if ($db) {
         $('#div_source_po_wrapper').toggle(type === 'act'); 
         isEditingSync = false; 
         savedTotalForEdit = 0;
-        poInitial = 0; poUsedByOthers = 0; maxAllocation = 0; // Reset Globals
+        poInitial = 0; poUsedByOthers = 0; maxAllocation = 0; 
 
         let title = (action === 'create' ? 'New ' : 'Edit ') + (type === 'act' ? 'Activation' : 'Termination');
         let color = (type === 'act' ? 'bg-success' : 'bg-danger');
