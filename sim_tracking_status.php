@@ -12,37 +12,14 @@ require_once 'includes/sidebar.php';
 
 $db = db_connect();
 
-// --- A. PREPARE SMART DATA (LATEST BATCH LOGIC) ---
-$last_act = [];
-$next_batch_suggestion = "BATCH 1"; // Default
-$last_po_id_suggestion = "";
-
-if ($db) {
-    // Ambil data aktivasi terakhir untuk logic "Next Batch"
-    $q_last = $db->query("SELECT * FROM sim_activations ORDER BY id DESC LIMIT 1");
-    if($q_last && $q_last->rowCount() > 0) {
-        $last_act = $q_last->fetch(PDO::FETCH_ASSOC);
-        
-        // Logic Increment Nama Batch (Misal: BATCH 1 -> BATCH 2)
-        if (preg_match('/(\d+)/', $last_act['activation_batch'], $matches)) {
-            $num = intval($matches[0]) + 1;
-            $next_batch_suggestion = preg_replace('/(\d+)/', $num, $last_act['activation_batch']);
-        } else {
-            $next_batch_suggestion = $last_act['activation_batch'] . " (NEXT)";
-        }
-        
-        $last_po_id_suggestion = $last_act['po_provider_id'];
-    }
-}
-
-// --- B. FETCH DATA (ACTIVATIONS & TERMINATIONS) ---
+// --- A. FETCH DATA (ACTIVATIONS) ---
 $activations = [];
 $terminations = [];
 $chart_data_act = []; 
 $chart_data_term = [];
 
 if ($db) {
-    // 1. Fetch Activations 
+    // 1. Fetch Activations (Pastikan po_provider_id dan data PO terambil)
     $sql_act = "SELECT sa.*, 
                 c.company_name, p.project_name,
                 po.po_number as source_po_number, po.batch_name as source_po_batch,
@@ -66,7 +43,7 @@ if ($db) {
     if($stmt) $terminations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// --- C. CHART DATA GENERATION ---
+// --- B. CHART DATA GENERATION ---
 foreach ($activations as $row) {
     $d = date('Y-m-d', strtotime($row['activation_date']));
     if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -86,13 +63,13 @@ foreach ($all_dates as $dateKey) {
     $js_series_term[] = $chart_data_term[$dateKey] ?? 0;
 }
 
-// --- D. SYNC DATA (PO PROVIDER + REMAINING STOCK CALCULATION) ---
+// --- C. SYNC DATA (PO PROVIDER + REMAINING STOCK CALCULATION) ---
 $clients = []; $projects = []; $provider_pos = [];
 if ($db) {
     $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     $projects = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     
-    // HITUNG SISA STOK PO (Initial - Used)
+    // HITUNG SISA STOK PO (Initial - Total Used)
     $sql_pos = "SELECT st.id, st.po_number, st.batch_name, st.sim_qty as initial_qty,
                 COALESCE(linked.company_id, st.company_id) as final_company_id, 
                 COALESCE(linked.project_id, st.project_id) as final_project_id,
@@ -135,9 +112,8 @@ if ($db) {
     .nav-link.active { color: #435ebe; border-bottom: 2px solid #435ebe; background: transparent; }
     .badge-batch { background-color: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; }
     
-    /* Animation for Auto Fill */
-    .highlight-input { animation: highlightFade 1.5s ease-out; }
-    @keyframes highlightFade { 0% { background-color: #d1e7dd; } 100% { background-color: white; } }
+    /* Action Buttons */
+    .btn-action-group .btn { padding: 4px 10px; font-size: 0.85rem; }
 </style>
 
 <div class="page-heading mb-4">
@@ -170,14 +146,7 @@ if ($db) {
                 <div class="tab-pane fade show active" id="activation">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="fw-bold text-dark m-0">Activation Data</h6>
-                        <div>
-                            <button class="btn btn-outline-primary btn-sm px-3 fw-bold me-2" onclick="autoNextBatch()" title="Continue previous sequence">
-                                <i class="bi bi-magic me-1"></i> Auto Next Batch
-                            </button>
-                            <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="openModal('act', 'create')">
-                                <i class="bi bi-plus me-1"></i> New Activation
-                            </button>
-                        </div>
+                        <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" onclick="openModal('act', 'create')"><i class="bi bi-plus me-1"></i> New Activation</button>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-hover w-100" id="table-activation">
@@ -190,6 +159,18 @@ if ($db) {
                                 <?php foreach ($activations as $row): 
                                     $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                                     $src = $row['source_po_number'] ? "<span class='badge bg-info text-dark bg-opacity-25 border border-info'><i class='bi bi-link-45deg'></i> ".$row['source_po_number']."</span>" : "<span class='badge bg-light text-secondary border'>Manual</span>";
+                                    
+                                    // Logic Next Batch Name (Simple Increment)
+                                    $nextBatchName = "BATCH 2"; // Fallback
+                                    if(preg_match('/(\d+)/', $row['activation_batch'], $m)) {
+                                        $nextBatchName = preg_replace('/(\d+)/', intval($m[0])+1, $row['activation_batch']);
+                                    }
+                                    // Pack data for "Add Next Batch" button
+                                    $nextBatchData = [
+                                        'po_id' => $row['po_provider_id'],
+                                        'batch_name' => $nextBatchName
+                                    ];
+                                    $nextBatchJson = htmlspecialchars(json_encode($nextBatchData), ENT_QUOTES, 'UTF-8');
                                 ?>
                                 <tr>
                                     <td class="ps-3 fw-bold text-secondary"><?= date('d M Y', strtotime($row['activation_date'])) ?></td>
@@ -198,9 +179,12 @@ if ($db) {
                                     <td><div class="d-flex flex-column small"><span>Total: <b><?= number_format($row['total_sim']) ?></b></span><span class="text-success fw-bold">Active: <?= number_format($row['active_qty']) ?></span></div></td>
                                     <td class="text-center"><span class="badge-batch"><?= $row['activation_batch'] ?></span></td>
                                     <td class="text-center">
-                                        <div class="btn-group">
-                                            <button class="btn btn-sm btn-outline-secondary" onclick='openModal("act", "update", <?= $rowJson ?>)'><i class="bi bi-pencil-square"></i></button>
-                                            <a href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                        <div class="btn-group btn-action-group">
+                                            <button class="btn btn-outline-success" onclick='openModal("act", "create", null, <?= $nextBatchJson ?>)' title="Add Next Batch"><i class="bi bi-plus-lg"></i></button>
+                                            
+                                            <button class="btn btn-outline-secondary" onclick='openModal("act", "update", <?= $rowJson ?>)' title="Edit"><i class="bi bi-pencil-square"></i></button>
+                                            
+                                            <a href="process_sim_tracking.php?action=delete_activation&id=<?= $row['id'] ?>" class="btn btn-outline-danger" onclick="return confirm('Delete?')" title="Delete"><i class="bi bi-trash"></i></a>
                                         </div>
                                     </td>
                                 </tr>
@@ -228,9 +212,9 @@ if ($db) {
                                     <td><span class="text-danger fw-bold">Terminated: <?= number_format($row['terminated_qty']) ?></span></td>
                                     <td class="text-center"><span class="badge-batch"><?= $row['termination_batch'] ?></span></td>
                                     <td class="text-center">
-                                        <div class="btn-group">
-                                            <button class="btn btn-sm btn-outline-secondary" onclick='openModal("term", "update", <?= $rowJson ?>)'><i class="bi bi-pencil-square"></i></button>
-                                            <a href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                        <div class="btn-group btn-action-group">
+                                            <button class="btn btn-outline-secondary" onclick='openModal("term", "update", <?= $rowJson ?>)'><i class="bi bi-pencil-square"></i></button>
+                                            <a href="process_sim_tracking.php?action=delete_termination&id=<?= $row['id'] ?>" class="btn btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                         </div>
                                     </td>
                                 </tr>
@@ -252,7 +236,7 @@ if ($db) {
             
             <div class="modal-header text-white py-3" id="modalHeader">
                 <h6 class="modal-title m-0 fw-bold" id="modalTitle">Form</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             
             <div class="modal-body p-4">
@@ -261,7 +245,7 @@ if ($db) {
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-bold text-success small m-0"><i class="bi bi-link-45deg"></i> SYNC WITH PROVIDER PO</label>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="resetSync()" style="font-size: 0.7rem;">Reset Manual</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" id="btn_reset_sync" onclick="resetSync()" style="font-size: 0.7rem;">Reset Manual</button>
                         </div>
                         
                         <select id="inp_source_po" name="po_provider_id" class="form-select border-success shadow-none" onchange="syncWithPO()">
@@ -294,7 +278,7 @@ if ($db) {
                             
                             <div class="progress mb-2" style="height: 14px; background-color: #e9ecef;">
                                 <div id="bar_others" class="progress-bar bg-secondary opacity-50" role="progressbar" style="width: 0%" title="Used by Others"></div>
-                                <div id="bar_this" class="progress-bar bg-primary" role="progressbar" style="width: 0%" title="This Batch"></div>
+                                <div id="bar_this" class="progress-bar bg-primary" role="progressbar" style="width: 0%" title="Your Allocation"></div>
                                 <div id="bar_free" class="progress-bar bg-success opacity-25" role="progressbar" style="width: 0%" title="Free Space"></div>
                             </div>
                             
@@ -408,7 +392,7 @@ if ($db) {
         }
     }
 
-    // --- VARIABLES FOR SYNC LOGIC ---
+    // --- SYNC VARIABLES ---
     let poInitial = 0;
     let poUsedByOthers = 0; 
     let maxAllocation = 0; 
@@ -417,15 +401,16 @@ if ($db) {
     let savedTotalForEdit = 0; 
 
     function resetSync() {
-        $('#inp_source_po').val('').trigger('change');
+        $('#inp_source_po').val('').trigger('change').prop('disabled', false); // Enable back if manual reset
+        $('#btn_reset_sync').show();
     }
 
-    // --- 1. SET BASELINE DATA FROM PO SELECTION ---
+    // --- 1. SYNC LOGIC ---
     function syncWithPO() {
         let $sel = $('#inp_source_po option:selected');
         let poId = $('#inp_source_po').val();
 
-        // RESET
+        // RESET UI
         $('#stock_indicator').slideUp();
         $('#status_client, #status_project, #status_total').html('');
         $('#inp_company_id, #inp_project_id, #inp_total').removeClass('field-locked').prop('readonly', false);
@@ -444,20 +429,18 @@ if ($db) {
         let projId = $sel.data('proj');
         let batch = $sel.data('batch');
 
-        // CALCULATE "USED BY OTHERS"
+        // CALCULATE
         poUsedByOthers = dbUsed;
         if (isEditingSync) {
             poUsedByOthers = dbUsed - savedTotalForEdit;
         }
-
-        // Max I can allocate = Initial - Used By Others
         maxAllocation = poInitial - poUsedByOthers;
 
-        // SHOW VISUALS
+        // VISUALS
         $('#stock_indicator').slideDown();
         $('#po_batch_badge').text('PO: ' + $sel.text().split('|')[0].trim());
 
-        // AUTO FILL & LOCK
+        // LOCK FIELDS
         $('#inp_company_id').val(compId).trigger('change').addClass('field-locked');
         $('#status_client').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked</span>');
 
@@ -467,25 +450,21 @@ if ($db) {
             $('#status_project').html('<span class="sync-badge sync-active"><i class="bi bi-lock-fill"></i> Locked</span>');
         }, 50); 
 
-        // Suggest Batch Name (Only if empty or Auto mode)
+        // AUTO FILL
         if($('#inp_batch').val() === '') $('#inp_batch').val(batch);
         
-        // --- LOGIC PERUBAHAN UTAMA DI SINI ---
-        // Jika mode Create, JANGAN isi total_sim otomatis. Biarkan user input sendiri.
-        // Tapi tetap kunci maksimalnya di maxAllocation.
+        // ** DO NOT FILL TOTAL SIM ON CREATE (Allow manual input) **
         if (!isEditingSync) {
-            $('#inp_total').val(''); // Clear it, let user type
+            $('#inp_total').val(''); // Clear, let user decide allocation
         }
-        // Jika Edit, biarkan nilai lama
         
         $('#status_total').html(`<span class="sync-badge sync-active"><i class="bi bi-info-circle"></i> Max Alloc: ${maxAllocation.toLocaleString()}</span>`);
         
-        // UPDATE BAR & CALC
         updateReactiveBar();
         calculateRemaining();
     }
 
-    // --- 2. REACTIVE BAR UPDATE ---
+    // --- 2. BAR UPDATE ---
     function updateReactiveBar() {
         if (!$('#inp_source_po').val()) return;
 
@@ -494,7 +473,6 @@ if ($db) {
 
         let pctOthers = (poUsedByOthers / poInitial) * 100;
         let pctMy = (visualInput / poInitial) * 100;
-        // let pctFree = 100 - pctOthers - pctMy;
 
         $('#bar_others').css('width', pctOthers + '%');
         $('#bar_this').css('width', pctMy + '%');
@@ -505,12 +483,11 @@ if ($db) {
         );
     }
 
-    // --- 3. CALCULATION & VALIDATION ---
+    // --- 3. CALCULATION ---
     function calculateRemaining() {
         let totalVal = parseInt($('#inp_total').val()) || 0;
         let activeVal = parseInt($('#inp_qty_1').val()) || 0;
 
-        // Validation Rule 1: Max PO limit
         if (currentMode === 'act' && maxAllocation > 0 && totalVal > maxAllocation) {
             alert(`Maximum allocation available is ${maxAllocation.toLocaleString()}`);
             $('#inp_total').val(maxAllocation);
@@ -518,7 +495,6 @@ if ($db) {
             updateReactiveBar();
         }
 
-        // Validation Rule 2: Active <= Total
         if (activeVal > totalVal) {
             $('#inp_qty_1').val(totalVal);
             activeVal = totalVal;
@@ -527,33 +503,8 @@ if ($db) {
         $('#inp_qty_2').val(totalVal - activeVal);
     }
 
-    // --- 4. AUTO NEXT BATCH FEATURE ---
-    function autoNextBatch() {
-        // Data dari PHP
-        let suggestedName = "<?php echo $next_batch_suggestion; ?>";
-        let suggestedPO = "<?php echo $last_po_id_suggestion; ?>";
-
-        // Open Modal Create
-        openModal('act', 'create');
-
-        // Animation Effect
-        $('#inp_batch').addClass('highlight-input').val(suggestedName);
-        
-        // Try selecting previous PO
-        if(suggestedPO) {
-            let $opt = $(`#inp_source_po option[value="${suggestedPO}"]`);
-            // Cek apakah PO itu masih ada di list (artinya masih ada sisa)
-            if($opt.length > 0 && !$opt.prop('disabled')) {
-                $('#inp_source_po').val(suggestedPO).trigger('change'); // Trigger Sync
-            } else {
-                // Jika PO habis, biarkan manual tapi kasih tahu user
-                // alert("Previous PO is full. Please select a new PO for this next batch.");
-            }
-        }
-    }
-
-    // --- 5. OPEN MODAL HANDLER ---
-    function openModal(type, action, data = null) {
+    // --- 4. OPEN MODAL (IMPROVED) ---
+    function openModal(type, action, data = null, preset = null) {
         currentMode = type;
         $('#formUniversal')[0].reset();
         resetSync(); 
@@ -563,6 +514,7 @@ if ($db) {
         savedTotalForEdit = 0;
         poInitial = 0; poUsedByOthers = 0; maxAllocation = 0; 
 
+        // Title Setup
         let title = (action === 'create' ? 'New ' : 'Edit ') + (type === 'act' ? 'Activation' : 'Termination');
         let color = (type === 'act' ? 'bg-success' : 'bg-danger');
         let act = (action === 'create' ? `create_${type === 'act' ? 'activation' : 'termination'}` : `update_${type === 'act' ? 'activation' : 'termination'}`);
@@ -571,6 +523,7 @@ if ($db) {
         $('#modalHeader').removeClass('bg-success bg-danger').addClass(color);
         $('#formAction').val(act);
         
+        // Input Names
         if(type === 'act') {
             $('#inp_date').attr('name', 'activation_date'); $('#inp_batch').attr('name', 'activation_batch');
             $('#inp_qty_1').attr('name', 'active_qty'); $('#inp_qty_2').attr('name', 'inactive_qty');
@@ -582,6 +535,7 @@ if ($db) {
         }
 
         if(data) {
+            // EDIT MODE
             $('#formId').val(data.id);
             $('#inp_date').val(type === 'act' ? data.activation_date : data.termination_date);
             $('#inp_batch').val(type === 'act' ? data.activation_batch : data.termination_batch);
@@ -592,15 +546,30 @@ if ($db) {
             $('#inp_company_id').val(data.company_id);
             updateProjectDropdown(data.company_id, data.project_id);
 
-            // AUTO SYNC TRIGGER
+            // AUTO SYNC + STRICT LOCK
             if(type === 'act' && data.po_provider_id) {
                 isEditingSync = true;
                 savedTotalForEdit = parseInt(data.total_sim); 
+                
                 $('#inp_source_po').val(data.po_provider_id);
+                // STRICT MODE: Disable dropdown so user cannot change PO
+                $('#inp_source_po').prop('disabled', true);
+                $('#btn_reset_sync').hide(); // Hide Reset Button on Edit
+
                 setTimeout(() => { syncWithPO(); }, 100);
             }
         } else {
+            // CREATE MODE
             $('#inp_date').val(new Date().toISOString().split('T')[0]);
+            
+            // PRESET LOGIC (For Add Next Batch Button)
+            if(preset) {
+                if(preset.batch_name) $('#inp_batch').val(preset.batch_name);
+                if(preset.po_id) {
+                    $('#inp_source_po').val(preset.po_id);
+                    setTimeout(() => { syncWithPO(); }, 100);
+                }
+            }
         }
 
         var myModal = new bootstrap.Modal(document.getElementById('modalUniversal'));
