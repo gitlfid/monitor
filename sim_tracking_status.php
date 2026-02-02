@@ -12,8 +12,13 @@ require_once 'includes/sidebar.php';
 
 $db = db_connect();
 
+// Helper Function untuk mencegah error htmlspecialchars null
+function e($str) {
+    return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
+}
+
 // =========================================================================
-// 2. FETCH RAW DATA (UNTUK CHART & TIMELINE MODAL)
+// 2. FETCH RAW DATA (CHART & LOGS)
 // =========================================================================
 $activations_raw = [];
 $terminations_raw = [];
@@ -21,17 +26,19 @@ $chart_data_act = [];
 $chart_data_term = [];
 
 if ($db) {
-    // Ambil semua data raw untuk keperluan chart & history log
-    $sql_act_raw = "SELECT * FROM sim_activations ORDER BY activation_date DESC, id DESC";
-    $stmt = $db->query($sql_act_raw);
-    if($stmt) $activations_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Ambil data aktivasi & terminasi untuk chart
+    try {
+        $sql_act_raw = "SELECT * FROM sim_activations ORDER BY activation_date DESC";
+        $stmt = $db->query($sql_act_raw);
+        if($stmt) $activations_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $sql_term_raw = "SELECT * FROM sim_terminations ORDER BY termination_date DESC, id DESC";
-    $stmt = $db->query($sql_term_raw);
-    if($stmt) $terminations_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $sql_term_raw = "SELECT * FROM sim_terminations ORDER BY termination_date DESC";
+        $stmt = $db->query($sql_term_raw);
+        if($stmt) $terminations_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) { /* Silent */ }
 }
 
-// Chart Logic (Preserved)
+// Generate Chart Data
 foreach ($activations_raw as $row) {
     $d = date('Y-m-d', strtotime($row['activation_date']));
     if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -52,13 +59,11 @@ foreach ($all_dates as $dateKey) {
 }
 
 // =========================================================================
-// 3. MAIN DASHBOARD DATA (GROUPED BY PO) - THE FIX
+// 3. MAIN DASHBOARD DATA
 // =========================================================================
 $dashboard_data = [];
 if ($db) {
-    // FIX: Menggunakan 'po_provider_id' untuk join ke sim_terminations
-    // Ini memperbaiki error "Unknown column activation_id"
-    
+    // Query Utama: Group by PO Provider
     $sql_main = "SELECT 
                     po.id as po_id,
                     po.po_number as provider_po,
@@ -70,14 +75,11 @@ if ($db) {
                     c.id as company_id,
                     p.id as project_id,
                     
-                    -- Total Pernah Aktif (Kumulatif)
                     (SELECT COALESCE(SUM(active_qty + inactive_qty), 0) 
                      FROM sim_activations WHERE po_provider_id = po.id) as total_activated_hist,
                     
-                    -- Total Sudah Mati (Terminated) - FIX QUERY
                     (SELECT COALESCE(SUM(terminated_qty), 0) 
-                     FROM sim_terminations 
-                     WHERE po_provider_id = po.id) as total_terminated_hist
+                     FROM sim_terminations WHERE po_provider_id = po.id) as total_terminated_hist
 
                 FROM sim_tracking_po po
                 LEFT JOIN sim_tracking_po client_po ON po.link_client_po_id = client_po.id
@@ -89,34 +91,33 @@ if ($db) {
     try {
         $stmt = $db->query($sql_main);
         if($stmt) $dashboard_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        // Fallback warning jika ada masalah database lain
-        echo "<div class='alert alert-danger m-3'>Database Error: " . $e->getMessage() . "</div>";
-    }
+    } catch (Exception $e) { }
 }
 ?>
 
 <style>
-    /* PROFESSIONAL UI SYSTEM */
+    /* BASIC SETUP */
     body { background-color: #f3f4f6; font-family: 'Inter', system-ui, sans-serif; }
     
+    /* CARDS */
     .card { border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); background: #fff; margin-bottom: 24px; }
     .card-header { background: #fff; border-bottom: 1px solid #f3f4f6; padding: 20px 24px; border-radius: 12px 12px 0 0 !important; }
     
+    /* TABLE */
     .table-pro { width: 100%; border-collapse: separate; border-spacing: 0; }
     .table-pro th { background-color: #f9fafb; color: #6b7280; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
     .table-pro td { padding: 20px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; color: #1f2937; background: #fff; }
     .table-pro tr:hover td { background-color: #f9fafb; }
 
-    /* Badges & Icons */
+    /* HIERARCHY SOURCE */
     .source-box { display: flex; flex-direction: column; gap: 6px; }
     .source-item { display: flex; align-items: center; font-size: 0.8rem; }
-    .source-icon { width: 24px; text-align: center; margin-right: 8px; color: #9ca3af; }
+    .source-icon { width: 24px; text-align: center; margin-right: 8px; color: #9ca3af; font-size: 1rem; }
     .badge-po-prov { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-weight: 600; }
     .badge-po-cli { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; padding: 3px 8px; border-radius: 6px; font-family: monospace; }
     .badge-batch { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
 
-    /* Lifecycle Status Bar */
+    /* LIFECYCLE BAR */
     .lifecycle-container { background: #fff; border-radius: 8px; }
     .lifecycle-stats { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
     .progress-multi { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #f3f4f6; border: 1px solid #e5e7eb; margin-bottom: 12px; }
@@ -124,7 +125,7 @@ if ($db) {
     .bar-active { background-color: #10b981; }
     .bar-empty { background-color: #e5e7eb; }
 
-    /* Quick Actions */
+    /* QUICK ACTIONS BUTTONS */
     .btn-quick { padding: 6px 12px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; display: inline-flex; align-items: center; transition: all 0.2s; text-decoration: none; border: 1px solid transparent; cursor: pointer; }
     .btn-quick-act { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
     .btn-quick-act:hover { background: #059669; color: #fff; border-color: #059669; }
@@ -132,14 +133,19 @@ if ($db) {
     .btn-quick-term:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
     .btn-quick.disabled { opacity: 0.5; pointer-events: none; filter: grayscale(100%); }
 
-    /* Timeline */
+    /* TIMELINE */
     .timeline-box { position: relative; padding-left: 20px; border-left: 2px solid #e5e7eb; margin-left: 10px; }
     .timeline-item { position: relative; margin-bottom: 20px; }
     .timeline-item::before { content: ''; position: absolute; left: -26px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #9ca3af; }
     .timeline-item.act::before { border-color: #10b981; background: #10b981; }
     .timeline-item.term::before { border-color: #ef4444; background: #ef4444; }
     .timeline-date { font-size: 0.75rem; color: #6b7280; font-weight: 600; margin-bottom: 4px; display: block; }
-    .timeline-card { background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #f3f4f6; }
+    .timeline-card { background: #f9fafb; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; }
+
+    /* SIM INPUT SECTION */
+    .sim-detail-box { border: 1px dashed #cbd5e1; background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 15px; display: none; }
+    .sim-toggle-btn { font-size: 0.8rem; font-weight: 600; color: #6366f1; cursor: pointer; display: flex; align-items: center; gap: 5px; margin-top: 10px; }
+    .sim-toggle-btn:hover { text-decoration: underline; }
 </style>
 
 <div class="page-heading mb-4">
@@ -178,24 +184,20 @@ if ($db) {
                 </thead>
                 <tbody>
                     <?php if(empty($dashboard_data)): ?>
-                        <tr><td colspan="4" class="text-center py-5 text-muted">No PO data found. Please input Provider PO first.</td></tr>
+                        <tr><td colspan="4" class="text-center py-5 text-muted">No PO data found.</td></tr>
                     <?php else: ?>
                         <?php foreach($dashboard_data as $row): 
-                            // 1. HITUNGAN REAL-TIME
+                            // Hitungan Logic
                             $totalAllocated = (int)$row['total_allocation'];
                             $totalActivatedHist = (int)$row['total_activated_hist']; 
                             $totalTerminatedHist = (int)$row['total_terminated_hist']; 
                             
-                            // Active Saat Ini = (Total Yg Pernah Aktif) - (Total Yg Sudah Mati)
                             $currentActive = $totalActivatedHist - $totalTerminatedHist;
                             if($currentActive < 0) $currentActive = 0;
 
-                            // Sisa Kuota PO = Total Alloc - Total Yg Pernah Aktif
-                            // (Logika: PO yg sudah diaktifkan sekali, kuotanya terpakai, meskipun nanti mati)
                             $remainingToActivate = $totalAllocated - $totalActivatedHist;
                             if($remainingToActivate < 0) $remainingToActivate = 0;
 
-                            // Persentase Bar Visual
                             if($totalAllocated > 0) {
                                 $pctTerm = ($totalTerminatedHist / $totalAllocated) * 100;
                                 $pctActive = ($currentActive / $totalAllocated) * 100;
@@ -204,7 +206,7 @@ if ($db) {
                                 $pctTerm = 0; $pctActive = 0; $pctEmpty = 100;
                             }
 
-                            // Data JSON untuk Modal (Action & Detail)
+                            // Safe JSON Encode (Using Helper 'e' for display, json_encode handles quotes)
                             $rowJson = htmlspecialchars(json_encode([
                                 'po_id' => $row['po_id'],
                                 'po_number' => $row['provider_po'],
@@ -221,27 +223,25 @@ if ($db) {
                         ?>
                         <tr>
                             <td>
-                                <div class="fw-bold text-dark mb-1"><?= htmlspecialchars($row['company_name']) ?></div>
-                                <div class="text-muted small"><i class="bi bi-folder2-open me-1"></i> <?= htmlspecialchars($row['project_name']) ?></div>
+                                <div class="fw-bold text-dark mb-1"><?= e($row['company_name']) ?></div>
+                                <div class="text-muted small"><i class="bi bi-folder2-open me-1"></i> <?= e($row['project_name']) ?></div>
                             </td>
-                            
                             <td>
                                 <div class="source-box">
                                     <div class="source-item">
                                         <div class="source-icon" title="Provider PO"><i class="bi bi-box-seam"></i></div>
-                                        <span class="badge-po-prov"><?= htmlspecialchars($row['provider_po']) ?></span>
+                                        <span class="badge-po-prov"><?= e($row['provider_po']) ?></span>
                                     </div>
                                     <div class="source-item">
                                         <div class="source-icon" title="Client PO"><i class="bi bi-person-badge"></i></div>
-                                        <span class="badge-po-cli"><?= htmlspecialchars($row['client_po'] ?? '-') ?></span>
+                                        <span class="badge-po-cli"><?= e($row['client_po']) ?: '-' ?></span>
                                     </div>
                                     <div class="source-item">
                                         <div class="source-icon" title="Batch"><i class="bi bi-layers"></i></div>
-                                        <span class="badge-batch"><?= htmlspecialchars($row['batch_name'] ?? 'BATCH 1') ?></span>
+                                        <span class="badge-batch"><?= e($row['batch_name']) ?: 'BATCH 1' ?></span>
                                     </div>
                                 </div>
                             </td>
-
                             <td>
                                 <div class="lifecycle-container">
                                     <div class="lifecycle-stats">
@@ -251,33 +251,19 @@ if ($db) {
                                             <span class="text-danger" style="font-size:0.75rem">Term: <b><?= number_format($totalTerminatedHist) ?></b></span>
                                         </div>
                                     </div>
-                                    
-                                    <div class="progress-multi" title="Usage Visualization">
-                                        <div class="bar-term" style="width: <?= $pctTerm ?>%" title="Terminated"></div>
-                                        <div class="bar-active" style="width: <?= $pctActive ?>%" title="Active"></div>
-                                        <div class="bar-empty" style="width: <?= $pctEmpty ?>%" title="Available"></div>
+                                    <div class="progress-multi mb-3" title="Terminated vs Active vs Available">
+                                        <div class="bar-term" style="width: <?= $pctTerm ?>%"></div>
+                                        <div class="bar-active" style="width: <?= $pctActive ?>%"></div>
+                                        <div class="bar-empty" style="width: <?= $pctEmpty ?>%"></div>
                                     </div>
-
                                     <div class="d-flex justify-content-end gap-2">
-                                        <button class="btn-quick btn-quick-act <?= ($remainingToActivate <= 0) ? 'disabled' : '' ?>" 
-                                                onclick='openActionModal("activate", <?= $rowJson ?>)' 
-                                                title="Add New Activation">
-                                            <i class="bi bi-plus-lg me-1"></i> Activate
-                                        </button>
-                                        
-                                        <button class="btn-quick btn-quick-term <?= ($currentActive <= 0) ? 'disabled' : '' ?>" 
-                                                onclick='openActionModal("terminate", <?= $rowJson ?>)'
-                                                title="Terminate Active SIMs">
-                                            <i class="bi bi-x-lg me-1"></i> Terminate
-                                        </button>
+                                        <button class="btn-quick btn-quick-act <?= ($remainingToActivate <= 0) ? 'disabled' : '' ?>" onclick='openActionModal("activate", <?= $rowJson ?>)'><i class="bi bi-plus-lg me-1"></i> Activate</button>
+                                        <button class="btn-quick btn-quick-term <?= ($currentActive <= 0) ? 'disabled' : '' ?>" onclick='openActionModal("terminate", <?= $rowJson ?>)'><i class="bi bi-x-lg me-1"></i> Terminate</button>
                                     </div>
                                 </div>
                             </td>
-
                             <td class="text-center">
-                                <button class="btn btn-light btn-sm border text-muted fw-bold" onclick='openDetailModal(<?= $rowJson ?>)'>
-                                    <i class="bi bi-list-ul me-1"></i> Logs
-                                </button>
+                                <button class="btn btn-light btn-sm border text-muted fw-bold" onclick='openDetailModal(<?= $rowJson ?>)'><i class="bi bi-list-ul me-1"></i> Logs</button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -295,7 +281,6 @@ if ($db) {
             <input type="hidden" name="po_provider_id" id="act_po_id">
             <input type="hidden" name="company_id" id="act_comp_id">
             <input type="hidden" name="project_id" id="act_proj_id">
-            
             <input type="hidden" name="activation_batch" id="act_batch_name_hidden"> 
             <input type="hidden" name="termination_batch" id="term_batch_name_hidden"> 
 
@@ -328,6 +313,32 @@ if ($db) {
                         <i class="bi bi-exclamation-triangle-fill me-1"></i> Cannot exceed limit!
                     </div>
                 </div>
+
+                <div class="sim-toggle-btn" onclick="$('#sim_detail_box').slideToggle()">
+                    <i class="bi bi-sim"></i> Input Specific SIM Details (Optional) <i class="bi bi-chevron-down ms-1" style="font-size:0.7em"></i>
+                </div>
+                
+                <div id="sim_detail_box" class="sim-detail-box">
+                    <div class="mb-2">
+                        <label class="form-label fw-bold text-dark small">MSISDN <span class="text-danger">*</span></label>
+                        <input type="text" name="msisdn" id="inp_msisdn" class="form-control form-control-sm" placeholder="e.g. 62812xxxx (Mandatory if filled)">
+                        <div class="form-text text-muted" style="font-size:0.7rem">Wajib diisi jika input detail.</div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label fw-bold text-dark small">ICCID</label>
+                            <input type="text" name="iccid" class="form-control form-control-sm" placeholder="Optional">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold text-dark small">IMSI</label>
+                            <input type="text" name="imsi" class="form-control form-control-sm" placeholder="Optional">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold text-dark small">Serial Number (SN)</label>
+                            <input type="text" name="sn" class="form-control form-control-sm" placeholder="Optional">
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="modal-footer bg-light border-0">
@@ -350,10 +361,8 @@ if ($db) {
                     <h5 class="fw-bold mb-1" id="det_po">-</h5>
                     <p class="text-muted small m-0" id="det_client">-</p>
                 </div>
-                
                 <h6 class="text-uppercase text-muted fw-bold small mb-3">Activity Timeline</h6>
-                <div class="timeline-box" id="timeline_content">
-                    </div>
+                <div class="timeline-box" id="timeline_content"></div>
             </div>
         </div>
     </div>
@@ -365,11 +374,9 @@ if ($db) {
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
-    // LOAD DATA RAW DARI PHP
+    // PREPARE DATA
     const activationsRaw = <?php echo json_encode($activations_raw ?? []); ?>;
     const terminationsRaw = <?php echo json_encode($terminations_raw ?? []); ?>;
-    
-    // Chart Data
     const chartLabels = <?php echo json_encode($js_labels ?? []); ?>;
     const seriesAct = <?php echo json_encode($js_series_act ?? []); ?>;
     const seriesTerm = <?php echo json_encode($js_series_term ?? []); ?>;
@@ -399,6 +406,11 @@ if ($db) {
         $('#act_error_msg').hide();
         $('#act_btn_save').prop('disabled', false);
         
+        // Reset SIM Inputs
+        $('#sim_detail_box input').val(''); 
+        $('#sim_detail_box').hide();
+        $('#inp_msisdn').removeClass('is-invalid');
+
         // Fill Hidden Fields
         $('#act_po_id').val(data.po_id);
         $('#act_comp_id').val(data.company_id);
@@ -412,13 +424,11 @@ if ($db) {
             $('#act_header').removeClass('bg-danger').addClass('bg-success');
             $('#act_form_action').val('create_activation_simple'); 
             
-            // Name input -> active_qty (sesuai db structure activation)
             $('#act_qty_input').attr('name', 'active_qty'); 
             $('#act_batch_name_hidden').val(data.batch_name); 
             
             maxLimit = parseInt(data.max_activate);
             $('#act_limit_display').html(`Available: <b class="text-success">${maxLimit.toLocaleString()}</b> (of ${parseInt(data.total_alloc).toLocaleString()})`);
-            
             $('#act_btn_save').removeClass('btn-danger').addClass('btn-success').text('Process Activation');
         } 
         else {
@@ -426,17 +436,15 @@ if ($db) {
             $('#act_header').removeClass('bg-success').addClass('bg-danger');
             $('#act_form_action').val('create_termination_simple'); 
             
-            // Name input -> terminated_qty (sesuai db structure termination)
             $('#act_qty_input').attr('name', 'terminated_qty');
             $('#term_batch_name_hidden').val(data.batch_name); 
             
             maxLimit = parseInt(data.current_active);
             $('#act_limit_display').html(`Active SIMs: <b class="text-danger">${maxLimit.toLocaleString()}</b> (Ready to Terminate)`);
-            
             $('#act_btn_save').removeClass('btn-success').addClass('btn-danger').text('Process Termination');
         }
 
-        // Input Validation (Client Side)
+        // Qty Validation
         $('#act_qty_input').off('input').on('input', function() {
             let val = parseInt($(this).val()) || 0;
             if (val > maxLimit) {
@@ -452,47 +460,44 @@ if ($db) {
             }
         });
 
+        // SIM Detail Validation (Mandatory MSISDN Check)
+        $('#act_btn_save').off('click').on('click', function(e) {
+            // Check if any SIM detail field has value
+            let hasSimDetail = false;
+            $('#sim_detail_box input').each(function() {
+                if($(this).val().trim() !== '') hasSimDetail = true;
+            });
+
+            // If user filled ANY sim detail, enforce MSISDN
+            if(hasSimDetail && $('#inp_msisdn').val().trim() === '') {
+                e.preventDefault();
+                $('#inp_msisdn').addClass('is-invalid');
+                if(!$('#sim_detail_box').is(':visible')) $('#sim_detail_box').slideDown();
+                alert("MSISDN is mandatory if you provide SIM details!");
+            }
+        });
+
         var myModal = new bootstrap.Modal(document.getElementById('modalAction'));
         myModal.show();
     }
 
-    // --- DETAIL TIMELINE MODAL ---
+    // --- TIMELINE MODAL ---
     function openDetailModal(data) {
         $('#det_po').text(data.po_number);
         $('#det_client').text(data.company_name + " / " + data.batch_name);
         
-        // Filter Data by PO ID
-        // Note: terminations_raw juga harus punya po_provider_id
         let acts = activationsRaw.filter(item => item.po_provider_id == data.po_id);
         let terms = terminationsRaw.filter(item => item.po_provider_id == data.po_id);
         
-        // Gabungkan dan Sortir berdasarkan Tanggal
         let combined = [];
+        acts.forEach(item => combined.push({ type: 'act', date: item.activation_date, qty: item.active_qty }));
+        terms.forEach(item => combined.push({ type: 'term', date: item.termination_date, qty: item.terminated_qty }));
         
-        acts.forEach(item => {
-            combined.push({
-                type: 'act',
-                date: item.activation_date,
-                qty: item.active_qty,
-                batch: item.activation_batch
-            });
-        });
-        
-        terms.forEach(item => {
-            combined.push({
-                type: 'term',
-                date: item.termination_date,
-                qty: item.terminated_qty,
-                batch: item.termination_batch
-            });
-        });
-        
-        // Sort Descending (Terbaru diatas)
         combined.sort((a, b) => new Date(b.date) - new Date(a.date));
         
         let html = '';
         if(combined.length === 0) {
-            html = '<div class="text-center text-muted py-3">No activity logs found.</div>';
+            html = '<div class="text-center text-muted py-3">No logs found.</div>';
         } else {
             combined.forEach(log => {
                 let isAct = log.type === 'act';
@@ -509,7 +514,6 @@ if ($db) {
                             <span class="fw-bold text-dark">${label}</span>
                             <span class="badge ${badgeClass}">${sign} ${parseInt(log.qty).toLocaleString()}</span>
                         </div>
-                        <div class="small text-muted mt-1">Batch: ${log.batch}</div>
                     </div>
                 </div>`;
             });
