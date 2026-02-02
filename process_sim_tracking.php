@@ -44,7 +44,7 @@ function checkAndFix($db, $db_type, $table, $col, $def) {
     } catch (Exception $e) {}
 }
 
-// Cek Kolom Detail SIM (Wajib untuk fitur baru)
+// Cek Kolom Detail SIM
 checkAndFix($db, $db_type, 'sim_activations', 'msisdn', "VARCHAR(50) NULL");
 checkAndFix($db, $db_type, 'sim_activations', 'iccid', "VARCHAR(50) NULL");
 checkAndFix($db, $db_type, 'sim_activations', 'imsi', "VARCHAR(50) NULL");
@@ -74,7 +74,7 @@ function readSpreadsheet($filePath) {
         return $data;
     }
 
-    // B. XLSX HANDLER (Native ZipArchive - Simple Parser)
+    // B. XLSX HANDLER (Native ZipArchive)
     if ($ext === 'xlsx') {
         $zip = new ZipArchive;
         if ($zip->open($filePath) === TRUE) {
@@ -107,11 +107,12 @@ function readSpreadsheet($filePath) {
 }
 
 // =======================================================================
-// 4. LOGIC FITUR BARU (INJECT & SIMPLE ACTION)
+// 4. LOGIC FITUR BARU (UPLOAD & SIMPLE ACTION)
 // =======================================================================
 
-// --- A. BULK INJECT MASTER DATA (CSV/EXCEL) ---
-if ($action == 'inject_master_bulk') {
+// --- A. BULK UPLOAD MASTER DATA (CSV/EXCEL) ---
+// REPLACES 'inject_master_bulk'
+if ($action == 'upload_master_bulk') {
     try {
         $po_id      = $_POST['po_provider_id'];
         $company_id = $_POST['company_id'];
@@ -174,7 +175,7 @@ if ($action == 'inject_master_bulk') {
             
             if($db_type === 'pdo') $db->commit();
             
-            header("Location: sim_tracking_status.php?msg=injected_bulk&count=$successCount"); exit;
+            header("Location: sim_tracking_status.php?msg=uploaded_bulk&count=$successCount"); exit;
 
         } else {
             die("Error: Gagal upload file.");
@@ -182,7 +183,7 @@ if ($action == 'inject_master_bulk') {
 
     } catch (Exception $e) {
         if($db_type === 'pdo') $db->rollBack();
-        die("System Error (Injection): " . $e->getMessage());
+        die("System Error (Upload): " . $e->getMessage());
     }
 }
 

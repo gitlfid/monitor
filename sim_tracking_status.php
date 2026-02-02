@@ -26,7 +26,7 @@ $list_projects  = [];
 
 if ($db) {
     // A. FILTER PROVIDER PO:
-    // Hanya tampilkan PO Provider yang BELUM pernah di-inject (belum ada di tabel sim_activations)
+    // Hanya tampilkan PO Provider yang BELUM pernah di-upload (belum ada di tabel sim_activations)
     // Sekaligus join ke Client PO untuk mendapatkan data Client/Project otomatis (Auto-Link)
     $sql_prov = "SELECT 
                     p.id, p.po_number, p.batch_name, p.sim_qty,
@@ -89,7 +89,7 @@ foreach ($all_dates as $dateKey) {
 // =========================================================================
 $dashboard_data = [];
 if ($db) {
-    // Query Utama: Menampilkan PO yang sudah aktif (sudah di-inject)
+    // Query Utama: Menampilkan PO yang sudah aktif (sudah di-upload)
     $sql_main = "SELECT 
                     po.id as po_id,
                     po.po_number as provider_po,
@@ -142,7 +142,7 @@ if ($db) {
     .info-value { font-weight: 600; color: #334155; }
 
     /* BADGES */
-    .badge-prov { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 4px 8px; border-radius: 6px; font-family: monospace; font-weight: 600; font-size: 0.8rem; }
+    .badge-prov { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-weight: 600; font-size: 0.8rem; }
     .badge-cli { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-size: 0.8rem; }
     .badge-batch { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; }
 
@@ -197,7 +197,7 @@ if ($db) {
         </div>
         <div>
             <button class="btn-master" onclick="openMasterModal()">
-                <i class="bi bi-cloud-arrow-up-fill"></i> Inject Master Data (New Activation)
+                <i class="bi bi-cloud-arrow-up-fill"></i> Upload Master Data
             </button>
         </div>
     </div>
@@ -227,27 +227,42 @@ if ($db) {
                 </thead>
                 <tbody>
                     <?php if(empty($dashboard_data)): ?>
-                        <tr><td colspan="4" class="text-center py-5 text-muted fst-italic">No active batches found. Click "Inject Master Data" to start.</td></tr>
+                        <tr><td colspan="4" class="text-center py-5 text-muted fst-italic">No active batches found. Please click "Upload Master Data" to start.</td></tr>
                     <?php else: ?>
                         <?php foreach($dashboard_data as $row): 
-                            $total = (int)$row['total_allocation'];
-                            $termHist = (int)$row['total_terminated_hist'];
-                            $currActive = max(0, (int)$row['total_activated_hist'] - $termHist);
+                            // LOGIC HITUNGAN
+                            $totalAllocated = (int)$row['total_allocation'];
+                            $totalActivatedHist = (int)$row['total_activated_hist']; 
+                            $totalTerminatedHist = (int)$row['total_terminated_hist']; 
                             
-                            $pctTerm = ($total > 0) ? ($termHist / $total) * 100 : 0;
-                            $pctActive = ($total > 0) ? ($currActive / $total) * 100 : 0;
-                            $pctEmpty = 100 - $pctTerm - $pctActive;
-                            
-                            // Data JSON for Modals
+                            // Active Saat Ini = (Total Pernah Aktif) - (Total Sudah Mati)
+                            $currentActive = max(0, $totalActivatedHist - $totalTerminatedHist);
+
+                            // Sisa Kuota PO = Total Alloc - Total Pernah Aktif
+                            $remainingToActivate = max(0, $totalAllocated - $totalActivatedHist);
+
+                            // Persentase Bar Visual
+                            if($totalAllocated > 0) {
+                                $pctTerm = ($totalTerminatedHist / $totalAllocated) * 100;
+                                $pctActive = ($currentActive / $totalAllocated) * 100;
+                                $pctEmpty = 100 - $pctTerm - $pctActive;
+                            } else {
+                                $pctTerm = 0; $pctActive = 0; $pctEmpty = 100;
+                            }
+
+                            // Data JSON untuk Modal
                             $rowJson = htmlspecialchars(json_encode([
                                 'po_id' => $row['po_id'],
                                 'po_number' => $row['provider_po'],
                                 'batch_name' => $row['batch_name'],
                                 'company_id' => $row['company_id'],
                                 'project_id' => $row['project_id'],
-                                'curr_active' => $currActive,
-                                'total_alloc' => $total,
-                                'rem_alloc' => max(0, $total - (int)$row['total_activated_hist'])
+                                'max_activate' => $remainingToActivate,
+                                'max_terminate' => $currentActive,
+                                'current_active' => $currentActive,
+                                'total_alloc' => $totalAllocated,
+                                'company_name' => $row['company_name'],
+                                'project_name' => $row['project_name']
                             ]), ENT_QUOTES, 'UTF-8');
                         ?>
                         <tr>
@@ -280,10 +295,10 @@ if ($db) {
                             <td>
                                 <div class="lifecycle-container">
                                     <div class="lifecycle-stats">
-                                        <span class="text-muted small">Total: <span class="text-dark fw-bold"><?= number_format($total) ?></span></span>
+                                        <span class="text-muted small">Total: <span class="text-dark fw-bold"><?= number_format($totalAllocated) ?></span></span>
                                         <div>
-                                            <span class="text-success me-2">Act: <?= number_format($currActive) ?></span>
-                                            <span class="text-danger">Term: <?= number_format($termHist) ?></span>
+                                            <span class="text-success me-2">Act: <?= number_format($currentActive) ?></span>
+                                            <span class="text-danger">Term: <?= number_format($totalTerminatedHist) ?></span>
                                         </div>
                                     </div>
                                     <div class="progress-stacked mb-3">
@@ -318,10 +333,10 @@ if ($db) {
 <div class="modal fade" id="modalMaster" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg">
         <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0">
-            <input type="hidden" name="action" value="inject_master_bulk">
+            <input type="hidden" name="action" value="upload_master_bulk">
 
             <div class="modal-header bg-primary text-white">
-                <h6 class="modal-title fw-bold"><i class="bi bi-cloud-arrow-up-fill me-2"></i> Inject Master Data</h6>
+                <h6 class="modal-title fw-bold"><i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Master Data</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             
@@ -339,7 +354,7 @@ if ($db) {
                             </option>
                         <?php endforeach; ?>
                     </select>
-                    <div class="form-text text-muted small"><i class="bi bi-info-circle"></i> Only POs not yet injected are shown.</div>
+                    <div class="form-text text-muted small"><i class="bi bi-info-circle"></i> Only POs not yet uploaded are shown.</div>
                 </div>
 
                 <div class="row g-3 mb-4">
@@ -376,7 +391,7 @@ if ($db) {
                         <input type="text" name="activation_batch" id="inj_batch" class="form-control" placeholder="e.g. BATCH 1" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold">Inject Date</label>
+                        <label class="form-label small fw-bold">Upload Date</label>
                         <input type="date" name="date_field" class="form-control" value="<?= date('Y-m-d') ?>" required>
                     </div>
                 </div>
@@ -384,7 +399,7 @@ if ($db) {
             
             <div class="modal-footer bg-light border-0">
                 <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary fw-bold px-4">Start Injection</button>
+                <button type="submit" class="btn btn-primary fw-bold px-4">Start Upload</button>
             </div>
         </form>
     </div>
@@ -498,7 +513,7 @@ if ($db) {
     const seriesAct = <?php echo json_encode($js_series_act ?? []); ?>;
     const seriesTerm = <?php echo json_encode($js_series_term ?? []); ?>;
 
-    // 1. OPEN MODAL MASTER
+    // 1. OPEN MODAL UPLOAD
     function openMasterModal() {
         var myModal = new bootstrap.Modal(document.getElementById('modalMaster'));
         myModal.show();
@@ -525,7 +540,7 @@ if ($db) {
         }
     }
 
-    // 4. AUTO LINK (AUTOSELECT)
+    // 4. AUTO LINK (AUTOSELECT FIX)
     function autoFillClient(selectObj) {
         let opt = selectObj.options[selectObj.selectedIndex];
         let compId = opt.getAttribute('data-comp');
@@ -535,7 +550,7 @@ if ($db) {
         // A. Set Client Value & Trigger Filter
         if(compId) {
             document.getElementById('inj_client').value = compId;
-            filterProjects(compId); // TRIGGER FILTER
+            filterProjects(compId); // TRIGGER FILTER HERE
         }
         
         // B. Set Project Value (After delay)
@@ -589,7 +604,7 @@ if ($db) {
             $('#act_qty_input').attr('name', 'terminated_qty');
             $('#term_batch_name_hidden').val(data.batch_name); 
             
-            maxLimit = parseInt(data.curr_active);
+            maxLimit = parseInt(data.current_active);
             $('#act_limit_display').html(`Active SIMs: <b class="text-danger">${maxLimit.toLocaleString()}</b> (Ready to Terminate)`);
             $('#act_btn_save').removeClass('btn-success').addClass('btn-danger').text('Process Termination');
         }
