@@ -27,7 +27,7 @@ if (!$db && defined('DB_HOST')) {
 if (!$db) die("System Error: Database Connection Failed.");
 
 // =======================================================================
-// 2. AUTO-REPAIR & MIGRATION (UTUH - TIDAK DIUBAH)
+// 2. AUTO-REPAIR & MIGRATION (DATABASE STRUCTURE)
 // =======================================================================
 function checkAndFix($db, $db_type, $table, $col, $def) {
     try {
@@ -43,12 +43,9 @@ function checkAndFix($db, $db_type, $table, $col, $def) {
 }
 
 // A. Tabel PO
-if ($db_type === 'pdo') $db->exec("CREATE TABLE IF NOT EXISTS `sim_tracking_po` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-else mysqli_query($db, "CREATE TABLE IF NOT EXISTS `sim_tracking_po` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-
 checkAndFix($db, $db_type, 'sim_tracking_po', 'type', "ENUM('client','provider') NOT NULL DEFAULT 'client'");
 checkAndFix($db, $db_type, 'sim_tracking_po', 'po_number', "VARCHAR(100) NULL");
-checkAndFix($db, $db_type, 'sim_tracking_po', 'po_date', "DATE NULL"); // Pastikan kolom po_date ada
+checkAndFix($db, $db_type, 'sim_tracking_po', 'po_date', "DATE NULL");
 checkAndFix($db, $db_type, 'sim_tracking_po', 'company_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_tracking_po', 'project_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_tracking_po', 'manual_company_name', "VARCHAR(255) NULL");
@@ -60,9 +57,6 @@ checkAndFix($db, $db_type, 'sim_tracking_po', 'po_file', "VARCHAR(255) NULL");
 checkAndFix($db, $db_type, 'sim_tracking_po', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
 // B. Tabel Logistics
-if ($db_type === 'pdo') $db->exec("CREATE TABLE IF NOT EXISTS `sim_tracking_logistics` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-else mysqli_query($db, "CREATE TABLE IF NOT EXISTS `sim_tracking_logistics` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-
 checkAndFix($db, $db_type, 'sim_tracking_logistics', 'type', "ENUM('receive','delivery') NULL");
 checkAndFix($db, $db_type, 'sim_tracking_logistics', 'po_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_tracking_logistics', 'logistic_date', "DATE NULL");
@@ -78,10 +72,7 @@ checkAndFix($db, $db_type, 'sim_tracking_logistics', 'receiver_name', "VARCHAR(1
 checkAndFix($db, $db_type, 'sim_tracking_logistics', 'notes', "TEXT NULL");
 checkAndFix($db, $db_type, 'sim_tracking_logistics', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
-// C. Tabel Activations
-if ($db_type === 'pdo') $db->exec("CREATE TABLE IF NOT EXISTS `sim_activations` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-else mysqli_query($db, "CREATE TABLE IF NOT EXISTS `sim_activations` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-
+// C. Tabel Activations (UPDATE: Added SIM Details Columns)
 checkAndFix($db, $db_type, 'sim_activations', 'company_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_activations', 'project_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_activations', 'po_batch_sim', "VARCHAR(100) NULL");
@@ -93,16 +84,18 @@ checkAndFix($db, $db_type, 'sim_activations', 'inactive_qty', "INT(11) DEFAULT 0
 checkAndFix($db, $db_type, 'sim_activations', 'activation_date', "DATE NULL");
 checkAndFix($db, $db_type, 'sim_activations', 'activation_qty', "INT(11) DEFAULT 0");
 checkAndFix($db, $db_type, 'sim_activations', 'activation_batch', "VARCHAR(100) NULL");
+// New Columns for Detail
+checkAndFix($db, $db_type, 'sim_activations', 'msisdn', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_activations', 'iccid', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_activations', 'imsi', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_activations', 'sn', "VARCHAR(50) NULL");
 checkAndFix($db, $db_type, 'sim_activations', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
-// D. Tabel Terminations
-if ($db_type === 'pdo') $db->exec("CREATE TABLE IF NOT EXISTS `sim_terminations` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-else mysqli_query($db, "CREATE TABLE IF NOT EXISTS `sim_terminations` ( `id` int(11) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) ) ENGINE=InnoDB;");
-
+// D. Tabel Terminations (UPDATE: Added SIM Details Columns & po_provider_id)
 checkAndFix($db, $db_type, 'sim_terminations', 'company_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_terminations', 'project_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_terminations', 'po_batch_sim', "VARCHAR(100) NULL");
-checkAndFix($db, $db_type, 'sim_terminations', 'po_provider_id', "INT(11) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'po_provider_id', "INT(11) NULL"); // Crucial for Sync
 checkAndFix($db, $db_type, 'sim_terminations', 'po_client_id', "INT(11) NULL");
 checkAndFix($db, $db_type, 'sim_terminations', 'total_sim', "INT(11) DEFAULT 0");
 checkAndFix($db, $db_type, 'sim_terminations', 'terminated_qty', "INT(11) DEFAULT 0");
@@ -110,6 +103,11 @@ checkAndFix($db, $db_type, 'sim_terminations', 'unterminated_qty', "INT(11) DEFA
 checkAndFix($db, $db_type, 'sim_terminations', 'termination_date', "DATE NULL");
 checkAndFix($db, $db_type, 'sim_terminations', 'termination_qty', "INT(11) DEFAULT 0");
 checkAndFix($db, $db_type, 'sim_terminations', 'termination_batch', "VARCHAR(100) NULL");
+// New Columns for Detail
+checkAndFix($db, $db_type, 'sim_terminations', 'msisdn', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'iccid', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'imsi', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'sn', "VARCHAR(50) NULL");
 checkAndFix($db, $db_type, 'sim_terminations', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
 
@@ -125,8 +123,98 @@ function uploadFile($fileArray, $prefix) {
     return null;
 }
 
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+
 // =======================================================================
-// 3. LOGISTIK (RECEIVE & DELIVERY)
+// [NEW] 3. SIMPLE ACTIVATION & TERMINATION (DARI DASHBOARD UNIFIED)
+// =======================================================================
+
+// A. SIMPLE ACTIVATION
+if ($action == 'create_activation_simple') {
+    try {
+        $po_id = $_POST['po_provider_id'];
+        $qty = $_POST['active_qty'];
+        $date = $_POST['date_field'];
+        $batch = $_POST['activation_batch'] ?? 'BATCH 1'; // Fallback
+        
+        // Sim Details
+        $msisdn = !empty($_POST['msisdn']) ? $_POST['msisdn'] : NULL;
+        $iccid  = !empty($_POST['iccid']) ? $_POST['iccid'] : NULL;
+        $imsi   = !empty($_POST['imsi']) ? $_POST['imsi'] : NULL;
+        $sn     = !empty($_POST['sn']) ? $_POST['sn'] : NULL;
+
+        // Auto-Lookup Data Konsisten dari PO
+        if ($db_type === 'pdo') {
+            $stmt = $db->prepare("SELECT company_id, project_id FROM sim_tracking_po WHERE id = ?");
+            $stmt->execute([$po_id]);
+            $poData = $stmt->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $res = mysqli_query($db, "SELECT company_id, project_id FROM sim_tracking_po WHERE id = '$po_id'");
+            $poData = mysqli_fetch_assoc($res);
+        }
+
+        $company_id = $poData['company_id'] ?? 0;
+        $project_id = $poData['project_id'] ?? 0;
+
+        // INSERT (total_sim = active_qty karena ini log transaksi penambahan)
+        if ($db_type === 'pdo') {
+            $sql = "INSERT INTO sim_activations (po_provider_id, company_id, project_id, activation_date, activation_batch, total_sim, active_qty, inactive_qty, msisdn, iccid, imsi, sn) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([$po_id, $company_id, $project_id, $date, $batch, $qty, $qty, $msisdn, $iccid, $imsi, $sn]);
+        } else {
+            $msisdn = $msisdn ? "'$msisdn'" : "NULL"; $iccid = $iccid ? "'$iccid'" : "NULL"; 
+            $imsi = $imsi ? "'$imsi'" : "NULL"; $sn = $sn ? "'$sn'" : "NULL";
+            mysqli_query($db, "INSERT INTO sim_activations (po_provider_id, company_id, project_id, activation_date, activation_batch, total_sim, active_qty, inactive_qty, msisdn, iccid, imsi, sn) VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', '$qty', '$qty', 0, $msisdn, $iccid, $imsi, $sn)");
+        }
+
+        header("Location: sim_tracking_status.php?msg=activated"); exit;
+    } catch (Exception $e) { die("Error Activation: " . $e->getMessage()); }
+}
+
+// B. SIMPLE TERMINATION
+if ($action == 'create_termination_simple') {
+    try {
+        $po_id = $_POST['po_provider_id'];
+        $qty = $_POST['terminated_qty'];
+        $date = $_POST['date_field'];
+        $batch = $_POST['termination_batch'] ?? 'TERM 1';
+        
+        // Sim Details
+        $msisdn = !empty($_POST['msisdn']) ? $_POST['msisdn'] : NULL;
+        $iccid  = !empty($_POST['iccid']) ? $_POST['iccid'] : NULL;
+        $imsi   = !empty($_POST['imsi']) ? $_POST['imsi'] : NULL;
+        $sn     = !empty($_POST['sn']) ? $_POST['sn'] : NULL;
+
+        // Auto-Lookup Data
+        if ($db_type === 'pdo') {
+            $stmt = $db->prepare("SELECT company_id, project_id FROM sim_tracking_po WHERE id = ?");
+            $stmt->execute([$po_id]);
+            $poData = $stmt->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $res = mysqli_query($db, "SELECT company_id, project_id FROM sim_tracking_po WHERE id = '$po_id'");
+            $poData = mysqli_fetch_assoc($res);
+        }
+
+        $company_id = $poData['company_id'] ?? 0;
+        $project_id = $poData['project_id'] ?? 0;
+
+        // INSERT
+        if ($db_type === 'pdo') {
+            $sql = "INSERT INTO sim_terminations (po_provider_id, company_id, project_id, termination_date, termination_batch, total_sim, terminated_qty, unterminated_qty, msisdn, iccid, imsi, sn) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([$po_id, $company_id, $project_id, $date, $batch, $qty, $qty, $msisdn, $iccid, $imsi, $sn]);
+        } else {
+            $msisdn = $msisdn ? "'$msisdn'" : "NULL"; $iccid = $iccid ? "'$iccid'" : "NULL"; 
+            $imsi = $imsi ? "'$imsi'" : "NULL"; $sn = $sn ? "'$sn'" : "NULL";
+            mysqli_query($db, "INSERT INTO sim_terminations (po_provider_id, company_id, project_id, termination_date, termination_batch, total_sim, terminated_qty, unterminated_qty, msisdn, iccid, imsi, sn) VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', '$qty', '$qty', 0, $msisdn, $iccid, $imsi, $sn)");
+        }
+
+        header("Location: sim_tracking_status.php?msg=terminated"); exit;
+    } catch (Exception $e) { die("Error Termination: " . $e->getMessage()); }
+}
+
+// =======================================================================
+// 4. LOGISTIK (RECEIVE & DELIVERY)
 // =======================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST['action'] === 'create_logistic' || $_POST['action'] === 'update_logistic')) {
     $is_upd = ($_POST['action'] === 'update_logistic');
@@ -170,10 +258,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_logistic') {
 }
 
 // =======================================================================
-// 4. PO MANAGEMENT (CLIENT & PROVIDER)
+// 5. PO MANAGEMENT
 // =======================================================================
-
-// A. Create & Update Standard
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST['action'] === 'create' || $_POST['action'] === 'update')) {
     $is_upd = ($_POST['action'] === 'update');
     $id = $_POST['id'] ?? null;
@@ -211,27 +297,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST[
     header("Location: sim_tracking_{$type}_po.php?msg=" . ($is_upd ? 'updated' : 'success')); exit;
 }
 
-// B. Create Provider from Client (NEW LOGIC)
+// B. Create Provider from Client
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_provider_from_client') {
     $type = 'provider';
-    $link_client_po_id = $_POST['link_client_po_id']; // ID Asal
+    $link_client_po_id = $_POST['link_client_po_id']; 
     
-    // Info Provider
     $company_id = !empty($_POST['provider_company_id']) ? $_POST['provider_company_id'] : NULL;
     $m_comp = (empty($company_id) && !empty($_POST['manual_provider_name'])) ? $_POST['manual_provider_name'] : NULL;
     
-    // Info PO
     $po_num = $_POST['provider_po_number'];
     $sim_qty = str_replace(',', '', $_POST['sim_qty']);
     $po_date = !empty($_POST['po_date']) ? $_POST['po_date'] : date('Y-m-d');
-    $batch = !empty($_POST['batch_name']) ? $_POST['batch_name'] : NULL; // Bawaan dari Client
+    $batch = !empty($_POST['batch_name']) ? $_POST['batch_name'] : NULL;
     
-    // File
     $file = NULL;
     $new_file = uploadFile($_FILES['po_file'], 'provider');
     if ($new_file) $file = $new_file;
 
-    // Simpan
     $params = [$type, $company_id, NULL, $m_comp, NULL, $batch, $link_client_po_id, $po_num, $po_date, $sim_qty, $file];
 
     if ($db_type === 'pdo') {
@@ -240,8 +322,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $v = array_map(function($x) use ($db) { return $x===NULL?"NULL":"'".mysqli_real_escape_string($db,$x)."'"; }, $params);
         mysqli_query($db, "INSERT INTO sim_tracking_po (type, company_id, project_id, manual_company_name, manual_project_name, batch_name, link_client_po_id, po_number, po_date, sim_qty, po_file) VALUES (" . implode(',', $v) . ")");
     }
-    
-    // Redirect ke halaman Provider PO
     header("Location: sim_tracking_provider_po.php?msg=created_from_client"); exit;
 }
 
@@ -252,7 +332,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete') {
 }
 
 // =======================================================================
-// 5. ACTIVATION MANAGEMENT
+// 6. ACTIVATION & TERMINATION (LEGACY & FULL EDIT)
 // =======================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST['action'] === 'create_activation' || $_POST['action'] === 'update_activation')) {
     $is_upd = ($_POST['action'] === 'update_activation');
@@ -293,9 +373,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_activation') {
     header("Location: sim_tracking_status.php?msg=deleted"); exit;
 }
 
-// =======================================================================
-// 6. TERMINATION MANAGEMENT
-// =======================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST['action'] === 'create_termination' || $_POST['action'] === 'update_termination')) {
     $is_upd = ($_POST['action'] === 'update_termination');
     $id = $_POST['id'] ?? null;
