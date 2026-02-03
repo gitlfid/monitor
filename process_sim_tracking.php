@@ -8,7 +8,7 @@ error_reporting(E_ALL);
 require_once 'includes/auth_check.php';
 if (file_exists('includes/config.php')) require_once 'includes/config.php';
 
-// Koneksi Universal
+// Koneksi Universal (Support PDO & MySQLi)
 $db = null; $db_type = '';
 $candidates = ['pdo', 'conn', 'db', 'link', 'mysqli'];
 foreach ($candidates as $var) { if (isset($$var)) { if ($$var instanceof PDO) { $db = $$var; $db_type = 'pdo'; break; } if ($$var instanceof mysqli) { $db = $$var; $db_type = 'mysqli'; break; } } if (isset($GLOBALS[$var])) { if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } } }
@@ -28,25 +28,71 @@ if (!$db) die("System Error: Database Connection Failed.");
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // =======================================================================
-// 2. HELPER: BACA EXCEL/CSV & SMART HEADER FINDER
+// 2. AUTO-REPAIR DATABASE
 // =======================================================================
-function readSpreadsheet($filePath) {
-    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+function checkAndFix($db, $db_type, $table, $col, $def) {
+    try {
+        $exists = false;
+        if ($db_type === 'pdo') { $stmt = $db->query("SHOW COLUMNS FROM `$table` LIKE '$col'"); if ($stmt->rowCount() > 0) $exists = true; }
+        else { $res = mysqli_query($db, "SHOW COLUMNS FROM `$table` LIKE '$col'"); if (mysqli_num_rows($res) > 0) $exists = true; }
+        
+        if (!$exists) {
+            $sql = "ALTER TABLE `$table` ADD COLUMN `$col` $def";
+            if ($db_type === 'pdo') $db->exec($sql); else mysqli_query($db, $sql);
+        }
+    } catch (Exception $e) {}
+}
+
+checkAndFix($db, $db_type, 'sim_activations', 'msisdn', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_activations', 'iccid', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_activations', 'imsi', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_activations', 'sn', "VARCHAR(50) NULL");
+
+checkAndFix($db, $db_type, 'sim_terminations', 'msisdn', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'iccid', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'imsi', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'sn', "VARCHAR(50) NULL");
+checkAndFix($db, $db_type, 'sim_terminations', 'po_provider_id', "INT(11) NULL");
+
+// =======================================================================
+// 3. HELPER: BACA EXCEL/CSV (LOGIC DIPERBAIKI)
+// =======================================================================
+function readSpreadsheet($tmpPath, $originalName) {
+    // FIX: Ambil ekstensi dari nama asli, bukan tmpPath
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $data = [];
 
+    // --- CSV HANDLER ---
     if ($ext === 'csv') {
-        if (($handle = fopen($filePath, "r")) !== FALSE) {
-            while (($row = fgetcsv($handle, 1000, ",")) !== FALSE) { $data[] = $row; }
+        if (($handle = fopen($tmpPath, "r")) !== FALSE) {
+            // Deteksi BOM (Byte Order Mark) untuk Excel CSV UTF-8
+            $bom = "\xEF\xBB\xBF";
+            $firstLine = fgets($handle);
+            if (strncmp($firstLine, $bom, 3) === 0) $firstLine = substr($firstLine, 3);
+            
+            // Parse baris pertama manual, sisanya loop
+            $data[] = str_getcsv($firstLine);
+            while (($row = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                $data[] = $row;
+            }
             fclose($handle);
         }
-    } elseif ($ext === 'xlsx') {
+        return $data;
+    }
+
+    // --- XLSX HANDLER ---
+    if ($ext === 'xlsx') {
         $zip = new ZipArchive;
-        if ($zip->open($filePath) === TRUE) {
+        if ($zip->open($tmpPath) === TRUE) {
             $sharedStrings = [];
+            // Load Shared Strings
             if ($zip->locateName('xl/sharedStrings.xml') !== false) {
                 $xml = simplexml_load_string($zip->getFromName('xl/sharedStrings.xml'));
-                foreach ($xml->si as $si) { $sharedStrings[] = (string)$si->t; }
+                foreach ($xml->si as $si) {
+                    $sharedStrings[] = (string)$si->t;
+                }
             }
+            // Load Sheet 1
             if ($zip->locateName('xl/worksheets/sheet1.xml') !== false) {
                 $xml = simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));
                 foreach ($xml->sheetData->row as $row) {
@@ -63,72 +109,65 @@ function readSpreadsheet($filePath) {
             }
             $zip->close();
         }
+        return $data;
     }
-    return $data;
+    return false; // Format tidak didukung
 }
 
-// Fungsi Mencari Index Kolom Secara Fleksibel
-function findColumnIndex($headerRow, $possibleNames) {
-    foreach ($headerRow as $index => $colName) {
-        $cleanName = strtolower(trim(str_replace(['_', ' ', '.'], '', $colName))); // msisdn, nohp, phonenumber
-        foreach ($possibleNames as $target) {
-            if ($cleanName === $target) return $index;
-        }
+// Helper: Cari Index Kolom (Case Insensitive)
+function findColIndex($headers, $keys) {
+    foreach ($headers as $idx => $val) {
+        $clean = strtolower(trim(str_replace([' ', '_', '-', '.'], '', $val)));
+        if (in_array($clean, $keys)) return $idx;
     }
     return false;
 }
 
 // =======================================================================
-// 3. ACTION HANDLERS (FLEXIBLE LOGIC)
+// 4. ACTION HANDLERS
 // =======================================================================
 
-// --- A. UPLOAD MASTER DATA ---
+// --- A. UPLOAD MASTER DATA (Initial Batch) ---
 if ($action == 'upload_master_bulk') {
     try {
-        $po_id = $_POST['po_provider_id']; $company_id = $_POST['company_id']; 
-        $project_id = $_POST['project_id']; $date = $_POST['date_field']; $batch = $_POST['activation_batch'];
+        $po_id = $_POST['po_provider_id']; $company_id = $_POST['company_id']; $project_id = $_POST['project_id']; $date = $_POST['date_field']; $batch = $_POST['activation_batch'];
         
         if (isset($_FILES['upload_file']) && $_FILES['upload_file']['error'] == 0) {
-            $rows = readSpreadsheet($_FILES['upload_file']['tmp_name']);
-            if (!$rows || count($rows) < 2) die("<script>alert('Error: File kosong atau format salah.'); window.history.back();</script>");
+            // FIX: Pass nama asli file untuk deteksi ekstensi
+            $rows = readSpreadsheet($_FILES['upload_file']['tmp_name'], $_FILES['upload_file']['name']);
+            
+            if (!$rows || count($rows) < 2) die("<script>alert('File kosong atau format tidak terbaca. Pastikan .csv atau .xlsx'); window.history.back();</script>");
 
-            $header = $rows[0]; // Baris pertama adalah header
+            $header = $rows[0];
+            
+            // Cari Kolom (Flexible)
+            $idx_msisdn = findColIndex($header, ['msisdn', 'nomor', 'nohp', 'phone', 'number']);
+            $idx_iccid  = findColIndex($header, ['iccid']);
+            $idx_imsi   = findColIndex($header, ['imsi']);
+            $idx_sn     = findColIndex($header, ['sn', 'serial', 'serialnumber']);
 
-            // Cari Index Kolom (Flexible Names)
-            $idx_msisdn = findColumnIndex($header, ['msisdn', 'nomor', 'no', 'nohp', 'phonenumber', 'phone']);
-            $idx_iccid  = findColumnIndex($header, ['iccid', 'sn2']);
-            $idx_imsi   = findColumnIndex($header, ['imsi']);
-            $idx_sn     = findColumnIndex($header, ['sn', 'serial', 'serialnumber']);
-
-            // Validasi: Hanya MSISDN yang wajib
-            if ($idx_msisdn === false) {
-                die("<script>alert('Error: Kolom MSISDN tidak ditemukan di file Excel/CSV. Pastikan ada header bernama MSISDN, No HP, atau Phone.'); window.history.back();</script>");
-            }
+            if ($idx_msisdn === false) die("<script>alert('Error: Kolom MSISDN tidak ditemukan di header file.'); window.history.back();</script>");
 
             if($db_type === 'pdo') $db->beginTransaction();
 
             $successCount = 0;
-            // Mulai loop dari baris ke-2 (index 1)
+            // Loop Data (Skip header index 0)
             for ($i = 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
-                
-                // Ambil Data (Safe Check)
-                $msisdn = isset($row[$idx_msisdn]) ? trim($row[$idx_msisdn]) : '';
-                
-                // Data Optional (Jika kolom tidak ada, set NULL)
+                // Ambil data jika index ditemukan, jika tidak kosongkan
+                $msisdn = ($idx_msisdn !== false && isset($row[$idx_msisdn])) ? trim($row[$idx_msisdn]) : '';
                 $iccid  = ($idx_iccid !== false && isset($row[$idx_iccid])) ? trim($row[$idx_iccid]) : NULL;
                 $imsi   = ($idx_imsi !== false && isset($row[$idx_imsi])) ? trim($row[$idx_imsi]) : NULL;
                 $sn     = ($idx_sn !== false && isset($row[$idx_sn])) ? trim($row[$idx_sn]) : NULL;
 
-                if (empty($msisdn)) continue; // Skip jika MSISDN kosong
+                if (empty($msisdn)) continue; 
 
-                // Simpan ke DB
                 if ($db_type === 'pdo') {
                     $stmt = $db->prepare("INSERT INTO sim_activations (po_provider_id, company_id, project_id, activation_date, activation_batch, total_sim, active_qty, inactive_qty, msisdn, iccid, imsi, sn) VALUES (?, ?, ?, ?, ?, 1, 1, 0, ?, ?, ?, ?)");
                     $stmt->execute([$po_id, $company_id, $project_id, $date, $batch, $msisdn, $iccid, $imsi, $sn]);
                 } else {
-                    $iccid = $iccid?"'$iccid'":"NULL"; $imsi = $imsi?"'$imsi'":"NULL"; $sn = $sn?"'$sn'":"NULL";
-                    mysqli_query($db, "INSERT INTO sim_activations (po_provider_id, company_id, project_id, activation_date, activation_batch, total_sim, active_qty, inactive_qty, msisdn, iccid, imsi, sn) VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', 1, 1, 0, '$msisdn', $iccid, $imsi, $sn)");
+                    $iccid_s = $iccid?"'$iccid'":"NULL"; $imsi_s = $imsi?"'$imsi'":"NULL"; $sn_s = $sn?"'$sn'":"NULL";
+                    mysqli_query($db, "INSERT INTO sim_activations (po_provider_id, company_id, project_id, activation_date, activation_batch, total_sim, active_qty, inactive_qty, msisdn, iccid, imsi, sn) VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', 1, 1, 0, '$msisdn', $iccid_s, $imsi_s, $sn_s)");
                 }
                 $successCount++;
             }
@@ -136,7 +175,7 @@ if ($action == 'upload_master_bulk') {
             if($db_type === 'pdo') $db->commit();
             header("Location: sim_tracking_status.php?msg=uploaded_bulk&count=$successCount"); exit;
         } else {
-            die("Error: Gagal upload file.");
+            die("Error: File upload gagal.");
         }
     } catch (Exception $e) {
         if($db_type === 'pdo') $db->rollBack();
@@ -144,7 +183,7 @@ if ($action == 'upload_master_bulk') {
     }
 }
 
-// --- B. ACTION (ACTIVATE/TERMINATE) - MANUAL OR FILE ---
+// --- B. CREATE ACTIVATION & TERMINATION (MANUAL & FILE) ---
 if ($action == 'create_activation_simple' || $action == 'create_termination_simple') {
     try {
         $is_term = ($action == 'create_termination_simple');
@@ -154,10 +193,12 @@ if ($action == 'create_activation_simple' || $action == 'create_termination_simp
         $qty_f   = $is_term ? 'terminated_qty' : 'active_qty';
         $xtra_f  = $is_term ? ', unterminated_qty' : ', inactive_qty';
         
-        $po_id = $_POST['po_provider_id']; $date = $_POST['date_field']; $batch = $_POST[$batch_f];
-        $company_id = $_POST['company_id'] ?? 0; $project_id = $_POST['project_id'] ?? 0;
-
-        // Auto-Fill Company/Project if Missing
+        $po_id = $_POST['po_provider_id'];
+        $date  = $_POST['date_field'];
+        $batch = $_POST[$batch_f];
+        
+        $company_id = $_POST['company_id'] ?? 0;
+        $project_id = $_POST['project_id'] ?? 0;
         if (empty($company_id)) {
             if ($db_type === 'pdo') {
                 $stmt = $db->prepare("SELECT company_id, project_id FROM sim_tracking_po WHERE id = ?");
@@ -171,26 +212,26 @@ if ($action == 'create_activation_simple' || $action == 'create_termination_simp
             $project_id = $poData['project_id'] ?? 0;
         }
 
-        // --- MODE 1: BULK FILE UPLOAD ---
+        // --- CEK FILE UPLOAD ---
         if (isset($_FILES['action_file']) && $_FILES['action_file']['error'] == 0) {
-            $rows = readSpreadsheet($_FILES['action_file']['tmp_name']);
+            
+            // FIX: Pass nama file asli
+            $rows = readSpreadsheet($_FILES['action_file']['tmp_name'], $_FILES['action_file']['name']);
             if (!$rows || count($rows) < 2) die("<script>alert('File kosong/salah format');window.history.back();</script>");
 
             $header = $rows[0];
-            // Flexible Search
-            $idx_msisdn = findColumnIndex($header, ['msisdn', 'nomor', 'no', 'nohp', 'phonenumber', 'phone']);
-            $idx_iccid  = findColumnIndex($header, ['iccid']);
-            $idx_imsi   = findColumnIndex($header, ['imsi']);
-            $idx_sn     = findColumnIndex($header, ['sn', 'serial']);
+            $idx_msisdn = findColIndex($header, ['msisdn', 'nomor', 'nohp', 'phone']);
+            $idx_iccid  = findColIndex($header, ['iccid']);
+            $idx_imsi   = findColIndex($header, ['imsi']);
+            $idx_sn     = findColIndex($header, ['sn', 'serial']);
 
-            if ($idx_msisdn === false) die("<script>alert('Error: Kolom MSISDN tidak ditemukan.');window.history.back();</script>");
+            if ($idx_msisdn === false) die("<script>alert('Error: Header MSISDN tidak ditemukan.');window.history.back();</script>");
 
             if($db_type === 'pdo') $db->beginTransaction();
             
             for ($i = 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
-                $msisdn = isset($row[$idx_msisdn]) ? trim($row[$idx_msisdn]) : '';
-                // Optional Fields
+                $msisdn = ($idx_msisdn !== false && isset($row[$idx_msisdn])) ? trim($row[$idx_msisdn]) : '';
                 $iccid  = ($idx_iccid !== false && isset($row[$idx_iccid])) ? trim($row[$idx_iccid]) : NULL;
                 $imsi   = ($idx_imsi !== false && isset($row[$idx_imsi])) ? trim($row[$idx_imsi]) : NULL;
                 $sn     = ($idx_sn !== false && isset($row[$idx_sn])) ? trim($row[$idx_sn]) : NULL;
@@ -198,17 +239,19 @@ if ($action == 'create_activation_simple' || $action == 'create_termination_simp
                 if (empty($msisdn)) continue;
 
                 if ($db_type === 'pdo') {
-                    $stmt = $db->prepare("INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) VALUES (?, ?, ?, ?, ?, 1, 1, 0, ?, ?, ?, ?)");
+                    $stmt = $db->prepare("INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) 
+                            VALUES (?, ?, ?, ?, ?, 1, 1, 0, ?, ?, ?, ?)");
                     $stmt->execute([$po_id, $company_id, $project_id, $date, $batch, $msisdn, $iccid, $imsi, $sn]);
                 } else {
                     $iccid_s = $iccid?"'$iccid'":"NULL"; $imsi_s = $imsi?"'$imsi'":"NULL"; $sn_s = $sn?"'$sn'":"NULL";
-                    mysqli_query($db, "INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', 1, 1, 0, '$msisdn', $iccid_s, $imsi_s, $sn_s)");
+                    mysqli_query($db, "INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) 
+                    VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', 1, 1, 0, '$msisdn', $iccid_s, $imsi_s, $sn_s)");
                 }
             }
             if($db_type === 'pdo') $db->commit();
 
         } else {
-            // --- MODE 2: MANUAL INPUT ---
+            // --- MANUAL QTY INPUT ---
             $qty = ($is_term ? $_POST['terminated_qty'] : $_POST['active_qty']) ?? 0;
             $msisdn = !empty($_POST['msisdn']) ? $_POST['msisdn'] : NULL;
             $iccid  = !empty($_POST['iccid']) ? $_POST['iccid'] : NULL;
@@ -216,11 +259,14 @@ if ($action == 'create_activation_simple' || $action == 'create_termination_simp
             $sn     = !empty($_POST['sn']) ? $_POST['sn'] : NULL;
 
             if ($db_type === 'pdo') {
-                $stmt = $db->prepare("INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)");
+                $sql = "INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)";
+                $stmt = $db->prepare($sql);
                 $stmt->execute([$po_id, $company_id, $project_id, $date, $batch, $qty, $qty, $msisdn, $iccid, $imsi, $sn]);
             } else {
                 $msisdn_s = $msisdn?"'$msisdn'":"NULL"; $iccid_s = $iccid?"'$iccid'":"NULL"; $imsi_s = $imsi?"'$imsi'":"NULL"; $sn_s = $sn?"'$sn'":"NULL";
-                mysqli_query($db, "INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', '$qty', '$qty', 0, $msisdn_s, $iccid_s, $imsi_s, $sn_s)");
+                mysqli_query($db, "INSERT INTO $table (po_provider_id, company_id, project_id, $date_f, $batch_f, total_sim, $qty_f $xtra_f, msisdn, iccid, imsi, sn) 
+                VALUES ('$po_id', '$company_id', '$project_id', '$date', '$batch', '$qty', '$qty', 0, $msisdn_s, $iccid_s, $imsi_s, $sn_s)");
             }
         }
 
@@ -229,7 +275,7 @@ if ($action == 'create_activation_simple' || $action == 'create_termination_simp
 }
 
 // =======================================================================
-// [LEGACY] FITUR LAMA (PO, LOGISTIC, ETC) - JANGAN DIHAPUS
+// [LEGACY] 5. FITUR LAMA (PO, LOGISTIC, ETC)
 // =======================================================================
 function uploadFile($fileArray, $prefix) {
     if (isset($fileArray) && $fileArray['error'] === UPLOAD_ERR_OK) {
