@@ -12,24 +12,22 @@ require_once 'includes/sidebar.php';
 
 $db = db_connect();
 
-// Helper Function
+// Helper Function untuk mencegah error htmlspecialchars null
 function e($str) {
     return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
 }
 
 // =========================================================================
-// 2. FETCH DATA DROPDOWNS & RAW DATA FOR JS
+// 2. FETCH DATA FOR DROPDOWNS (FILTERED & AUTO-LINK)
 // =========================================================================
 $list_providers = [];
 $list_clients   = [];
 $list_projects  = [];
 
-// Raw Data Arrays for JS (History Logs & Charts)
-$activations_raw = [];
-$terminations_raw = [];
-
 if ($db) {
-    // A. PROVIDER PO (FILTERED)
+    // A. FILTER PROVIDER PO:
+    // Hanya tampilkan PO Provider yang BELUM pernah di-upload (belum ada di tabel sim_activations)
+    // Sekaligus join ke Client PO untuk mendapatkan data Client/Project otomatis (Auto-Link)
     $sql_prov = "SELECT 
                     p.id, p.po_number, p.batch_name, p.sim_qty,
                     cpo.company_id as client_comp_id, 
@@ -41,13 +39,22 @@ if ($db) {
                  ORDER BY p.id DESC";
     $list_providers = $db->query($sql_prov)->fetchAll(PDO::FETCH_ASSOC);
 
-    // B. MASTER DATA
+    // B. LIST MASTER DATA (Untuk Dropdown Client/Project)
     $list_clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     $list_projects = $db->query("SELECT id, company_id, project_name FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+}
 
-    // C. FETCH RAW HISTORY (ALL DATA)
-    // Penting: Ambil semua data tanpa limit agar history log lengkap
+// =========================================================================
+// 3. FETCH RAW DATA (CHART & LOGS)
+// =========================================================================
+$activations_raw = [];
+$terminations_raw = [];
+$chart_data_act = []; 
+$chart_data_term = [];
+
+if ($db) {
     try {
+        // Ambil SEMUA data activation & termination untuk keperluan Log & Chart
         $sql_act_raw = "SELECT * FROM sim_activations ORDER BY activation_date DESC, id DESC";
         $stmt = $db->query($sql_act_raw);
         if($stmt) $activations_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -55,14 +62,10 @@ if ($db) {
         $sql_term_raw = "SELECT * FROM sim_terminations ORDER BY termination_date DESC, id DESC";
         $stmt = $db->query($sql_term_raw);
         if($stmt) $terminations_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) { }
+    } catch (Exception $e) { /* Silent fail */ }
 }
 
-// Chart Data Logic
-$chart_data_act = []; 
-$chart_data_term = [];
-$js_labels = []; $js_series_act = []; $js_series_term = [];
-
+// Generate Chart Data (Group by Date)
 foreach ($activations_raw as $row) {
     $d = date('Y-m-d', strtotime($row['activation_date']));
     if(!isset($chart_data_act[$d])) $chart_data_act[$d] = 0;
@@ -75,6 +78,7 @@ foreach ($terminations_raw as $row) {
 }
 $all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term)));
 sort($all_dates); 
+$js_labels = []; $js_series_act = []; $js_series_term = [];
 foreach ($all_dates as $dateKey) {
     $js_labels[] = date('d M', strtotime($dateKey));
     $js_series_act[] = $chart_data_act[$dateKey] ?? 0;
@@ -82,10 +86,12 @@ foreach ($all_dates as $dateKey) {
 }
 
 // =========================================================================
-// 3. MAIN DASHBOARD DATA
+// 4. MAIN DASHBOARD DATA (GROUPED BY PO)
 // =========================================================================
 $dashboard_data = [];
 if ($db) {
+    // Query Utama: Menampilkan PO yang sudah aktif (sudah di-upload/inject)
+    // Mengambil total alokasi, total yang sudah dipakai (activated), dan total yang sudah mati (terminated)
     $sql_main = "SELECT 
                     po.id as po_id,
                     po.po_number as provider_po,
@@ -108,6 +114,7 @@ if ($db) {
                 LEFT JOIN companies c ON po.company_id = c.id
                 LEFT JOIN projects p ON po.project_id = p.id
                 WHERE po.type = 'provider'
+                -- FILTER: Hanya tampilkan yang sudah ada di tabel activation (sudah di-upload)
                 HAVING po.id IN (SELECT DISTINCT po_provider_id FROM sim_activations)
                 ORDER BY po.id DESC";
     
@@ -119,14 +126,15 @@ if ($db) {
 ?>
 
 <style>
-    /* 1. CORE LAYOUT */
-    body { background-color: #f4f7fa; font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #1e293b; }
+    /* PROFESSIONAL UI SYSTEM */
+    body { background-color: #f4f6f8; font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #334155; }
     
-    /* 2. CARD & CONTAINERS */
-    .card { border: none; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); background: #fff; margin-bottom: 24px; }
-    .card-header { background: #fff; border-bottom: 1px solid #f1f5f9; padding: 20px 24px; border-radius: 16px 16px 0 0 !important; }
+    /* CARDS */
+    .card { border: none; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02); background: #fff; margin-bottom: 24px; transition: transform 0.2s ease; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
+    .card-header { background: #fff; border-bottom: 1px solid #f1f5f9; padding: 20px 24px; border-radius: 12px 12px 0 0 !important; }
     
-    /* 3. TABLE PROFESSIONAL */
+    /* TABLE */
     .table-pro { width: 100%; border-collapse: separate; border-spacing: 0; }
     .table-pro th { 
         background-color: #f8fafc; color: #64748b; font-size: 0.7rem; 
@@ -137,76 +145,87 @@ if ($db) {
     .table-pro tr:last-child td { border-bottom: none; }
     .table-pro tr:hover td { background-color: #fcfdfe; }
 
-    /* 4. TYPOGRAPHY & LABELS */
-    .text-label { font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 4px; letter-spacing: 0.03em; }
-    .text-value { font-size: 0.95rem; font-weight: 600; color: #334155; display: block; }
-    .text-sub { font-size: 0.8rem; color: #64748b; }
+    /* LABELS & TYPOGRAPHY */
+    .lbl-meta { font-size: 0.65rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 4px; letter-spacing: 0.03em; }
+    .val-meta { font-size: 0.9rem; font-weight: 600; color: #1e293b; display: block; }
+    .val-sub { font-size: 0.8rem; color: #64748b; }
 
-    /* 5. BADGES */
-    .badge-soft { padding: 5px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; font-family: monospace; }
+    /* BADGES */
+    .badge-soft { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; font-family: monospace; display: inline-block; }
     .badge-prov { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .badge-cli { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
     .badge-batch { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 
-    /* 6. STATUS BAR (PROFESSIONAL) */
+    /* LIFECYCLE STATUS BAR */
     .status-wrapper { background: #fff; }
-    .status-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
-    .progress-bar-modern { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: #f1f5f9; width: 100%; }
-    .bar-seg { height: 100%; transition: width 0.5s ease; }
+    .status-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #64748b; }
+    .progress-stacked { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: #e2e8f0; width: 100%; margin-bottom: 12px; }
+    .bar-seg { height: 100%; transition: width 0.6s ease; }
     
     /* COLORS */
-    .bg-active { background-color: #10b981; } /* Green */
-    .bg-terminated { background-color: #ef4444; } /* Red */
-    .bg-available { background-color: #cbd5e1; } /* Gray */
+    .bg-act { background-color: #10b981; } /* Green - Active */
+    .bg-term { background-color: #ef4444; } /* Red - Terminated */
+    .bg-rem { background-color: #cbd5e1; } /* Gray - Available */
+    .text-act { color: #10b981; } .text-term { color: #ef4444; }
     
-    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
-    .dot-act { background: #10b981; }
-    .dot-term { background: #ef4444; }
+    .status-legend { display: flex; gap: 16px; font-size: 0.75rem; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
 
-    /* 7. ACTION BUTTONS */
-    .btn-action { 
-        padding: 8px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; 
-        display: inline-flex; align-items: center; justify-content: center; gap: 6px; 
-        transition: all 0.2s; border: 1px solid transparent; width: 100%; text-align: center; margin-bottom: 6px;
+    /* BUTTONS */
+    .btn-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .btn-custom { 
+        padding: 8px; font-size: 0.75rem; font-weight: 700; border-radius: 8px; 
+        display: flex; align-items: center; justify-content: center; gap: 6px; 
+        transition: all 0.2s; border: 1px solid transparent; text-decoration: none; cursor: pointer;
     }
     .btn-act { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
-    .btn-act:hover { background: #059669; color: white; }
+    .btn-act:hover { background: #059669; color: white; transform: translateY(-1px); }
+    
     .btn-term { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-    .btn-term:hover { background: #dc2626; color: white; }
-    .btn-log { background: #fff; color: #64748b; border-color: #e2e8f0; }
-    .btn-log:hover { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
-    .disabled { opacity: 0.5; pointer-events: none; filter: grayscale(1); }
+    .btn-term:hover { background: #dc2626; color: white; transform: translateY(-1px); }
+    
+    .btn-log { background: #fff; color: #64748b; border-color: #e2e8f0; width: 100%; }
+    .btn-log:hover { background: #f8fafc; border-color: #cbd5e1; color: #1e293b; }
+    
+    .btn-disabled { opacity: 0.5; pointer-events: none; filter: grayscale(1); cursor: not-allowed; }
 
-    /* 8. MASTER BUTTON */
+    /* MASTER BUTTON */
     .btn-master { 
         background: #4f46e5; color: white; border: none; padding: 10px 24px; border-radius: 8px; 
-        font-weight: 600; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); 
+        font-weight: 600; font-size: 0.85rem; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); 
         display: flex; align-items: center; gap: 8px; transition: 0.2s; 
     }
-    .btn-master:hover { background: #4338ca; transform: translateY(-1px); color: white; }
+    .btn-master:hover { background: #4338ca; transform: translateY(-2px); color: white; }
 
-    /* 9. TIMELINE (HISTORY LOG) */
-    .timeline { position: relative; padding-left: 24px; border-left: 2px solid #e2e8f0; margin-left: 12px; }
-    .timeline-item { position: relative; margin-bottom: 24px; }
-    .timeline-dot { 
-        position: absolute; left: -31px; top: 0; width: 16px; height: 16px; border-radius: 50%; 
-        border: 3px solid #fff; box-shadow: 0 0 0 1px #e2e8f0; 
-    }
-    .timeline-dot.act { background: #10b981; }
-    .timeline-dot.term { background: #ef4444; }
+    /* UPLOAD AREA */
+    .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; text-align: center; padding: 30px; position: relative; cursor: pointer; transition: 0.2s; }
+    .upload-zone:hover { border-color: #6366f1; background: #eef2ff; }
+    .upload-icon { font-size: 2rem; color: #94a3b8; margin-bottom: 10px; }
+
+    /* TIMELINE (LOGS) */
+    .timeline { position: relative; padding-left: 20px; border-left: 2px solid #e2e8f0; margin-left: 8px; }
+    .t-item { position: relative; margin-bottom: 20px; }
+    .t-dot { position: absolute; left: -26px; top: 4px; width: 14px; height: 14px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px #e2e8f0; }
+    .t-dot.act { background: #10b981; } .t-dot.term { background: #ef4444; }
+    .t-date { font-size: 0.7rem; color: #94a3b8; font-weight: 700; margin-bottom: 4px; display: block; }
+    .t-card { background: #fff; padding: 12px; border: 1px solid #f1f5f9; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
     
-    .timeline-content { background: #fff; border: 1px solid #f1f5f9; padding: 12px 16px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-    .time-date { font-size: 0.75rem; color: #94a3b8; font-weight: 600; margin-bottom: 4px; display: block; }
+    /* MODAL TABS */
+    .nav-tabs .nav-link { font-size: 0.85rem; font-weight: 600; color: #64748b; border: none; border-bottom: 2px solid transparent; }
+    .nav-tabs .nav-link.active { color: #4f46e5; border-bottom-color: #4f46e5; background: transparent; }
     
-    /* 10. UPLOAD ZONE */
-    .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; padding: 30px; text-align: center; border-radius: 12px; position: relative; cursor: pointer; transition: 0.2s; }
-    .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
+    /* SIM DETAIL */
+    .sim-detail-toggle { font-size: 0.8rem; font-weight: 600; color: #6366f1; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+    .sim-detail-toggle:hover { text-decoration: underline; }
+    .sim-detail-box { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px dashed #cbd5e1; display: none; margin-top: 10px; }
 </style>
 
 <div class="page-heading mb-4">
     <div class="d-flex justify-content-between align-items-center">
         <div>
             <h3 class="mb-1 text-dark fw-bold">SIM Lifecycle Dashboard</h3>
-            <p class="text-muted mb-0 small">Centralized Management for Master Data & Status.</p>
+            <p class="text-muted mb-0 small">Centralized Management for Master Data & Lifecycle Status.</p>
         </div>
         <div>
             <button class="btn-master" onclick="openMasterModal()">
@@ -240,11 +259,11 @@ if ($db) {
                 </thead>
                 <tbody>
                     <?php if(empty($dashboard_data)): ?>
-                        <tr><td colspan="4" class="text-center py-5 text-muted fst-italic">No data found. Click "Upload Master Data" to start.</td></tr>
+                        <tr><td colspan="4" class="text-center py-5 text-muted fst-italic">No active data found. Click "Upload Master Data" to start.</td></tr>
                     <?php else: ?>
                         <?php foreach($dashboard_data as $row): 
-                            // 1. LOGIKA UTAMA
-                            $totalPool = (int)$row['total_pool']; // Total Awal
+                            // 1. LOGIKA UTAMA (FIXED)
+                            $totalPool = (int)$row['total_pool']; // Kapasitas Awal PO Provider
                             $usedStock = (int)$row['total_used_stock']; // Pernah Aktif
                             $terminated = (int)$row['total_terminated']; // Sudah Mati
                             
@@ -260,7 +279,7 @@ if ($db) {
                             $pctTerm = ($totalPool > 0) ? ($terminated / $totalPool) * 100 : 0;
                             $pctAvail = 100 - $pctActive - $pctTerm;
 
-                            // 4. JSON DATA
+                            // 4. JSON DATA FOR JS
                             $rowJson = htmlspecialchars(json_encode([
                                 'po_id' => $row['po_id'],
                                 'po_number' => $row['provider_po'],
@@ -274,23 +293,27 @@ if ($db) {
                         ?>
                         <tr>
                             <td>
-                                <div class="mb-2">
-                                    <span class="text-label">Client Name</span>
-                                    <span class="text-value"><?= e($row['company_name']) ?></span>
+                                <div class="mb-3">
+                                    <span class="lbl-meta">Client Name</span>
+                                    <span class="val-meta"><?= e($row['company_name']) ?></span>
                                 </div>
-                                <div>
-                                    <span class="text-label">Project</span>
-                                    <div class="text-sub"><i class="bi bi-folder2-open text-primary me-1"></i> <?= e($row['project_name']) ?></div>
+                                <div class="mb-2">
+                                    <span class="lbl-meta">Client PO</span>
+                                    <span class="badge-soft badge-cli"><?= e($row['client_po']) ?: 'N/A' ?></span>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="lbl-meta">Project</span>
+                                    <div class="val-sub"><i class="bi bi-folder2-open text-primary me-1"></i> <?= e($row['project_name']) ?></div>
                                 </div>
                             </td>
 
                             <td>
-                                <div class="mb-2">
-                                    <span class="text-label">Provider Source</span>
+                                <div class="mb-3">
+                                    <span class="lbl-meta">Provider Source</span>
                                     <span class="badge-soft badge-prov"><?= e($row['provider_po']) ?></span>
                                 </div>
                                 <div>
-                                    <span class="text-label">Batch ID</span>
+                                    <span class="lbl-meta">Batch ID</span>
                                     <span class="badge-soft badge-batch"><?= e($row['batch_name']) ?: 'BATCH 1' ?></span>
                                 </div>
                             </td>
@@ -298,46 +321,41 @@ if ($db) {
                             <td>
                                 <div class="status-wrapper">
                                     <div class="status-header">
-                                        <span class="text-sub fw-bold">Total Pool: <?= number_format($totalPool) ?></span>
-                                        <span class="text-sub text-success fw-bold">Available: <?= number_format($available) ?></span>
+                                        <span>Total: <?= number_format($totalPool) ?></span>
+                                        <span class="text-success">Available: <?= number_format($available) ?></span>
                                     </div>
                                     
-                                    <div class="progress-bar-modern mb-2">
-                                        <div class="bar-seg bg-active" style="width: <?= $pctActive ?>%" title="Active"></div>
-                                        <div class="bar-seg bg-terminated" style="width: <?= $pctTerm ?>%" title="Terminated"></div>
-                                        <div class="bar-seg bg-available" style="width: <?= $pctAvail ?>%" title="Available"></div>
+                                    <div class="progress-stacked">
+                                        <div class="bar-seg bg-act" style="width: <?= $pctActive ?>%"></div>
+                                        <div class="bar-seg bg-term" style="width: <?= $pctTerm ?>%"></div>
+                                        <div class="bar-seg bg-rem" style="width: <?= $pctAvail ?>%"></div>
                                     </div>
 
-                                    <div class="d-flex gap-3 justify-content-between">
-                                        <div class="d-flex align-items-center">
-                                            <div class="dot dot-act"></div>
-                                            <div class="ms-1 lh-1">
-                                                <div class="text-label" style="font-size:0.6rem; margin:0;">Active</div>
-                                                <div class="fw-bold text-dark"><?= number_format($active) ?></div>
-                                            </div>
+                                    <div class="status-legend mt-2">
+                                        <div class="legend-item">
+                                            <div class="dot bg-act"></div>
+                                            <div>Active: <b><?= number_format($active) ?></b></div>
                                         </div>
-                                        <div class="d-flex align-items-center">
-                                            <div class="dot dot-term"></div>
-                                            <div class="ms-1 lh-1">
-                                                <div class="text-label" style="font-size:0.6rem; margin:0;">Terminated</div>
-                                                <div class="fw-bold text-dark"><?= number_format($terminated) ?></div>
-                                            </div>
+                                        <div class="legend-item">
+                                            <div class="dot bg-term"></div>
+                                            <div>Terminated: <b><?= number_format($terminated) ?></b></div>
                                         </div>
                                     </div>
                                 </div>
                             </td>
 
                             <td>
-                                <button class="btn-action btn-act <?= ($available <= 0) ? 'disabled' : '' ?>" onclick='openActionModal("activate", <?= $rowJson ?>)'>
-                                    <i class="bi bi-plus-lg"></i> Activate
-                                </button>
-                                
-                                <button class="btn-action btn-term <?= ($active <= 0) ? 'disabled' : '' ?>" onclick='openActionModal("terminate", <?= $rowJson ?>)'>
-                                    <i class="bi bi-x-lg"></i> Terminate
-                                </button>
-                                
-                                <button class="btn-action btn-log" onclick='openDetailModal(<?= $rowJson ?>)'>
-                                    <i class="bi bi-clock-history"></i> Logs
+                                <div class="btn-action-row">
+                                    <button class="btn-custom btn-act <?= ($available <= 0) ? 'btn-disabled' : '' ?>" onclick='openActionModal("activate", <?= $rowJson ?>)' title="Activate Stock">
+                                        <i class="bi bi-play-fill"></i> Activate
+                                    </button>
+                                    
+                                    <button class="btn-custom btn-term <?= ($active <= 0) ? 'btn-disabled' : '' ?>" onclick='openActionModal("terminate", <?= $rowJson ?>)' title="Terminate SIM">
+                                        <i class="bi bi-stop-fill"></i> Terminate
+                                    </button>
+                                </div>
+                                <button class="btn-custom btn-log" onclick='openDetailModal(<?= $rowJson ?>)'>
+                                    <i class="bi bi-list-ul"></i> History Logs
                                 </button>
                             </td>
                         </tr>
@@ -350,8 +368,8 @@ if ($db) {
 </section>
 
 <div class="modal fade" id="modalMaster" tabindex="-1" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg">
-        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow">
             <input type="hidden" name="action" value="upload_master_bulk">
 
             <div class="modal-header bg-primary text-white">
@@ -360,63 +378,64 @@ if ($db) {
             </div>
             
             <div class="modal-body p-4">
-                <div class="mb-4">
-                    <label class="form-label fw-bold small text-muted">1. SELECT SOURCE (PROVIDER PO)</label>
-                    <select name="po_provider_id" id="inj_provider" class="form-select form-select-lg fw-bold border-primary" required onchange="autoFillClient(this)">
-                        <option value="">-- Choose New Provider PO --</option>
-                        <?php foreach($list_providers as $p): ?>
-                            <option value="<?= $p['id'] ?>" 
-                                data-comp="<?= $p['client_comp_id'] ?>" 
-                                data-proj="<?= $p['client_proj_id'] ?>"
-                                data-batch="<?= $p['batch_name'] ?>">
-                                <?= $p['po_number'] ?> (Total: <?= number_format($p['sim_qty']) ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="row g-4">
+                    <div class="col-md-6 border-end">
+                        <div class="mb-3">
+                            <label class="lbl-meta text-dark mb-1">1. Select Source (Provider PO)</label>
+                            <select name="po_provider_id" id="inj_provider" class="form-select fw-bold border-primary" required onchange="autoFillClient(this)">
+                                <option value="">-- Choose New Provider PO --</option>
+                                <?php foreach($list_providers as $p): ?>
+                                    <option value="<?= $p['id'] ?>" 
+                                        data-comp="<?= $p['client_comp_id'] ?>" 
+                                        data-proj="<?= $p['client_proj_id'] ?>"
+                                        data-batch="<?= $p['batch_name'] ?>">
+                                        <?= $p['po_number'] ?> (Alloc: <?= number_format($p['sim_qty']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text text-muted small" style="font-size:0.7rem">* Only POs not yet uploaded shown.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="lbl-meta text-dark mb-1">2. Destination</label>
+                            <select name="company_id" id="inj_client" class="form-select bg-light mb-2" required onchange="filterProjects(this.value)">
+                                <option value="">-- Client --</option>
+                                <?php foreach($list_clients as $c): ?>
+                                    <option value="<?= $c['id'] ?>"><?= $c['company_name'] ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <select name="project_id" id="inj_project" class="form-select bg-light">
+                                <option value="">-- Project --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 d-flex flex-column">
+                        <label class="lbl-meta text-dark mb-2">3. Upload File</label>
+                        <div class="upload-zone h-100 d-flex flex-column justify-content-center">
+                            <input type="file" name="upload_file" accept=".csv, .xlsx, .xls" required onchange="handleFile(this, 'fileNameDisplay')" style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0; cursor:pointer;">
+                            <div class="upload-icon"><i class="bi bi-file-earmark-spreadsheet"></i></div>
+                            <h6 class="fw-bold text-dark" id="fileNameDisplay">Click or Drag File Here</h6>
+                            <p class="text-muted small mb-0">Accepted: .csv, .xlsx</p>
+                            <div class="mt-3 badge bg-light text-dark border">Header: SN, ICCID, IMSI, MSISDN</div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="row g-3 mb-4">
+                <div class="row g-3 mt-1">
                     <div class="col-md-6">
-                        <label class="form-label fw-bold small text-muted">Client</label>
-                        <select name="company_id" id="inj_client" class="form-select bg-light" required onchange="filterProjects(this.value)">
-                            <option value="">-- Auto Select --</option>
-                            <?php foreach($list_clients as $c): ?>
-                                <option value="<?= $c['id'] ?>"><?= $c['company_name'] ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold small text-muted">Project</label>
-                        <select name="project_id" id="inj_project" class="form-select bg-light">
-                            <option value="">-- Select Project --</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <label class="form-label fw-bold small text-muted">2. UPLOAD DATA</label>
-                    <div class="upload-zone">
-                        <input type="file" name="upload_file" accept=".csv, .xlsx, .xls" required onchange="handleFile(this)" style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0;">
-                        <i class="bi bi-file-earmark-excel text-primary display-4"></i>
-                        <h6 class="fw-bold mt-2 text-dark" id="fileNameDisplay">Drag & Drop or Click to Browse</h6>
-                        <p class="text-muted small mb-0">Format: <code>SN, ICCID, IMSI, MSISDN</code></p>
-                    </div>
-                </div>
-
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">Batch Name</label>
+                        <label class="lbl-meta mb-1">Batch Name</label>
                         <input type="text" name="activation_batch" id="inj_batch" class="form-control" placeholder="e.g. BATCH 1" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold">Upload Date</label>
+                        <label class="lbl-meta mb-1">Upload Date</label>
                         <input type="date" name="date_field" class="form-control" value="<?= date('Y-m-d') ?>" required>
                     </div>
                 </div>
             </div>
             
             <div class="modal-footer bg-light border-0">
-                <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-light fw-bold text-muted" data-bs-dismiss="modal">Cancel</button>
                 <button type="submit" class="btn btn-primary fw-bold px-4">Start Upload</button>
             </div>
         </form>
@@ -424,8 +443,8 @@ if ($db) {
 </div>
 
 <div class="modal fade" id="modalAction" tabindex="-1">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-        <form action="process_sim_tracking.php" method="POST" class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow">
             <input type="hidden" name="action" id="act_form_action"> 
             <input type="hidden" name="po_provider_id" id="act_po_id">
             <input type="hidden" name="company_id" id="act_comp_id">
@@ -433,34 +452,66 @@ if ($db) {
             <input type="hidden" name="activation_batch" id="act_batch_name_hidden"> 
             <input type="hidden" name="termination_batch" id="term_batch_name_hidden"> 
 
-            <div class="modal-header border-0 pb-0">
-                <h6 class="modal-title fw-bold" id="act_title">Action</h6>
+            <div class="modal-header bg-white border-0 pb-0">
+                <div>
+                    <h6 class="modal-title fw-bold" id="act_title">Action</h6>
+                    <div class="text-muted small" id="act_po_display">-</div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             
-            <div class="modal-body pt-2 text-center">
-                <div class="text-muted small mb-3" id="act_limit_display">...</div>
-                <div class="form-floating mb-2">
-                    <input type="number" name="qty_input" id="act_qty_input" class="form-control text-center fw-bold fs-5" placeholder="Qty" required min="1">
-                    <label>Quantity</label>
-                </div>
-                <div class="form-floating mb-3">
-                    <input type="date" name="date_field" class="form-control text-center" value="<?= date('Y-m-d') ?>" required>
-                    <label>Date</label>
-                </div>
-                <div class="text-danger small fw-bold mb-3" id="act_error_msg" style="display:none;">Exceeds Limit!</div>
-                
-                <div class="text-end mb-3">
-                    <a href="#" class="small text-decoration-none" onclick="$('#sim_detail_box').slideToggle(); return false;">+ SIM Details (Optional)</a>
-                </div>
-                <div id="sim_detail_box" class="text-start bg-light p-3 rounded mb-3 border" style="display:none;">
-                    <input type="text" name="msisdn" id="inp_msisdn" class="form-control form-control-sm mb-2" placeholder="MSISDN (Required)">
-                    <input type="text" name="iccid" class="form-control form-control-sm mb-2" placeholder="ICCID">
-                    <input type="text" name="imsi" class="form-control form-control-sm mb-2" placeholder="IMSI">
-                    <input type="text" name="sn" class="form-control form-control-sm" placeholder="SN">
+            <div class="modal-body pt-3">
+                <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3 py-2 px-3">
+                    <span class="small fw-bold text-uppercase text-muted">Limit Status</span>
+                    <span id="act_limit_display" class="fw-bold">Checking...</span>
                 </div>
 
-                <button type="submit" class="btn fw-bold w-100" id="act_btn_save">Confirm</button>
+                <ul class="nav nav-tabs nav-fill mb-3" id="actionTab" role="tablist">
+                    <li class="nav-item"><button class="nav-link active" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual" type="button">Manual Input</button></li>
+                    <li class="nav-item"><button class="nav-link" id="file-tab" data-bs-toggle="tab" data-bs-target="#file" type="button">Bulk Upload File</button></li>
+                </ul>
+
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="manual" role="tabpanel">
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <label class="lbl-meta mb-1">Date</label>
+                                <input type="date" name="date_field" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="lbl-meta mb-1">Quantity</label>
+                                <input type="number" name="qty_input" id="act_qty_input" class="form-control fw-bold text-center" placeholder="0" min="1">
+                                <div class="text-danger small mt-1 fw-bold" id="act_error_msg" style="display:none;">Exceeds Limit!</div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-end mb-2">
+                            <a href="#" class="sim-detail-toggle" onclick="$('#sim_detail_box').slideToggle(); return false;">
+                                <i class="bi bi-plus-circle"></i> Input SIM Details (Optional)
+                            </a>
+                        </div>
+                        <div id="sim_detail_box" class="sim-detail-box">
+                            <div class="mb-2"><input type="text" name="msisdn" id="inp_msisdn" class="form-control form-control-sm" placeholder="MSISDN (Required if detail filled)"></div>
+                            <div class="row g-2">
+                                <div class="col-6"><input type="text" name="iccid" class="form-control form-control-sm" placeholder="ICCID"></div>
+                                <div class="col-6"><input type="text" name="imsi" class="form-control form-control-sm" placeholder="IMSI"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="file" role="tabpanel">
+                        <div class="upload-zone py-4">
+                            <input type="file" name="action_file" accept=".csv, .xlsx, .xls" onchange="handleFile(this, 'actFileDisplay')" style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0; cursor:pointer;">
+                            <i class="bi bi-cloud-arrow-up fs-3 text-secondary"></i>
+                            <div class="mt-2 fw-bold small text-dark" id="actFileDisplay">Click to Upload List</div>
+                            <div class="text-muted" style="font-size:0.7rem">Contains MSISDNs to process</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer bg-light border-0">
+                <button type="submit" class="btn btn-primary fw-bold w-100" id="act_btn_save">Confirm Action</button>
             </div>
         </form>
     </div>
@@ -469,8 +520,11 @@ if ($db) {
 <div class="modal fade" id="modalDetail" tabindex="-1">
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content border-0">
-            <div class="modal-header bg-white border-bottom">
-                <h6 class="modal-title fw-bold">Activity History</h6>
+            <div class="modal-header bg-white border-bottom pb-3">
+                <div>
+                    <h6 class="modal-title fw-bold">Activity History</h6>
+                    <div class="small text-muted" id="det_po_title">-</div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body bg-light p-4" id="timeline_content"></div>
@@ -495,24 +549,25 @@ if ($db) {
     // 1. OPEN MODAL UPLOAD
     function openMasterModal() { new bootstrap.Modal(document.getElementById('modalMaster')).show(); }
 
-    // 2. FILENAME DISPLAY
-    function handleFile(input) {
+    // 2. FILENAME DISPLAY (Universal)
+    function handleFile(input, targetId) {
         if(input.files && input.files[0]) {
-            document.getElementById('fileNameDisplay').innerText = input.files[0].name;
-            document.getElementById('fileNameDisplay').className = "fw-bold mt-2 text-primary";
+            let el = document.getElementById(targetId);
+            el.innerText = input.files[0].name;
+            el.classList.add('text-success');
         }
     }
 
-    // 3. AUTO LINK
+    // 3. AUTO LINK (PO -> Client/Project)
     function autoFillClient(selectObj) {
         let opt = selectObj.options[selectObj.selectedIndex];
-        let compId = opt.getAttribute('data-comp');
-        let projId = opt.getAttribute('data-proj');
+        let cId = opt.getAttribute('data-comp');
+        let pId = opt.getAttribute('data-proj');
         let batch = opt.getAttribute('data-batch');
 
-        if(compId) { document.getElementById('inj_client').value = compId; filterProjects(compId); }
-        if(projId) { setTimeout(() => { document.getElementById('inj_project').value = projId; }, 50); }
-        if(batch) document.getElementById('inj_batch').value = batch; else document.getElementById('inj_batch').value = 'BATCH 1';
+        if(cId) { document.getElementById('inj_client').value = cId; filterProjects(cId); }
+        if(pId) { setTimeout(() => { document.getElementById('inj_project').value = pId; }, 50); }
+        document.getElementById('inj_batch').value = batch || 'BATCH 1';
     }
 
     function filterProjects(compId) {
@@ -524,86 +579,93 @@ if ($db) {
         }
     }
 
-    // 4. ACTION MODAL
+    // 4. ACTION MODAL (MANUAL / FILE)
     let maxLimit = 0;
     function openActionModal(type, data) {
-        // Reset
+        // Reset UI
         $('#act_qty_input').val(''); $('#act_error_msg').hide(); $('#act_btn_save').prop('disabled', false);
         $('#sim_detail_box input').val(''); $('#sim_detail_box').hide(); $('#inp_msisdn').removeClass('is-invalid');
-
-        $('#act_po_id').val(data.po_id);
-        $('#act_comp_id').val(data.company_id);
-        $('#act_proj_id').val(data.project_id);
+        $('#actFileDisplay').text('Click to Upload List').removeClass('text-success');
+        
+        // Fill Hidden
+        $('#act_po_id').val(data.po_id); $('#act_po_display').text(data.po_number);
+        $('#act_comp_id').val(data.company_id); $('#act_proj_id').val(data.project_id);
 
         if (type === 'activate') {
-            $('#act_title').text('Activate');
+            $('#act_title').text('Activate Stock');
             $('#act_form_action').val('create_activation_simple'); 
             $('#act_qty_input').attr('name', 'active_qty'); 
             $('#act_batch_name_hidden').val(data.batch_name); 
             maxLimit = parseInt(data.rem_alloc);
-            $('#act_limit_display').html(`Available: <b class="text-success">${maxLimit.toLocaleString()}</b>`);
+            $('#act_limit_display').html(`<span class="text-success">Available: ${maxLimit.toLocaleString()}</span>`);
             $('#act_btn_save').removeClass('btn-danger').addClass('btn-success');
         } else {
-            $('#act_title').text('Terminate');
+            $('#act_title').text('Terminate Stock');
             $('#act_form_action').val('create_termination_simple'); 
             $('#act_qty_input').attr('name', 'terminated_qty');
             $('#term_batch_name_hidden').val(data.batch_name); 
             maxLimit = parseInt(data.curr_active);
-            $('#act_limit_display').html(`Active: <b class="text-danger">${maxLimit.toLocaleString()}</b>`);
+            $('#act_limit_display').html(`<span class="text-danger">Active: ${maxLimit.toLocaleString()}</span>`);
             $('#act_btn_save').removeClass('btn-success').addClass('btn-danger');
         }
 
-        $('#act_qty_input').off('input').on('input', function() {
-            let val = parseInt($(this).val()) || 0;
-            if (val > maxLimit) { $(this).addClass('is-invalid'); $('#act_error_msg').show(); $('#act_btn_save').prop('disabled', true); }
-            else { $(this).removeClass('is-invalid'); $('#act_error_msg').hide(); $('#act_btn_save').prop('disabled', false); }
+        // Limit Check (Manual Input Only)
+        $('#act_qty_input').on('input', function() {
+            if(parseInt(this.value) > maxLimit) { $('#act_error_msg').show(); $('#act_btn_save').prop('disabled', true); }
+            else { $('#act_error_msg').hide(); $('#act_btn_save').prop('disabled', false); }
         });
 
+        // Detail Check
         $('#act_btn_save').off('click').on('click', function(e) {
-            let hasDetail = false;
-            $('#sim_detail_box input').each(function(){ if($(this).val().trim()!=='') hasDetail=true; });
-            if(hasDetail && $('#inp_msisdn').val().trim()==='') {
-                e.preventDefault(); $('#inp_msisdn').addClass('is-invalid');
-                if(!$('#sim_detail_box').is(':visible')) $('#sim_detail_box').slideDown();
-                alert("MSISDN is required if detail is filled!");
+            // Jika tab manual aktif, cek input detail
+            if($('#manual-tab').hasClass('active')) {
+                let hasDetail = false;
+                $('#sim_detail_box input').each(function(){ if($(this).val().trim()!=='') hasDetail=true; });
+                if(hasDetail && $('#inp_msisdn').val().trim()==='') {
+                    e.preventDefault(); $('#inp_msisdn').addClass('is-invalid');
+                    if(!$('#sim_detail_box').is(':visible')) $('#sim_detail_box').slideDown();
+                    alert("MSISDN is required!");
+                }
             }
         });
 
         new bootstrap.Modal(document.getElementById('modalAction')).show();
     }
 
-    // 5. HISTORY LOG (FIXED LOGIC)
+    // 5. HISTORY LOGS (FIXED ALL RECORDS)
     function openDetailModal(data) {
-        // Filter strictly by PO Provider ID
+        $('#det_po_title').text(data.po_number);
+        
         let acts = activationsRaw.filter(i => i.po_provider_id == data.po_id);
         let terms = terminationsRaw.filter(i => i.po_provider_id == data.po_id);
         
         let combined = [];
-        acts.forEach(i => combined.push({type:'act', date:i.activation_date, qty:i.active_qty, batch:i.activation_batch}));
-        terms.forEach(i => combined.push({type:'term', date:i.termination_date, qty:i.terminated_qty, batch:i.termination_batch}));
+        acts.forEach(i => combined.push({type:'act', date:i.activation_date, qty:i.active_qty, batch:i.activation_batch, msisdn:i.msisdn}));
+        terms.forEach(i => combined.push({type:'term', date:i.termination_date, qty:i.terminated_qty, batch:i.termination_batch, msisdn:i.msisdn}));
         
-        // Sort descending
         combined.sort((a,b) => new Date(b.date) - new Date(a.date));
 
         let html = '<div class="timeline">';
-        if(combined.length===0) html += '<div class="text-muted small text-center py-3">No activity logs found for this PO.</div>';
+        if(combined.length===0) html = '<div class="text-center text-muted small py-4">No history records found.</div>';
         
         combined.forEach(log => {
             let isAct = log.type==='act';
-            let dotClass = isAct ? 'act' : 'term';
+            let dotCls = isAct ? 'act' : 'term';
             let label = isAct ? 'Activation' : 'Termination';
             let color = isAct ? 'text-success' : 'text-danger';
             let sign = isAct ? '+' : '-';
-            
+            let detail = log.msisdn ? `<div class="small text-muted mt-1 fst-italic">MSISDN: ${log.msisdn}</div>` : '';
+
             html += `
-            <div class="timeline-item">
-                <div class="timeline-dot ${dotClass}"></div>
-                <div class="time-date">${log.date}</div>
-                <div class="timeline-content">
-                    <div class="d-flex justify-content-between align-items-center">
+            <div class="t-item">
+                <div class="t-dot ${dotCls}"></div>
+                <div class="t-date">${log.date}</div>
+                <div class="t-card">
+                    <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <span class="fw-bold ${color}">${label}</span>
+                            <span class="fw-bold ${color}" style="font-size:0.9rem;">${label}</span>
                             <div class="small text-muted">${log.batch}</div>
+                            ${detail}
                         </div>
                         <div class="fw-bold fs-6">${sign} ${parseInt(log.qty).toLocaleString()}</div>
                     </div>
