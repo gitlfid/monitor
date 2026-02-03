@@ -4,7 +4,7 @@
                         <p></p>
                     </div>
                     <div class="float-end">
-                        <br><p>2025 &copy; LinksField</p>
+                        <br><p>2026 &copy; LinksField</p>
                     </div>
                 </div>
             </footer>
