@@ -1,6 +1,6 @@
 <?php
 // =========================================================================
-// FRONTEND VIEW
+// FRONTEND VIEW: DASHBOARD SIM TRACKING
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 require_once 'includes/config.php'; require_once 'includes/functions.php'; 
@@ -10,14 +10,13 @@ require_once 'includes/sim_helper.php';
 $db = db_connect();
 function e($str) { return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8'); }
 
-// Fetch Data
+// Fetch Data for Dashboard
 $list_providers_new = []; $dashboard_data = []; $activations_raw = []; $terminations_raw = [];
 $total_sys_sims=0; $total_sys_act=0; $total_sys_term=0;
 
 if($db) {
     try { $list_providers_new = $db->query("SELECT id, po_number, sim_qty FROM sim_tracking_po WHERE type='provider' AND id NOT IN (SELECT DISTINCT po_provider_id FROM sim_inventory)")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
     
-    // Main Dashboard Data
     $sql_main = "SELECT po.id as po_id, po.po_number as provider_po, po.batch_name as batch_name, po.sim_qty as total_pool,
                     client_po.po_number as client_po, c.company_name, p.project_name,
                     (SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id = po.id AND status = 'Available') as cnt_avail,
@@ -34,12 +33,12 @@ if($db) {
         foreach($dashboard_data as $d) { $total_sys_sims += $d['total_uploaded']; $total_sys_act += $d['cnt_active']; $total_sys_term += $d['cnt_term']; }
     } catch(Exception $e){}
 
-    // Fetch Logs for Chart
+    // Fetch Logs for Chart (Sync Data)
     try { $activations_raw = $db->query("SELECT * FROM sim_activations ORDER BY activation_date ASC")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
     try { $terminations_raw = $db->query("SELECT * FROM sim_terminations ORDER BY termination_date ASC")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
 }
 
-// Chart Prep
+// Chart Preparation
 $cd_a=[]; $cd_t=[]; $lbls=[]; $s_a=[]; $s_t=[];
 foreach($activations_raw as $r){ $d=date('Y-m-d', strtotime($r['activation_date'])); if(!isset($cd_a[$d]))$cd_a[$d]=0; $cd_a[$d]+=$r['active_qty']; }
 foreach($terminations_raw as $r){ $d=date('Y-m-d', strtotime($r['termination_date'])); if(!isset($cd_t[$d]))$cd_t[$d]=0; $cd_t[$d]+=$r['terminated_qty']; }
@@ -51,10 +50,12 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     body { background:#f8fafc; font-family:'Plus Jakarta Sans', sans-serif; color:#334155; }
     
-    /* COMPONENTS */
+    /* CARDS & CONTAINERS */
     .card-pro { background:#fff; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05); margin-bottom:24px; overflow:hidden; }
     .stat-card { padding:24px; display:flex; gap:20px; align-items:center; }
     .stat-icon { width:50px; height:50px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.4rem; flex-shrink:0; }
+    
+    /* TABLE */
     .table-pro th { background:#f8fafc; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; padding:15px 20px; border-bottom:1px solid #e2e8f0; }
     .table-pro td { padding:18px 20px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
     .progress-track { height:8px; border-radius:4px; overflow:hidden; display:flex; background:#e2e8f0; margin-top:8px; }
@@ -74,7 +75,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log { background:#fff; color:#475569; border:1px solid #e2e8f0; font-size:0.75rem; font-weight:600; border-radius:6px; padding:6px 12px; width:100%; transition:0.2s; }
     .btn-log:hover { background:#f1f5f9; }
 
-    /* MANAGER MODAL */
+    /* MANAGER MODAL (SPLIT VIEW) */
     .mgr-layout { display:flex; height:600px; }
     .mgr-left { width:30%; background:#f8fafc; border-right:1px solid #e2e8f0; padding:20px; display:flex; flex-direction:column; }
     .mgr-right { width:70%; padding:0; display:flex; flex-direction:column; }
@@ -212,8 +213,9 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
         $.post('process_sim_tracking.php', {action:'fetch_sims', po_id:cId, mode:cMode, keyword:k}, function(r){
             if(r.status==='success'){
-                let h=''; r.data.forEach(s=>{ h+=`<div class="sim-item" onclick="tog(this)"><div><div class="fw-bold font-monospace">${s.msisdn}</div><small class="text-muted">${s.iccid||'-'}</small></div><input type="checkbox" class="chk" value="${s.id}" onclick="event.stopPropagation();upd()"></div>`; });
-                $('#sList').html(h||'<div class="text-center py-5 text-muted">No results.</div>'); $('#resCount').text(r.data.length); upd();
+                let h=''; if(r.data.length===0) h='<div class="text-center py-5 text-muted">No matching SIMs found.</div>';
+                else r.data.forEach(s=>{ h+=`<div class="sim-item" onclick="tog(this)"><div><div class="fw-bold font-monospace">${s.msisdn}</div><small class="text-muted">${s.iccid||'-'}</small></div><input type="checkbox" class="chk" value="${s.id}" onclick="event.stopPropagation();upd()"></div>`; });
+                $('#sList').html(h); $('#resCount').text(r.data.length); upd();
             } else toast('error', r.message);
         },'json');
     }

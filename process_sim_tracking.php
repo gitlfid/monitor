@@ -1,15 +1,17 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Full Stack: AJAX + Legacy)
+// DESC: Backend Processor Lengkap (AJAX + Legacy)
 // =======================================================================
-ini_set('display_errors', 0); error_reporting(E_ALL);
+ini_set('display_errors', 0); 
+error_reporting(E_ALL);
 ob_start(); 
 
 require_once 'includes/auth_check.php';
 if (file_exists('includes/config.php')) require_once 'includes/config.php';
 require_once 'includes/sim_helper.php'; 
 
+// Cek Koneksi DB
 if (!$db) {
     if(isset($_POST['is_ajax'])) jsonResponse('error', 'Database Connection Failed');
     die("System Error: DB Connection Failed");
@@ -18,7 +20,7 @@ if (!$db) {
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // =======================================================================
-// 1. AUTO REPAIR (Pastikan tabel inventory ada)
+// 1. AUTO REPAIR (Pastikan tabel inventory baru ada)
 // =======================================================================
 $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
     id INT(11) AUTO_INCREMENT PRIMARY KEY,
@@ -36,10 +38,10 @@ $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
 try { if ($db_type === 'pdo') $db->exec($sql_inv); else mysqli_query($db, $sql_inv); } catch (Exception $e) {}
 
 // =======================================================================
-// 2. AJAX HANDLERS (FITUR BARU)
+// 2. AJAX HANDLERS (FITUR BARU: UPLOAD PROGRESS & SEARCH)
 // =======================================================================
 
-// A. UPLOAD MASTER (Returns JSON untuk Progress Bar)
+// A. UPLOAD MASTER (Response JSON untuk Progress Bar)
 if ($action == 'upload_master_bulk') {
     try {
         $po_id = $_POST['po_provider_id'];
@@ -53,7 +55,9 @@ if ($action == 'upload_master_bulk') {
 
         $header = $rows[0];
         $idx_msisdn = findIdx($header, ['msisdn','nohp','number','phone','mobile']);
-        $idx_iccid = findIdx($header, ['iccid']); $idx_imsi = findIdx($header, ['imsi']); $idx_sn = findIdx($header, ['sn','serial']);
+        $idx_iccid = findIdx($header, ['iccid']); 
+        $idx_imsi = findIdx($header, ['imsi']); 
+        $idx_sn = findIdx($header, ['sn','serial']);
 
         if ($idx_msisdn === false) jsonResponse('error', 'Header MSISDN tidak ditemukan.');
 
@@ -89,7 +93,7 @@ if ($action == 'fetch_sims') {
     $p = [$po_id, $status];
 
     if (!empty($search)) {
-        // Cek apakah bulk (banyak baris) atau single search
+        // Cek apakah bulk list atau keyword search
         if (strpos($search, "\n") !== false || strpos($search, ",") !== false) {
             $nums = preg_split('/[\s,]+/', str_replace([',', ';'], "\n", $search));
             if (!empty($nums)) {
@@ -97,7 +101,7 @@ if ($action == 'fetch_sims') {
                 $p = array_merge($p, $nums);
             }
         } else {
-            // Partial Search LIKE
+            // Partial Search (Advanced)
             $q .= " AND (msisdn LIKE ? OR iccid LIKE ?)";
             $p[] = "%$search%";
             $p[] = "%$search%";
@@ -113,11 +117,9 @@ if ($action == 'fetch_logs') {
     $po_id = $_POST['po_id'];
     try {
         $logs = [];
-        // Ambil dari tabel Activation
         $stmtAct = $db->prepare("SELECT activation_date as date, active_qty as qty, activation_batch as batch, 'Activation' as type FROM sim_activations WHERE po_provider_id = ?");
         $stmtAct->execute([$po_id]); $logs = array_merge($logs, $stmtAct->fetchAll(PDO::FETCH_ASSOC));
 
-        // Ambil dari tabel Termination
         $stmtTerm = $db->prepare("SELECT termination_date as date, terminated_qty as qty, termination_batch as batch, 'Termination' as type FROM sim_terminations WHERE po_provider_id = ?");
         $stmtTerm->execute([$po_id]); $logs = array_merge($logs, $stmtTerm->fetchAll(PDO::FETCH_ASSOC));
 
@@ -158,8 +160,8 @@ if ($action == 'process_bulk_sim_action') {
 }
 
 // =======================================================================
-// 3. LEGACY HANDLERS (PO, LOGISTIC - FORM POST)
-// Bagian ini menangani request form biasa (bukan AJAX)
+// 3. LEGACY HANDLERS (PO, LOGISTIC - FORM POST BIASA)
+// Bagian ini menangani fitur lama yang tidak pakai AJAX
 // =======================================================================
 
 // A. PO CREATE/UPDATE

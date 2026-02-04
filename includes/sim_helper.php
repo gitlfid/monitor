@@ -1,14 +1,20 @@
 <?php
 // =======================================================================
 // FILE: includes/sim_helper.php
-// DESC: Library Pendukung (Database & Excel Reader)
+// FUNGSI: Library Pendukung (Database & Excel Reader)
 // =======================================================================
-ini_set('display_errors', 0); error_reporting(E_ALL);
+ini_set('display_errors', 0); 
+error_reporting(E_ALL);
 
-// 1. KONEKSI DATABASE
+// 1. KONEKSI DATABASE UNIVERSAL
 $db = null; $db_type = '';
 $candidates = ['pdo', 'conn', 'db', 'link', 'mysqli'];
-foreach ($candidates as $var) { if (isset($GLOBALS[$var])) { if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } } }
+foreach ($candidates as $var) { 
+    if (isset($GLOBALS[$var])) { 
+        if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } 
+        if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } 
+    } 
+}
 
 if (!$db && defined('DB_HOST')) { 
     try { 
@@ -18,9 +24,9 @@ if (!$db && defined('DB_HOST')) {
     } catch (Exception $e) {} 
 }
 
-// 2. HELPER JSON RESPONSE (Untuk AJAX)
+// 2. HELPER JSON RESPONSE (Untuk AJAX Progress Bar)
 function jsonResponse($status, $message, $data = []) {
-    ob_clean(); // Bersihkan buffer agar tidak ada sisa HTML
+    ob_clean(); // Bersihkan output buffer
     header('Content-Type: application/json');
     echo json_encode(array_merge(['status' => $status, 'message' => $message], $data));
     exit;
@@ -31,17 +37,23 @@ function readSpreadsheet($tmpPath, $originalName) {
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $data = [];
     
+    // CSV Handler
     if ($ext === 'csv') {
         if (($handle = fopen($tmpPath, "r")) !== FALSE) {
-            $bom = "\xEF\xBB\xBF"; $firstLine = fgets($handle);
+            $bom = "\xEF\xBB\xBF"; 
+            $firstLine = fgets($handle);
             if (strncmp($firstLine, $bom, 3) === 0) $firstLine = substr($firstLine, 3);
             if(!empty(trim($firstLine))) $data[] = str_getcsv(trim($firstLine));
-            while (($row = fgetcsv($handle, 1000, ",")) !== FALSE) { if(array_filter($row)) $data[] = $row; }
+            
+            while (($row = fgetcsv($handle, 1000, ",")) !== FALSE) { 
+                if(array_filter($row)) $data[] = $row; 
+            }
             fclose($handle);
         }
         return $data;
     }
     
+    // XLSX Handler
     if ($ext === 'xlsx') {
         $zip = new ZipArchive;
         if ($zip->open($tmpPath) === TRUE) {
@@ -78,7 +90,7 @@ function findIdx($headers, $keys) {
     return false;
 }
 
-// 5. LEGACY UPLOAD FILE (Untuk PO Management lama)
+// 5. LEGACY UPLOAD FILE (Untuk fitur PO lama)
 function uploadFileLegacy($file, $prefix) {
     if(isset($file) && $file['error']===0) {
         $dir = __DIR__ . "/../uploads/po/"; 
