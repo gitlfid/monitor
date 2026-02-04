@@ -1,6 +1,6 @@
 <?php
 // =========================================================================
-// FRONTEND VIEW: DASHBOARD SIM TRACKING
+// 1. SETUP & DATA FETCHING (BACKEND LOGIC - TIDAK DIKURANGI)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 require_once 'includes/config.php'; require_once 'includes/functions.php'; 
@@ -10,13 +10,18 @@ require_once 'includes/sim_helper.php';
 $db = db_connect();
 function e($str) { return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8'); }
 
-// Fetch Data for Dashboard
-$list_providers_new = []; $dashboard_data = []; $activations_raw = []; $terminations_raw = [];
-$total_sys_sims=0; $total_sys_act=0; $total_sys_term=0;
+// Variables Data
+$list_providers_new = [];
+$dashboard_data = [];
+$activations_raw = [];
+$terminations_raw = [];
+$total_system_sims = 0; $total_system_active = 0; $total_system_term = 0;
 
 if($db) {
+    // Dropdown Upload Baru
     try { $list_providers_new = $db->query("SELECT id, po_number, sim_qty FROM sim_tracking_po WHERE type='provider' AND id NOT IN (SELECT DISTINCT po_provider_id FROM sim_inventory)")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
     
+    // Dashboard Data
     $sql_main = "SELECT po.id as po_id, po.po_number as provider_po, po.batch_name as batch_name, po.sim_qty as total_pool,
                     client_po.po_number as client_po, c.company_name, p.project_name,
                     (SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id = po.id AND status = 'Available') as cnt_avail,
@@ -30,116 +35,193 @@ if($db) {
                 WHERE po.type = 'provider' HAVING total_uploaded > 0 ORDER BY po.id DESC";
     try { 
         $dashboard_data = $db->query($sql_main)->fetchAll(PDO::FETCH_ASSOC); 
-        foreach($dashboard_data as $d) { $total_sys_sims += $d['total_uploaded']; $total_sys_act += $d['cnt_active']; $total_sys_term += $d['cnt_term']; }
+        // Hitung Total System Stats
+        foreach($dashboard_data as $d) {
+            $total_system_sims += $d['total_uploaded'];
+            $total_system_active += $d['cnt_active'];
+            $total_system_term += $d['cnt_term'];
+        }
     } catch(Exception $e){}
 
-    // Fetch Logs for Chart (Sync Data)
-    try { $activations_raw = $db->query("SELECT * FROM sim_activations ORDER BY activation_date ASC")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
-    try { $terminations_raw = $db->query("SELECT * FROM sim_terminations ORDER BY termination_date ASC")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
+    // Data Chart
+    try {
+        $activations_raw = $db->query("SELECT * FROM sim_activations ORDER BY activation_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+        $terminations_raw = $db->query("SELECT * FROM sim_terminations ORDER BY termination_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {}
 }
 
-// Chart Preparation
-$cd_a=[]; $cd_t=[]; $lbls=[]; $s_a=[]; $s_t=[];
-foreach($activations_raw as $r){ $d=date('Y-m-d', strtotime($r['activation_date'])); if(!isset($cd_a[$d]))$cd_a[$d]=0; $cd_a[$d]+=$r['active_qty']; }
-foreach($terminations_raw as $r){ $d=date('Y-m-d', strtotime($r['termination_date'])); if(!isset($cd_t[$d]))$cd_t[$d]=0; $cd_t[$d]+=$r['terminated_qty']; }
-$dates = array_unique(array_merge(array_keys($cd_a), array_keys($cd_t))); sort($dates);
-foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; $s_t[]=$cd_t[$d]??0; }
+// Chart Logic
+$chart_data_act = []; $chart_data_term = []; $js_labels = []; $js_series_act = []; $js_series_term = [];
+foreach ($activations_raw as $r) { $d = $r['activation_date']; if(!isset($chart_data_act[$d])) $chart_data_act[$d]=0; $chart_data_act[$d]+=$r['active_qty']; }
+foreach ($terminations_raw as $r) { $d = $r['termination_date']; if(!isset($chart_data_term[$d])) $chart_data_term[$d]=0; $chart_data_term[$d]+=$r['terminated_qty']; }
+$all_dates = array_unique(array_merge(array_keys($chart_data_act), array_keys($chart_data_term))); sort($all_dates);
+foreach ($all_dates as $dk) { $js_labels[]=date('d M', strtotime($dk)); $js_series_act[]=$chart_data_act[$dk]??0; $js_series_term[]=$chart_data_term[$dk]??0; }
 ?>
 
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-    body { background:#f8fafc; font-family:'Plus Jakarta Sans', sans-serif; color:#334155; }
     
-    /* CARDS & CONTAINERS */
-    .card-pro { background:#fff; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05); margin-bottom:24px; overflow:hidden; }
-    .stat-card { padding:24px; display:flex; gap:20px; align-items:center; }
-    .stat-icon { width:50px; height:50px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.4rem; flex-shrink:0; }
+    :root {
+        --primary: #4f46e5; --primary-hover: #4338ca; --primary-soft: #eef2ff;
+        --success: #10b981; --success-soft: #ecfdf5;
+        --danger: #ef4444; --danger-soft: #fef2f2;
+        --dark: #1e293b; --gray: #64748b; --light: #f1f5f9; --white: #ffffff;
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+
+    body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--dark); }
+    
+    /* CARDS */
+    .card-pro { background: var(--white); border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: var(--shadow-sm); transition: transform 0.2s; margin-bottom: 24px; overflow: hidden; }
+    .card-pro:hover { box-shadow: var(--shadow-md); }
+    .stat-card { padding: 24px; display: flex; align-items: center; gap: 20px; }
+    .stat-icon { width: 56px; height: 56px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
     
     /* TABLE */
-    .table-pro th { background:#f8fafc; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; padding:15px 20px; border-bottom:1px solid #e2e8f0; }
-    .table-pro td { padding:18px 20px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
-    .progress-track { height:8px; border-radius:4px; overflow:hidden; display:flex; background:#e2e8f0; margin-top:8px; }
-    .bar-seg { height:100%; transition:width 0.6s ease; }
+    .table-responsive { border-radius: 0 0 16px 16px; }
+    .table-hover tbody tr:hover { background-color: #f8fafc; }
+    .table-pro th { background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray); font-weight: 700; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; }
+    .table-pro td { padding: 20px 24px; vertical-align: top; border-bottom: 1px solid #f1f5f9; color: #334155; }
     
-    /* COLORS */
-    .bg-a{background:#10b981} .bg-t{background:#ef4444} .bg-v{background:#cbd5e1}
-    .text-act{color:#10b981} .text-term{color:#ef4444}
+    /* BADGES & PROGRESS */
+    .badge-pro { padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; }
+    .progress-track { background: #e2e8f0; border-radius: 6px; height: 8px; overflow: hidden; display: flex; }
+    .progress-fill { height: 100%; transition: width 0.6s ease; }
+    
+    /* DRAG & DROP UPLOAD */
+    .upload-area { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 40px 20px; text-align: center; background: #f8fafc; transition: all 0.2s; position: relative; cursor: pointer; }
+    .upload-area:hover, .upload-area.dragover { border-color: var(--primary); background: var(--primary-soft); }
+    .upload-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; }
+    
+    /* TOAST NOTIFICATION */
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+    .toast-pro { background: white; border-radius: 10px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); padding: 16px; margin-bottom: 10px; border-left: 4px solid var(--primary); display: flex; align-items: center; gap: 12px; min-width: 300px; transform: translateX(120%); transition: transform 0.3s ease; }
+    .toast-pro.show { transform: translateX(0); }
+    .toast-pro.success { border-color: var(--success); }
+    .toast-pro.error { border-color: var(--danger); }
     
     /* BUTTONS */
-    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; }
-    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
-    .btn-act { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; font-size:0.75rem; font-weight:600; border-radius:6px; padding:6px 12px; width:100%; margin-bottom:4px; transition:0.2s; }
-    .btn-act:hover { background:#166534; color:#fff; }
-    .btn-term { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; font-size:0.75rem; font-weight:600; border-radius:6px; padding:6px 12px; width:100%; margin-bottom:4px; transition:0.2s; }
-    .btn-term:hover { background:#991b1b; color:#fff; }
-    .btn-log { background:#fff; color:#475569; border:1px solid #e2e8f0; font-size:0.75rem; font-weight:600; border-radius:6px; padding:6px 12px; width:100%; transition:0.2s; }
-    .btn-log:hover { background:#f1f5f9; }
+    .btn-primary-pro { background: var(--primary); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; }
+    .btn-primary-pro:hover { background: var(--primary-hover); color: white; transform: translateY(-1px); }
+    .btn-action-sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; font-weight: 600; border: 1px solid transparent; width: 100%; margin-bottom: 4px; display: block; text-align: center; text-decoration: none; }
+    .btn-action-sm.act { background: var(--success-soft); color: #059669; border-color: #a7f3d0; }
+    .btn-action-sm.term { background: var(--danger-soft); color: #dc2626; border-color: #fecaca; }
+    .btn-action-sm:hover { filter: brightness(0.95); }
 
-    /* MANAGER MODAL (SPLIT VIEW) */
-    .mgr-layout { display:flex; height:600px; }
-    .mgr-left { width:30%; background:#f8fafc; border-right:1px solid #e2e8f0; padding:20px; display:flex; flex-direction:column; }
-    .mgr-right { width:70%; padding:0; display:flex; flex-direction:column; }
-    .mgr-list { flex-grow:1; overflow-y:auto; }
-    .sim-item { padding:10px 20px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
-    .sim-item:hover { background:#f1f5f9; }
-    .sim-item.selected { background:#eff6ff; border-left:4px solid #4f46e5; }
-    
-    /* TOAST */
-    #toastCont { position:fixed; top:20px; right:20px; z-index:9999; }
-    .toast-item { min-width:300px; padding:15px; border-radius:8px; background:#fff; box-shadow:0 5px 15px rgba(0,0,0,0.1); margin-bottom:10px; border-left:4px solid #333; display:flex; gap:12px; align-items:center; animation:slideIn 0.3s ease; }
-    .toast-success { border-color:#10b981; } .toast-error { border-color:#ef4444; }
-    @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-    
-    /* Upload */
-    .upload-zone { border:2px dashed #cbd5e1; background:#f8fafc; border-radius:8px; text-align:center; padding:30px; cursor:pointer; position:relative; }
-    .upload-zone:hover { border-color:#4f46e5; background:#eef2ff; }
-    .prog-cont { display:none; margin-top:20px; }
-    .prog-bar { height:10px; background:#4f46e5; width:0%; transition:width 0.2s; border-radius:5px; }
+    /* MANAGER MODAL */
+    .mgr-layout { display: flex; height: 500px; }
+    .mgr-left { width: 35%; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 20px; display: flex; flex-direction: column; }
+    .mgr-right { width: 65%; padding: 0; display: flex; flex-direction: column; }
+    .mgr-list-box { flex-grow: 1; overflow-y: auto; }
+    .mgr-item { padding: 12px 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .mgr-item:hover { background: #f1f5f9; }
+    .mgr-item.selected { background: var(--primary-soft); border-left: 3px solid var(--primary); }
 </style>
 
-<div id="toastCont"></div>
+<div class="toast-container" id="toastContainer"></div>
 
-<div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div><h3 class="fw-bold mb-0">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
-    <button class="btn-primary-pro" onclick="openUpload()"><i class="bi bi-cloud-upload me-2"></i> Upload Batch</button>
-</div>
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">SIM Lifecycle Dashboard</h2>
+            <p class="text-muted mb-0">Manage inventory, activation, and termination status.</p>
+        </div>
+        <button class="btn-primary-pro" onclick="openUploadModal()">
+            <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload New Batch
+        </button>
+    </div>
 
-<div class="row g-4 px-4 mb-4">
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-light text-primary"><i class="bi bi-sim"></i></div><div><h6 class="text-muted small fw-bold mb-0">TOTAL INVENTORY</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_sims)?></h3></div></div></div>
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-success-subtle text-success"><i class="bi bi-check-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">ACTIVE SIMS</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_act)?></h3></div></div></div>
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-danger-subtle text-danger"><i class="bi bi-x-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">TERMINATED</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_term)?></h3></div></div></div>
-</div>
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card-pro stat-card">
+                <div class="stat-icon bg-light text-primary"><i class="bi bi-sim"></i></div>
+                <div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-1">Total System Inventory</h6>
+                    <h2 class="fw-bold mb-0"><?= number_format($total_system_sims) ?></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-pro stat-card">
+                <div class="stat-icon" style="background:var(--success-soft); color:var(--success)"><i class="bi bi-lightning-charge-fill"></i></div>
+                <div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-1">Currently Active</h6>
+                    <h2 class="fw-bold mb-0"><?= number_format($total_system_active) ?></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-pro stat-card">
+                <div class="stat-icon" style="background:var(--danger-soft); color:var(--danger)"><i class="bi bi-power"></i></div>
+                <div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-1">Terminated</h6>
+                    <h2 class="fw-bold mb-0"><?= number_format($total_system_term) ?></h2>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<div class="px-4 mb-4">
-    <div class="card-pro p-4">
+    <div class="card-pro p-4 mb-4">
         <h6 class="fw-bold text-dark mb-3">Activity Trends</h6>
         <div id="lifecycleChart" style="height: 280px;"></div>
     </div>
-</div>
 
-<div class="px-4 pb-5">
     <div class="card-pro">
+        <div class="p-3 border-bottom d-flex align-items-center">
+            <h6 class="fw-bold m-0"><i class="bi bi-table me-2"></i>Inventory Pools</h6>
+        </div>
         <div class="table-responsive">
-            <table class="table w-100 mb-0 table-pro align-middle">
-                <thead><tr><th>Entity Info</th><th>Source</th><th>Inventory Status</th><th class="text-center">Manage</th></tr></thead>
-                <tbody>
-                    <?php if(empty($dashboard_data)): ?><tr><td colspan="4" class="text-center py-5 text-muted">No data available.</td></tr><?php else: ?>
-                    <?php foreach($dashboard_data as $row): 
-                        $t=$row['total_uploaded']; $a=$row['cnt_active']; $tm=$row['cnt_term']; $av=$row['cnt_avail'];
-                        $pa=($t>0)?($a/$t)*100:0; $pt=($t>0)?($tm/$t)*100:0; $pv=100-$pa-$pt;
-                        $json=htmlspecialchars(json_encode(['id'=>$row['po_id'], 'po'=>$row['provider_po'], 'batch'=>$row['batch_name'], 'comp'=>$row['company_name']]), ENT_QUOTES);
-                    ?>
+            <table class="table table-hover table-pro w-100 mb-0">
+                <thead>
                     <tr>
-                        <td><div class="fw-bold text-dark"><?=e($row['company_name'])?></div><small class="text-muted">PO: <?=e($row['client_po'])?:'-'?></small><br><span class="badge bg-light text-primary border mt-1"><?=e($row['project_name'])?></span></td>
-                        <td><div class="fw-bold text-dark"><?=e($row['provider_po'])?></div><div class="small text-muted"><?=e($row['batch_name'])?></div></td>
-                        <td>
-                            <div class="d-flex justify-content-between small fw-bold mb-1"><span>Total: <?=number_format($t)?></span><span class="text-act">Avail: <?=number_format($av)?></span></div>
-                            <div class="progress-track"><div class="bg-a" style="width:<?=$pa?>%"></div><div class="bg-t" style="width:<?=$pt?>%"></div><div class="bg-v" style="width:<?=$pv?>%"></div></div>
-                            <div class="d-flex gap-3 small mt-1"><span class="text-act fw-bold">Act: <?=number_format($a)?></span><span class="text-term fw-bold">Term: <?=number_format($tm)?></span></div>
-                        </td>
-                        <td><button class="btn-act" onclick='openMgr(<?=$json?>,"activate")'>Activate</button><button class="btn-term" onclick='openMgr(<?=$json?>,"terminate")'>Terminate</button><button class="btn-log" onclick='fetchLogs(<?=$json?>)'>Logs</button></td>
+                        <th width="30%">Entity / Project</th>
+                        <th width="20%">Source PO</th>
+                        <th width="35%">Inventory Status</th>
+                        <th width="15%" class="text-center">Quick Actions</th>
                     </tr>
-                    <?php endforeach; ?>
+                </thead>
+                <tbody>
+                    <?php if(empty($dashboard_data)): ?>
+                        <tr><td colspan="4" class="text-center py-5 text-muted">No data available.</td></tr>
+                    <?php else: ?>
+                        <?php foreach($dashboard_data as $row): 
+                            $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
+                            $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
+                            $json = htmlspecialchars(json_encode(['id'=>$row['po_id'], 'po'=>$row['provider_po'], 'batch'=>$row['batch_name'], 'company'=>$row['company_name']]), ENT_QUOTES);
+                        ?>
+                        <tr>
+                            <td>
+                                <div class="fw-bold text-dark"><?=e($row['company_name'])?></div>
+                                <div class="small text-muted mb-1">PO Client: <?=e($row['client_po'])?:'-'?></div>
+                                <span class="badge bg-light text-primary border"><?=e($row['project_name'])?></span>
+                            </td>
+                            <td>
+                                <div class="fw-bold text-dark"><?=e($row['provider_po'])?></div>
+                                <div class="small text-muted"><?=e($row['batch_name'])?></div>
+                            </td>
+                            <td>
+                                <div class="d-flex justify-content-between small fw-bold mb-1">
+                                    <span>Total: <?=number_format($tot)?></span>
+                                    <span class="text-success">Avail: <?=number_format($avail)?></span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-fill" style="width:<?=$pA?>%; background:var(--success)"></div>
+                                    <div class="progress-fill" style="width:<?=$pT?>%; background:var(--danger)"></div>
+                                    <div class="progress-fill" style="width:<?=$pV?>%; background:#cbd5e1"></div>
+                                </div>
+                                <div class="d-flex gap-3 small mt-1">
+                                    <span class="text-success fw-bold"><i class="bi bi-dot"></i> Act: <?=number_format($act)?></span>
+                                    <span class="text-danger fw-bold"><i class="bi bi-dot"></i> Term: <?=number_format($term)?></span>
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn-action-sm act" onclick='openManager(<?=$json?>, "activate")'>Activate</button>
+                                <button class="btn-action-sm term" onclick='openManager(<?=$json?>, "terminate")'>Terminate</button>
+                                <a href="#" class="text-center small d-block text-muted text-decoration-none mt-1" onclick='openLogs(<?=$json?>)'>View Logs</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -147,109 +229,305 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     </div>
 </div>
 
-<div class="modal fade" id="modalUp" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-dialog-centered"><div class="modal-content border-0 shadow"><div class="modal-header bg-primary text-white"><h6 class="modal-title fw-bold">Upload Master Data</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body p-4">
-    <form id="formUp">
-        <input type="hidden" name="action" value="upload_master_bulk">
-        <input type="hidden" name="is_ajax" value="1">
-        <div class="mb-3"><label class="small fw-bold">Provider PO</label><select name="po_provider_id" class="form-select"><?php foreach($list_providers_new as $p): ?><option value="<?=$p['id']?>"><?=$p['po_number']?> (Alloc: <?=number_format($p['sim_qty'])?>)</option><?php endforeach; ?></select></div>
-        <div class="mb-3"><div class="upload-zone"><input type="file" name="upload_file" id="fIn" style="position:absolute;width:100%;height:100%;top:0;left:0;opacity:0;cursor:pointer" onchange="$('#fTxt').text(this.files[0].name)"><i class="bi bi-cloud-arrow-up display-4 text-secondary"></i><div id="fTxt" class="mt-2 fw-bold">Click/Drag File Here</div><div class="small text-muted">Req: MSISDN</div></div></div>
-        <div class="row mb-3"><div class="col"><input type="text" name="activation_batch" class="form-control" placeholder="Batch Name" required></div><div class="col"><input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required></div></div>
-        <button type="submit" class="btn btn-primary w-100 fw-bold" id="btnUp">Start Upload</button>
-    </form>
-    <div class="prog-cont" id="pgCont"><div class="d-flex justify-content-between small fw-bold mb-1"><span>Uploading...</span><span id="pgTxt">0%</span></div><div class="progress" style="height:10px"><div class="prog-bar" id="pgBar" style="width:0%"></div></div></div>
-</div></div></div></div>
+<div class="modal fade" id="modalUpload" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Upload Master Data</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="formUploadMaster">
+                    <input type="hidden" name="action" value="upload_master_bulk">
+                    <input type="hidden" name="is_ajax" value="1">
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">1. Select Provider PO</label>
+                        <select name="po_provider_id" class="form-select" required>
+                            <option value="">-- Choose PO --</option>
+                            <?php foreach($list_providers_new as $p): ?>
+                                <option value="<?=$p['id']?>"><?=$p['po_number']?> (Allocated: <?=number_format($p['sim_qty'])?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
 
-<div class="modal fade" id="modalMgr" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content border-0 shadow" style="height:80vh"><div class="modal-header"><h6 class="modal-title fw-bold" id="mgrTitle">Manage SIMs</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><div class="mgr-layout">
-    <div class="mgr-left">
-        <label class="small fw-bold text-muted mb-2">SEARCH (MSISDN / ICCID)</label>
-        <input type="text" id="sKey" class="form-control mb-3" placeholder="Type partial number...">
-        <button class="btn btn-dark w-100 fw-bold mb-3" onclick="doSearch()">Find Matches</button>
-        <div class="alert alert-info small mb-0"><i class="bi bi-info-circle me-1"></i> Use search to filter specific SIMs.</div>
-    </div>
-    <div class="mgr-right">
-        <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-white">
-            <span class="fw-bold small">Results: <span id="resCount">0</span></span>
-            <div class="form-check"><input type="checkbox" class="form-check-input" id="chkAll" onchange="tAll(this)"><label class="form-check-label small" for="chkAll">Select All</label></div>
-        </div>
-        <div class="mgr-list" id="sList"><div class="text-center text-muted py-5 mt-5"><i class="bi bi-search display-4 text-light"></i><p class="mt-3">Ready to search.</p></div></div>
-        <div class="p-3 border-top bg-light d-flex align-items-center justify-content-between">
-            <div class="d-flex gap-2 align-items-center"><span class="small fw-bold">Date:</span><input type="date" id="actDate" class="form-control form-control-sm w-auto" value="<?=date('Y-m-d')?>"></div>
-            <div class="d-flex align-items-center gap-3"><div class="text-end lh-1"><div class="small text-muted">Selected</div><div class="fw-bold text-primary h5 m-0" id="selCount">0</div></div><button class="btn-primary-pro" id="btnProcess" disabled onclick="doProc()">Execute</button></div>
-        </div>
-    </div>
-</div></div></div></div></div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">2. Upload File (CSV/Excel)</label>
+                        <div class="upload-area" id="dropZone">
+                            <input type="file" name="upload_file" class="upload-input" id="fileInput" required accept=".csv, .xlsx">
+                            <i class="bi bi-cloud-arrow-up display-4 text-primary opacity-50"></i>
+                            <p class="mb-0 fw-bold mt-2" id="fileName">Click or Drag file here</p>
+                            <div class="small text-muted mt-1">Format Header: <code>MSISDN</code> (Required)</div>
+                        </div>
+                    </div>
 
-<div class="modal fade" id="modalLog" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content border-0"><div class="modal-header"><h6 class="modal-title fw-bold">History Logs</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><div id="logList" class="list-group list-group-flush"></div></div></div></div></div>
+                    <div class="row mb-4">
+                        <div class="col">
+                            <label class="small fw-bold text-muted">Batch Name</label>
+                            <input type="text" name="activation_batch" class="form-control" placeholder="Batch 1" required>
+                        </div>
+                        <div class="col">
+                            <label class="small fw-bold text-muted">Date</label>
+                            <input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="progCont" style="display:none;">
+                        <div class="d-flex justify-content-between small fw-bold mb-1">
+                            <span id="progText">Uploading...</span>
+                            <span id="progPct">0%</span>
+                        </div>
+                        <div class="progress-track" style="height:10px">
+                            <div class="progress-fill" id="progBar" style="width:0%"></div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary-pro w-100" id="btnStartUpload">Start Upload Process</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalManager" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="overflow:hidden;">
+            <div class="modal-header bg-white border-bottom">
+                <div><h6 class="modal-title fw-bold" id="mgrTitle">Manage SIMs</h6><div class="small text-muted" id="mgrSubtitle">-</div></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="mgr-layout">
+                <div class="mgr-left">
+                    <label class="small fw-bold text-muted mb-2">BULK SEARCH (MSISDN)</label>
+                    <textarea id="searchBulk" class="form-control mb-3 flex-grow-1" placeholder="Paste numbers here...&#10;62811...&#10;62812..."></textarea>
+                    <button class="btn btn-dark w-100 fw-bold" onclick="fetchSims()"><i class="bi bi-search me-2"></i>Find Matches</button>
+                </div>
+                <div class="mgr-right">
+                    <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
+                        <span class="fw-bold small">Results: <span id="resCount">0</span></span>
+                        <div class="form-check"><input type="checkbox" class="form-check-input" id="checkAll" onchange="toggleAll(this)"><label class="form-check-label small" for="checkAll">Select All</label></div>
+                    </div>
+                    <div class="mgr-list-box" id="simList">
+                        <div class="text-center text-muted py-5 mt-5">
+                            <i class="bi bi-arrow-left-circle display-4 text-light"></i>
+                            <p class="mt-3">Search from the left panel.</p>
+                        </div>
+                    </div>
+                    <div class="p-3 border-top bg-light d-flex align-items-center justify-content-between">
+                        <div class="d-flex gap-2 align-items-center">
+                            <span class="small fw-bold">Date:</span>
+                            <input type="date" id="actionDate" class="form-control form-control-sm w-auto" value="<?=date('Y-m-d')?>">
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="text-end lh-1"><div class="small text-muted">Selected</div><div class="fw-bold text-primary h5 m-0" id="selCount">0</div></div>
+                            <button class="btn-primary-pro" id="btnProcess" onclick="processAction()" disabled>Confirm Action</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalLogs" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content border-0"><div class="modal-header"><h6 class="modal-title fw-bold">Activity Logs</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0" id="logContent"><div class="text-center py-5"><div class="spinner-border text-primary"></div></div></div></div></div></div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
 <script>
-    // Toast Helper
-    function toast(t,m){ 
-        let c=t==='success'?'toast-success':'toast-error'; let i=t==='success'?'bi-check-circle-fill text-success':'bi-exclamation-triangle-fill text-danger';
-        let h=`<div class="toast-item ${c}"><i class="bi ${i} fs-4"></i><div><div class="fw-bold">${t.toUpperCase()}</div><div class="small text-muted">${m}</div></div></div>`;
-        $('#toastCont').append(h); setTimeout(()=>$('#toastCont').children().first().remove(),4000); 
+    // --- UI HELPERS ---
+    function showToast(type, msg) {
+        const icon = type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+        const html = `
+            <div class="toast-pro ${type} show">
+                <i class="bi ${icon} fs-4 ${type === 'success' ? 'text-success' : 'text-danger'}"></i>
+                <div>
+                    <div class="fw-bold text-dark">${type === 'success' ? 'Success' : 'Error'}</div>
+                    <div class="small text-muted">${msg}</div>
+                </div>
+            </div>
+        `;
+        const $toast = $(html).appendTo('#toastContainer');
+        setTimeout(() => { $toast.removeClass('show'); setTimeout(() => $toast.remove(), 300); }, 4000);
     }
 
-    // Upload
-    function openUpload(){ $('#formUp')[0].reset(); $('#pgCont').hide(); $('#btnUp').prop('disabled',false).text('Start Upload'); new bootstrap.Modal(document.getElementById('modalUp')).show(); }
-    $('#formUp').on('submit',function(e){
-        e.preventDefault(); let fd=new FormData(this); $('#btnUp').prop('disabled',true); $('#pgCont').slideDown();
+    // Drag & Drop Visuals
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+    function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+    ['dragenter', 'dragover'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false); });
+    ['dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false); });
+    dropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        fileInput.files = files;
+        $('#fileName').text(files[0].name).addClass('text-primary');
+    });
+    fileInput.addEventListener('change', () => {
+        if(fileInput.files.length > 0) $('#fileName').text(fileInput.files[0].name).addClass('text-primary');
+    });
+
+    // --- UPLOAD HANDLER ---
+    function openUploadModal() {
+        $('#formUploadMaster')[0].reset();
+        $('#progCont').hide(); $('#btnStartUpload').prop('disabled', false).text('Start Upload');
+        $('#fileName').text('Click or Drag file here').removeClass('text-primary');
+        new bootstrap.Modal(document.getElementById('modalUpload')).show();
+    }
+
+    $('#formUploadMaster').on('submit', function(e) {
+        e.preventDefault();
+        let formData = new FormData(this);
+        
+        $('#btnStartUpload').prop('disabled', true).text('Processing...');
+        $('#progCont').slideDown();
+        $('#progBar').css('width', '0%').css('background', '#4f46e5');
+        $('#progText').text('Uploading...');
+
         $.ajax({
-            xhr: function(){var x=new window.XMLHttpRequest(); x.upload.addEventListener("progress",function(e){if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100); $('#pgBar').css('width',p+'%'); $('#pgTxt').text(p+'%');}},false); return x;},
-            type:'POST', url:'process_sim_tracking.php', data:fd, contentType:false, processData:false, dataType:'json',
-            success: function(r){ if(r.status==='success'){ $('#pgBar').css('background','#10b981'); $('#pgTxt').text('Done!'); toast('success',r.message); setTimeout(()=>location.reload(),1500); } else { $('#pgBar').css('background','#ef4444'); $('#pgTxt').text('Failed'); toast('error',r.message); $('#btnUp').prop('disabled',false).text('Retry'); } },
-            error: function(x){ toast('error',x.responseText); $('#btnUp').prop('disabled',false).text('Retry'); }
+            xhr: function() {
+                var xhr = new window.XMLHttpRequest();
+                xhr.upload.addEventListener("progress", function(evt) {
+                    if (evt.lengthComputable) {
+                        var pct = Math.round((evt.loaded / evt.total) * 100);
+                        $('#progBar').css('width', pct + '%');
+                        $('#progPct').text(pct + '%');
+                        if (pct === 100) $('#progText').text('Server Validating...');
+                    }
+                }, false);
+                return xhr;
+            },
+            type: 'POST',
+            url: 'process_sim_tracking.php',
+            data: formData,
+            contentType: false,
+            processData: false,
+            dataType: 'json',
+            success: function(res) {
+                if (res.status === 'success') {
+                    $('#progBar').css('background', '#10b981');
+                    $('#progText').text('Completed!');
+                    showToast('success', res.message);
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    $('#progBar').css('background', '#ef4444');
+                    $('#progText').text('Failed');
+                    $('#btnStartUpload').prop('disabled', false).text('Try Again');
+                    showToast('error', res.message);
+                }
+            },
+            error: function(xhr) {
+                let msg = "Server Error";
+                if(xhr.responseText) msg += ": " + xhr.responseText.substring(0, 100);
+                $('#progBar').css('background', '#ef4444');
+                $('#btnStartUpload').prop('disabled', false).text('Try Again');
+                showToast('error', msg);
+            }
         });
     });
 
-    // Manager
-    let cId=0, cMode='', cBatch='';
-    function openMgr(d,m) { cId=d.id; cMode=m; cBatch=d.batch; $('#mgrTitle').text(m==='activate'?'Activate SIMs':'Terminate SIMs'); $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); $('#sKey').val(''); $('#sList').html('<div class="text-center py-5 text-muted">Ready to search.</div>'); $('#resCount').text(0); $('#selCount').text(0); $('#btnProc').prop('disabled',true); new bootstrap.Modal(document.getElementById('modalMgr')).show(); }
-    function doSearch(){
-        let k = $('#sKey').val().trim();
-        $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
-        $.post('process_sim_tracking.php', {action:'fetch_sims', po_id:cId, mode:cMode, keyword:k}, function(r){
-            if(r.status==='success'){
-                let h=''; if(r.data.length===0) h='<div class="text-center py-5 text-muted">No matching SIMs found.</div>';
-                else r.data.forEach(s=>{ h+=`<div class="sim-item" onclick="tog(this)"><div><div class="fw-bold font-monospace">${s.msisdn}</div><small class="text-muted">${s.iccid||'-'}</small></div><input type="checkbox" class="chk" value="${s.id}" onclick="event.stopPropagation();upd()"></div>`; });
-                $('#sList').html(h); $('#resCount').text(r.data.length); upd();
-            } else toast('error', r.message);
-        },'json');
-    }
-    function tog(el){ let c=$(el).find('.chk'); c.prop('checked',!c.prop('checked')); upd(); }
-    function tAll(el){ $('.chk').prop('checked',el.checked); upd(); }
-    function upd(){ 
-        let n=$('.chk:checked').length; $('#selCount').text(n); $('#btnProc').prop('disabled',n===0); 
-        $('.sim-item').removeClass('selected'); $('.chk:checked').closest('.sim-item').addClass('selected');
-    }
-    function doProc(){
-        let ids=[]; $('.chk:checked').each(function(){ids.push($(this).val())});
-        if(!confirm(`Confirm ${cMode} ${ids.length} items?`)) return;
-        $('#btnProc').prop('disabled',true).text('Processing...');
-        $.post('process_sim_tracking.php', {action:'process_bulk_sim_action', po_provider_id:cId, mode:cMode, sim_ids:ids, date_field:$('#actDate').val(), batch_name:cBatch}, function(r){
-            if(r.status==='success'){ toast('success',r.message); setTimeout(()=>location.reload(),1500); } else { toast('error',r.message); $('#btnProc').prop('disabled',false).text('Execute'); }
-        },'json');
+    // --- MANAGER HANDLER ---
+    let curPO = 0, curMode = '', curBatch = '';
+    
+    function openManager(d, m) {
+        curPO = d.id; curMode = m; curBatch = d.batch;
+        $('#mgrTitle').text(m === 'activate' ? 'Activate SIMs' : 'Terminate SIMs');
+        $('#mgrSubtitle').text(`${d.company} - ${d.po}`);
+        $('#searchBulk').val('');
+        $('#simList').html('<div class="text-center text-muted py-5 mt-5"><p>Enter MSISDNs to search.</p></div>');
+        $('#resCount').text('0'); $('#selCount').text('0');
+        $('#btnProcess').prop('disabled', true);
+        
+        if (m === 'activate') {
+            $('#btnProcess').removeClass('btn-danger').addClass('btn-success').text('Switch to Active');
+        } else {
+            $('#btnProcess').removeClass('btn-success').addClass('btn-danger').text('Switch to Terminated');
+        }
+        new bootstrap.Modal(document.getElementById('modalManager')).show();
     }
 
-    // Logs
-    function fetchLogs(d) {
-        $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
-        new bootstrap.Modal(document.getElementById('modalLog')).show();
-        $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
-            if(r.status==='success'){
-                let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs.</div>';
-                else r.data.forEach(l=>{ let c=l.type==='Activation'?'text-success':'text-danger'; h+=`<div class="list-group-item d-flex justify-content-between align-items-center"><div><div class="fw-bold ${c}">${l.type}</div><small class="text-muted">${l.batch} | ${l.date}</small></div><span class="fw-bold fs-5">${parseInt(l.qty).toLocaleString()}</span></div>`; });
-                $('#logList').html(h);
-            } else $('#logList').html('Error.');
-        },'json');
+    function fetchSims() {
+        let v = $('#searchBulk').val().trim();
+        $('#simList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
+        
+        $.post('process_sim_tracking.php', {action:'fetch_sims', po_id:curPO, mode:curMode, search_bulk:v}, function(res){
+            if(res.status === 'success'){
+                let h = '';
+                res.data.forEach(s => {
+                    h += `<div class="mgr-item" onclick="toggleRow(this)">
+                            <div><div class="fw-bold" style="font-family:monospace;font-size:1rem">${s.msisdn}</div><small class="text-muted">${s.iccid||'-'}</small></div>
+                            <input type="checkbox" class="form-check-input chk-item" value="${s.id}" onclick="event.stopPropagation();upd()">
+                          </div>`;
+                });
+                $('#simList').html(h || '<div class="text-center py-5 text-muted">No results found.</div>');
+                $('#resCount').text(res.data.length);
+                upd();
+            } else { showToast('error', res.message); }
+        }, 'json');
     }
 
-    // Chart
-    const lbl=<?php echo json_encode($lbls); ?>; const sa=<?php echo json_encode($s_a); ?>; const st=<?php echo json_encode($s_t); ?>;
-    if(lbl.length>0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:250,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
+    function toggleRow(el) {
+        let chk = $(el).find('.chk-item');
+        chk.prop('checked', !chk.prop('checked'));
+        upd();
+    }
+    function toggleAll(el) { $('.chk-item').prop('checked', el.checked); upd(); }
+    
+    function upd() {
+        let n = $('.chk-item:checked').length;
+        $('#selCount').text(n);
+        $('#btnProcess').prop('disabled', n===0);
+        $('.mgr-item').removeClass('selected');
+        $('.chk-item:checked').closest('.mgr-item').addClass('selected');
+    }
+
+    function processAction() {
+        let ids = []; $('.chk-item:checked').each(function(){ids.push($(this).val())});
+        if(!confirm(`Confirm action for ${ids.length} SIMs?`)) return;
+        
+        $('#btnProcess').prop('disabled',true).text('Processing...');
+        $.post('process_sim_tracking.php', {
+            action:'process_bulk_sim_action', po_provider_id:curPO, mode:curMode, sim_ids:ids, date_field:$('#actionDate').val(), batch_name:curBatch
+        }, function(res){
+            if(res.status==='success'){ showToast('success', res.message); setTimeout(()=>location.reload(), 1500); }
+            else { showToast('error', res.message); $('#btnProcess').prop('disabled',false).text('Retry'); }
+        }, 'json');
+    }
+
+    // --- LOGS (AJAX) ---
+    function openLogs(d) {
+        $('#logContent').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
+        new bootstrap.Modal(document.getElementById('modalLogs')).show();
+        $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(res){
+            if(res.status==='success'){
+                let h='<div class="list-group list-group-flush">';
+                if(res.data.length===0) h+='<div class="p-4 text-center text-muted">No history logs available.</div>';
+                else res.data.forEach(l=>{
+                    let c = l.type==='Activation'?'text-success':'text-danger';
+                    h+=`<div class="list-group-item d-flex justify-content-between"><div><span class="fw-bold ${c}">${l.type}</span><div class="small text-muted">${l.batch} - ${l.date}</div></div><span class="fw-bold fs-5">${parseInt(l.qty).toLocaleString()}</span></div>`;
+                });
+                $('#logContent').html(h+'</div>');
+            } else $('#logContent').html('<div class="p-3 text-danger">Failed to load logs.</div>');
+        },'json');
+    }
+    
+    // --- CHART ---
+    const labels = <?php echo json_encode($js_labels??[]); ?>;
+    const sAct = <?php echo json_encode($js_series_act??[]); ?>;
+    const sTerm = <?php echo json_encode($js_series_term??[]); ?>;
+    if(labels.length > 0) {
+        new ApexCharts(document.querySelector('#lifecycleChart'), {
+            series: [{name:'Activations',data:sAct},{name:'Terminations',data:sTerm}],
+            chart: {type:'area', height:250, toolbar:{show:false}},
+            colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2},
+            xaxis:{categories:labels}, grid:{borderColor:'#f1f5f9'},
+            fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}
+        }).render();
+    }
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
