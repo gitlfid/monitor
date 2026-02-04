@@ -1,11 +1,11 @@
 <?php
 // =======================================================================
 // FILE: includes/sim_helper.php
-// FUNGSI: Koneksi DB, Auto-Repair Table, dan Reader Excel
+// DESC: Library Pendukung (Database & Excel Reader)
 // =======================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
-// 1. KONEKSI DB UNIVERSAL
+// 1. KONEKSI DATABASE
 $db = null; $db_type = '';
 $candidates = ['pdo', 'conn', 'db', 'link', 'mysqli'];
 foreach ($candidates as $var) { if (isset($GLOBALS[$var])) { if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } } }
@@ -18,36 +18,19 @@ if (!$db && defined('DB_HOST')) {
     } catch (Exception $e) {} 
 }
 
-// 2. HELPER JSON RESPONSE
+// 2. HELPER JSON RESPONSE (Untuk AJAX)
 function jsonResponse($status, $message, $data = []) {
-    ob_clean(); 
+    ob_clean(); // Bersihkan buffer agar tidak ada sisa HTML
     header('Content-Type: application/json');
     echo json_encode(array_merge(['status' => $status, 'message' => $message], $data));
     exit;
 }
 
-// 3. AUTO REPAIR TABLE (Inventory)
-if($db) {
-    $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
-        id INT(11) AUTO_INCREMENT PRIMARY KEY,
-        po_provider_id INT(11) NOT NULL,
-        msisdn VARCHAR(50) NOT NULL,
-        iccid VARCHAR(50) NULL,
-        imsi VARCHAR(50) NULL,
-        sn VARCHAR(50) NULL,
-        status ENUM('Available', 'Active', 'Terminated') DEFAULT 'Available',
-        activation_date DATE NULL,
-        termination_date DATE NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX (po_provider_id), INDEX (msisdn), INDEX (status)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
-    try { if ($db_type === 'pdo') $db->exec($sql_inv); else mysqli_query($db, $sql_inv); } catch (Exception $e) {}
-}
-
-// 4. SMART SPREADSHEET READER
+// 3. SMART EXCEL/CSV READER
 function readSpreadsheet($tmpPath, $originalName) {
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $data = [];
+    
     if ($ext === 'csv') {
         if (($handle = fopen($tmpPath, "r")) !== FALSE) {
             $bom = "\xEF\xBB\xBF"; $firstLine = fgets($handle);
@@ -58,6 +41,7 @@ function readSpreadsheet($tmpPath, $originalName) {
         }
         return $data;
     }
+    
     if ($ext === 'xlsx') {
         $zip = new ZipArchive;
         if ($zip->open($tmpPath) === TRUE) {
@@ -85,6 +69,7 @@ function readSpreadsheet($tmpPath, $originalName) {
     return false;
 }
 
+// 4. FIND COLUMN INDEX
 function findIdx($headers, $keys) {
     foreach ($headers as $i => $v) { 
         $clean = strtolower(trim(str_replace([' ','_','-','.'],'',$v)));
@@ -93,6 +78,7 @@ function findIdx($headers, $keys) {
     return false;
 }
 
+// 5. LEGACY UPLOAD FILE (Untuk PO Management lama)
 function uploadFileLegacy($file, $prefix) {
     if(isset($file) && $file['error']===0) {
         $dir = __DIR__ . "/../uploads/po/"; 

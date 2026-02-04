@@ -1,10 +1,10 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Full Stack Logic)
+// DESC: Backend Processor (Full Stack: AJAX + Legacy)
 // =======================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
-ob_start();
+ob_start(); 
 
 require_once 'includes/auth_check.php';
 if (file_exists('includes/config.php')) require_once 'includes/config.php';
@@ -18,7 +18,7 @@ if (!$db) {
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // =======================================================================
-// 1. AUTO REPAIR (Jaga-jaga tabel belum ada)
+// 1. AUTO REPAIR (Pastikan tabel inventory ada)
 // =======================================================================
 $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
     id INT(11) AUTO_INCREMENT PRIMARY KEY,
@@ -36,17 +36,20 @@ $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
 try { if ($db_type === 'pdo') $db->exec($sql_inv); else mysqli_query($db, $sql_inv); } catch (Exception $e) {}
 
 // =======================================================================
-// 2. AJAX HANDLERS (MODERN FEATURES)
+// 2. AJAX HANDLERS (FITUR BARU)
 // =======================================================================
 
-// --- A. UPLOAD MASTER (Returns JSON) ---
+// A. UPLOAD MASTER (Returns JSON untuk Progress Bar)
 if ($action == 'upload_master_bulk') {
     try {
         $po_id = $_POST['po_provider_id'];
-        if (!isset($_FILES['upload_file']) || $_FILES['upload_file']['error'] != 0) jsonResponse('error', 'File error.');
+        
+        if (!isset($_FILES['upload_file']) || $_FILES['upload_file']['error'] != 0) {
+            jsonResponse('error', 'File tidak ditemukan atau error upload.');
+        }
 
         $rows = readSpreadsheet($_FILES['upload_file']['tmp_name'], $_FILES['upload_file']['name']);
-        if (!$rows || count($rows) < 2) jsonResponse('error', 'File kosong/format salah.');
+        if (!$rows || count($rows) < 2) jsonResponse('error', 'File kosong atau format salah.');
 
         $header = $rows[0];
         $idx_msisdn = findIdx($header, ['msisdn','nohp','number','phone','mobile']);
@@ -73,58 +76,48 @@ if ($action == 'upload_master_bulk') {
         }
         
         if($db_type === 'pdo') $db->commit();
-        jsonResponse('success', "Uploaded $c SIMs.", ['count'=>$c]);
+        jsonResponse('success', "Berhasil menyimpan $c data ke Inventory.", ['count'=>$c]);
 
     } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); jsonResponse('error', $e->getMessage()); }
 }
 
-// --- B. FETCH SIMS (ADVANCED SEARCH) ---
+// B. FETCH SIMS (ADVANCED SEARCH)
 if ($action == 'fetch_sims') {
-    $po_id = $_POST['po_id']; 
-    $mode = $_POST['mode']; 
-    $keyword = trim($_POST['keyword'] ?? ''); // Input pencarian
-    
+    $po_id = $_POST['po_id']; $mode = $_POST['mode']; $search = trim($_POST['search_bulk'] ?? '');
     $status = ($mode === 'activate') ? 'Available' : 'Active';
-    
-    // Base Query
-    $q = "SELECT id, msisdn, iccid, imsi, sn, status FROM sim_inventory WHERE po_provider_id = ? AND status = ?";
-    $params = [$po_id, $status];
+    $q = "SELECT id, msisdn, iccid, status FROM sim_inventory WHERE po_provider_id = ? AND status = ?";
+    $p = [$po_id, $status];
 
-    // Logic Pencarian Advanced (LIKE %...%)
-    if (!empty($keyword)) {
-        $q .= " AND (msisdn LIKE ? OR iccid LIKE ? OR sn LIKE ?)";
-        $wildcard = "%$keyword%";
-        $params[] = $wildcard;
-        $params[] = $wildcard;
-        $params[] = $wildcard;
+    if (!empty($search)) {
+        // Cek apakah bulk (banyak baris) atau single search
+        if (strpos($search, "\n") !== false || strpos($search, ",") !== false) {
+            $nums = preg_split('/[\s,]+/', str_replace([',', ';'], "\n", $search));
+            if (!empty($nums)) {
+                $q .= " AND msisdn IN (" . implode(',', array_fill(0, count($nums), '?')) . ")";
+                $p = array_merge($p, $nums);
+            }
+        } else {
+            // Partial Search LIKE
+            $q .= " AND (msisdn LIKE ? OR iccid LIKE ?)";
+            $p[] = "%$search%";
+            $p[] = "%$search%";
+        }
     }
-    
-    $q .= " ORDER BY msisdn ASC LIMIT 500"; // Limit 500 agar UI tidak berat
-
-    try {
-        $stmt = $db->prepare($q); 
-        $stmt->execute($params); 
-        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Hitung total di database (untuk info jika > 500)
-        // $countParams = array_slice($params, 0, count($params)); // Copy params
-        // $qCount = str_replace("SELECT id, msisdn, iccid, imsi, sn, status", "SELECT COUNT(*)", $q);
-        // $qCount = str_replace("ORDER BY msisdn ASC LIMIT 500", "", $qCount);
-        // $stmtC = $db->prepare($qCount); $stmtC->execute($params); $total = $stmtC->fetchColumn();
-
-        jsonResponse('success', 'OK', ['data' => $data]);
-    } 
+    $q .= " ORDER BY msisdn ASC LIMIT 500"; 
+    try { $stmt = $db->prepare($q); $stmt->execute($p); jsonResponse('success', 'OK', ['data'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]); } 
     catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
 }
 
-// --- C. FETCH LOGS ---
+// C. FETCH LOGS (AJAX FIX)
 if ($action == 'fetch_logs') {
     $po_id = $_POST['po_id'];
     try {
         $logs = [];
+        // Ambil dari tabel Activation
         $stmtAct = $db->prepare("SELECT activation_date as date, active_qty as qty, activation_batch as batch, 'Activation' as type FROM sim_activations WHERE po_provider_id = ?");
         $stmtAct->execute([$po_id]); $logs = array_merge($logs, $stmtAct->fetchAll(PDO::FETCH_ASSOC));
 
+        // Ambil dari tabel Termination
         $stmtTerm = $db->prepare("SELECT termination_date as date, terminated_qty as qty, termination_batch as batch, 'Termination' as type FROM sim_terminations WHERE po_provider_id = ?");
         $stmtTerm->execute([$po_id]); $logs = array_merge($logs, $stmtTerm->fetchAll(PDO::FETCH_ASSOC));
 
@@ -133,7 +126,7 @@ if ($action == 'fetch_logs') {
     } catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
 }
 
-// --- D. PROCESS ACTION ---
+// D. PROCESS BULK ACTION (SYNC CHART & INVENTORY)
 if ($action == 'process_bulk_sim_action') {
     try {
         $ids = $_POST['sim_ids'] ?? []; $mode = $_POST['mode']; $date = $_POST['date_field']; $batch = $_POST['batch_name']; $po = $_POST['po_provider_id'];
@@ -143,9 +136,12 @@ if ($action == 'process_bulk_sim_action') {
         $dc = ($mode === 'activate') ? 'activation_date' : 'termination_date';
         
         $db->beginTransaction();
+        
+        // 1. Update Inventory (Status Individual)
         $ph = implode(',', array_fill(0, count($ids), '?'));
         $db->prepare("UPDATE sim_inventory SET status = ?, $dc = ? WHERE id IN ($ph)")->execute(array_merge([$st, $date], $ids));
         
+        // 2. Insert Log Summary (Agar Chart di Dashboard tetap jalan)
         $tbl = ($mode === 'activate') ? 'sim_activations' : 'sim_terminations';
         $qty = ($mode === 'activate') ? 'active_qty' : 'terminated_qty';
         $dbc = ($mode === 'activate') ? 'activation_date' : 'termination_date';
@@ -157,23 +153,33 @@ if ($action == 'process_bulk_sim_action') {
            ->execute([$po, $inf['company_id']??0, $inf['project_id']??0, $date, $batch." (Action)", $cnt, $cnt]);
         
         $db->commit();
-        jsonResponse('success', "Processed $cnt SIMs.");
+        jsonResponse('success', "Success processing $cnt items.");
     } catch (Exception $e) { if($db->inTransaction())$db->rollBack(); jsonResponse('error', $e->getMessage()); }
 }
 
 // =======================================================================
 // 3. LEGACY HANDLERS (PO, LOGISTIC - FORM POST)
+// Bagian ini menangani request form biasa (bukan AJAX)
 // =======================================================================
+
+// A. PO CREATE/UPDATE
 if (isset($_POST['action']) && ($_POST['action'] == 'create' || $_POST['action'] == 'update')) {
     $id=$_POST['id']??null; $type=$_POST['type']; 
     $cId=!empty($_POST['company_id'])?$_POST['company_id']:null; $pId=!empty($_POST['project_id'])?$_POST['project_id']:null;
     $file=uploadFileLegacy($_FILES['po_file'], $type)??$_POST['existing_file']??null;
-    $sql=($_POST['action']=='update')?"UPDATE sim_tracking_po SET type=?, company_id=?, project_id=?, manual_company_name=?, manual_project_name=?, batch_name=?, link_client_po_id=?, po_number=?, po_date=?, sim_qty=?, po_file=? WHERE id=?":"INSERT INTO sim_tracking_po (type, company_id, project_id, manual_company_name, manual_project_name, batch_name, link_client_po_id, po_number, po_date, sim_qty, po_file) VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+    
+    $sql=($_POST['action']=='update')
+        ?"UPDATE sim_tracking_po SET type=?, company_id=?, project_id=?, manual_company_name=?, manual_project_name=?, batch_name=?, link_client_po_id=?, po_number=?, po_date=?, sim_qty=?, po_file=? WHERE id=?"
+        :"INSERT INTO sim_tracking_po (type, company_id, project_id, manual_company_name, manual_project_name, batch_name, link_client_po_id, po_number, po_date, sim_qty, po_file) VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+    
     $p=[$type, $cId, $pId, $_POST['manual_company_name']??null, $_POST['manual_project_name']??null, $_POST['batch_name']??null, $_POST['link_client_po_id']??null, $_POST['po_number'], $_POST['po_date'], str_replace(',','',$_POST['sim_qty']), $file];
     if($_POST['action']=='update') $p[]=$id;
-    $db->prepare($sql)->execute($p); header("Location: sim_tracking_{$type}_po.php?msg=success"); exit;
+    
+    $db->prepare($sql)->execute($p); 
+    header("Location: sim_tracking_{$type}_po.php?msg=success"); exit;
 }
 
+// B. LOGISTICS
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($_POST['action'], 'logistic') !== false) {
     $id=$_POST['id']??null; $upd=($_POST['action']=='update_logistic');
     $sql=$upd?"UPDATE sim_tracking_logistics SET type=?, po_id=?, logistic_date=?, qty=?, pic_name=?, pic_phone=?, delivery_address=?, courier=?, awb=?, status=?, received_date=?, receiver_name=?, notes=? WHERE id=?":"INSERT INTO sim_tracking_logistics (type, po_id, logistic_date, qty, pic_name, pic_phone, delivery_address, courier, awb, status, received_date, receiver_name, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
@@ -182,12 +188,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($_POST['action'], 'logistic'
     $db->prepare($sql)->execute($p); header("Location: sim_tracking_receive.php?msg=success"); exit;
 }
 
+// C. DELETE HANDLER
 if (isset($_GET['action']) && strpos($_GET['action'], 'delete') !== false) {
     $t=($_GET['action']=='delete')?'sim_tracking_po':'sim_tracking_logistics';
     $r=($_GET['action']=='delete')?"sim_tracking_{$_GET['type']}_po.php":"sim_tracking_receive.php";
     $db->prepare("DELETE FROM $t WHERE id=?")->execute([$_GET['id']]); header("Location: $r?msg=deleted"); exit;
 }
 
+// D. PROVIDER FROM CLIENT
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_provider_from_client') {
+    $cId = !empty($_POST['provider_company_id']) ? $_POST['provider_company_id'] : NULL;
+    $file = uploadFileLegacy($_FILES['po_file'], 'provider');
+    $p = ['provider', $cId, NULL, $_POST['manual_provider_name']??NULL, NULL, $_POST['batch_name'], $_POST['link_client_po_id'], $_POST['provider_po_number'], $_POST['po_date'], str_replace(',','',$_POST['sim_qty']), $file];
+    $db->prepare("INSERT INTO sim_tracking_po (type, company_id, project_id, manual_company_name, manual_project_name, batch_name, link_client_po_id, po_number, po_date, sim_qty, po_file) VALUES (?,?,?,?,?,?,?,?,?,?,?)")->execute($p);
+    header("Location: sim_tracking_provider_po.php?msg=created_from_client"); exit;
+}
+
+// E. COMPANY
 if (isset($_POST['action']) && $_POST['action'] === 'create_company') {
     $db->prepare("INSERT INTO companies (company_name, company_type) VALUES (?, ?)")->execute([trim($_POST['company_name']), $_POST['company_type']]);
     header("Location: sim_tracking_{$_POST['redirect']}_po.php?msg=success"); exit;
