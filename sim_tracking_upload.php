@@ -115,7 +115,7 @@ if($db) {
                             <div class="col-md-7">
                                 <label class="form-label fw-bold text-dark mb-2">1. Select Provider PO <span class="text-danger">*</span></label>
                                 <select name="po_provider_id" id="poSelect" class="form-select form-select-lg shadow-none border-secondary-subtle" required onchange="fetchBatchInfo(this.value)">
-                                    <option value="">-- Choose PO --</option>
+                                    <option value="">-- Choose available PO --</option>
                                     <?php foreach($list_providers as $p): ?>
                                         <option value="<?=$p['id']?>">
                                             <?=$p['po_number']?> (Allocated Qty: <?=number_format($p['sim_qty'])?>)
@@ -149,10 +149,10 @@ if($db) {
                         <div class="d-flex justify-content-between align-items-center pt-3 border-top">
                             <div class="d-flex align-items-center gap-3">
                                 <span class="fw-bold text-dark">Upload Date:</span>
-                                <input type="date" name="date_field" class="form-control form-control-sm w-auto" value="<?=date('Y-m-d')?>" required>
+                                <input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" style="width: 160px;" required>
                             </div>
                             <button type="submit" class="btn btn-upload btn-action btn-lg px-5 shadow-sm" id="btnSubmit">
-                                <i class="bi bi-upload me-2"></i> Start Bulk Upload
+                                <i class="bi bi-cloud-upload-fill me-2"></i> Start Bulk Upload
                             </button>
                         </div>
                     </form>
@@ -291,7 +291,7 @@ if($db) {
                     $('#prevTable tbody').html(tbody);
                     
                 } else {
-                    // Show Error (Restore Form)
+                    // Show Error but keep form visible
                     $('#uploadForm').show().css('opacity', '1');
                     $('#btnSubmit').prop('disabled', false).text('Start Bulk Upload');
                     

@@ -41,7 +41,7 @@ try { if ($db_type === 'pdo') $db->exec($sql_inv); else mysqli_query($db, $sql_i
 // 2. AJAX HANDLERS (FITUR BARU)
 // =======================================================================
 
-// --- KHUSUS BATCH: GET PO DETAILS ---
+// --- [BARU] GET PO DETAILS (AUTO FILL BATCH) ---
 if ($action == 'get_po_details') {
     $id = $_POST['id'];
     try {
@@ -51,7 +51,7 @@ if ($action == 'get_po_details') {
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if($data) {
-            // Pastikan batch_name tidak null, jika null beri default
+            // Pastikan batch_name tidak null/kosong
             if(empty($data['batch_name'])) $data['batch_name'] = "BATCH-PO-".$id;
             jsonResponse('success', 'Found', $data);
         } else {
