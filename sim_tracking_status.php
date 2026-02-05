@@ -1,34 +1,22 @@
 <?php
 // =========================================================================
-// FILE: sim_tracking_status.php (FRONTEND DASHBOARD FIXED)
+// FILE 3: FRONTEND DASHBOARD (UI/UX PROFESSIONAL)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
-
-require_once 'includes/config.php';
-require_once 'includes/functions.php'; 
-require_once 'includes/header.php'; 
-require_once 'includes/sidebar.php'; 
+require_once 'includes/config.php'; require_once 'includes/functions.php'; 
+require_once 'includes/header.php'; require_once 'includes/sidebar.php'; 
 require_once 'includes/sim_helper.php'; 
 
 $db = db_connect();
 function e($str) { return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8'); }
 
-// --- 1. FETCH DATA UTAMA ---
-$list_providers_new = [];
-$dashboard_data = [];
-$activations_raw = [];
-$terminations_raw = [];
-$total_sys_sims = 0; $total_sys_act = 0; $total_sys_term = 0;
+// Fetch Data
+$dashboard_data = []; $activations_raw = []; $terminations_raw = [];
+$total_sys_sims=0; $total_sys_act=0; $total_sys_term=0;
 
 if($db) {
-    // Dropdown Upload Baru (PO yang belum ada di inventory)
-    try { 
-        $list_providers_new = $db->query("SELECT id, po_number, sim_qty FROM sim_tracking_po WHERE type='provider' AND id NOT IN (SELECT DISTINCT po_provider_id FROM sim_inventory)")->fetchAll(PDO::FETCH_ASSOC); 
-    } catch(Exception $e){}
-    
-    // Data Dashboard Utama
-    $sql_main = "SELECT 
-                    po.id as po_id, po.po_number as provider_po, po.batch_name as batch_name, po.sim_qty as total_pool,
+    // Dashboard Data
+    $sql_main = "SELECT po.id as po_id, po.po_number as provider_po, po.batch_name as batch_name, po.sim_qty as total_pool,
                     client_po.po_number as client_po, c.company_name, p.project_name,
                     (SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id = po.id AND status = 'Available') as cnt_avail,
                     (SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id = po.id AND status = 'Active') as cnt_active,
@@ -38,26 +26,18 @@ if($db) {
                 LEFT JOIN sim_tracking_po client_po ON po.link_client_po_id = client_po.id
                 LEFT JOIN companies c ON po.company_id = c.id
                 LEFT JOIN projects p ON po.project_id = p.id
-                WHERE po.type = 'provider' 
-                HAVING total_uploaded > 0 
-                ORDER BY po.id DESC";
+                WHERE po.type = 'provider' HAVING total_uploaded > 0 ORDER BY po.id DESC";
     try { 
         $dashboard_data = $db->query($sql_main)->fetchAll(PDO::FETCH_ASSOC); 
-        foreach($dashboard_data as $d) {
-            $total_sys_sims += $d['total_uploaded'];
-            $total_sys_act += $d['cnt_active'];
-            $total_sys_term += $d['cnt_term'];
-        }
+        foreach($dashboard_data as $d) { $total_sys_sims += $d['total_uploaded']; $total_sys_act += $d['cnt_active']; $total_sys_term += $d['cnt_term']; }
     } catch(Exception $e){}
 
-    // Data Log untuk Grafik
-    try {
-        $activations_raw = $db->query("SELECT * FROM sim_activations ORDER BY activation_date ASC")->fetchAll(PDO::FETCH_ASSOC);
-        $terminations_raw = $db->query("SELECT * FROM sim_terminations ORDER BY termination_date ASC")->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {}
+    // Fetch Logs for Chart
+    try { $activations_raw = $db->query("SELECT * FROM sim_activations ORDER BY activation_date ASC")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
+    try { $terminations_raw = $db->query("SELECT * FROM sim_terminations ORDER BY termination_date ASC")->fetchAll(PDO::FETCH_ASSOC); } catch(Exception $e){}
 }
 
-// Proses Data Grafik
+// Chart Prep
 $cd_a=[]; $cd_t=[]; $lbls=[]; $s_a=[]; $s_t=[];
 foreach($activations_raw as $r){ $d=date('Y-m-d', strtotime($r['activation_date'])); if(!isset($cd_a[$d]))$cd_a[$d]=0; $cd_a[$d]+=$r['active_qty']; }
 foreach($terminations_raw as $r){ $d=date('Y-m-d', strtotime($r['termination_date'])); if(!isset($cd_t[$d]))$cd_t[$d]=0; $cd_t[$d]+=$r['terminated_qty']; }
@@ -68,18 +48,18 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; }
-    
     .card-pro { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px; overflow: hidden; }
     .stat-card { padding: 24px; display: flex; align-items: center; gap: 20px; }
-    .stat-icon { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
-    
-    .table-pro th { background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; font-weight: 700; }
-    .table-pro td { padding: 18px 20px; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
-    .progress-track { background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden; display: flex; width: 100%; margin-top: 8px; }
+    .stat-icon { width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
+    .table-pro th { background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; padding: 15px 20px; border-bottom: 1px solid #e2e8f0; }
+    .table-pro td { padding: 18px 20px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .progress-track { height: 8px; border-radius: 4px; overflow: hidden; display: flex; background: #e2e8f0; margin-top: 8px; }
     .bar-seg { height: 100%; transition: width 0.6s ease; }
-    .bg-a { background: #10b981; } .bg-t { background: #ef4444; } .bg-v { background: #cbd5e1; }
-    .text-act { color: #10b981; } .text-term { color: #ef4444; }
+    .bg-a{background:#10b981} .bg-t{background:#ef4444} .bg-v{background:#cbd5e1}
+    .text-act{color:#10b981} .text-term{color:#ef4444}
     
+    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
+    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
     .btn-act { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
     .btn-act:hover { background: #166534; color: #fff; }
     .btn-term { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
@@ -87,17 +67,10 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
 
-    /* UPLOAD MODAL */
-    .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; text-align: center; padding: 30px; cursor: pointer; position: relative; transition: 0.2s; }
-    .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
-    .prog-cont { display: none; margin-top: 20px; }
-    .prog-bar { height: 10px; background: #4f46e5; width: 0%; transition: width 0.2s; border-radius: 5px; }
-
-    /* MANAGER MODAL */
     .mgr-layout { display: flex; height: 600px; }
     .mgr-left { width: 30%; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 20px; display: flex; flex-direction: column; }
     .mgr-right { width: 70%; padding: 0; display: flex; flex-direction: column; }
-    .mgr-list-box { flex-grow: 1; overflow-y: auto; position: relative; } 
+    .mgr-list-box { flex-grow: 1; overflow-y: auto; }
     .sim-item { padding: 10px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
     .sim-item:hover { background: #f1f5f9; }
     .sim-item.selected { background: #eff6ff; border-left: 4px solid #4f46e5; }
@@ -111,19 +84,14 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <div id="toastCont"></div>
 
 <div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div>
-        <h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3>
-        <p class="text-muted small m-0">Inventory Management Dashboard</p>
-    </div>
-    <button class="btn btn-primary fw-bold px-4" onclick="openUploadModal()">
-        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch
-    </button>
+    <div><h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
+    <a href="sim_tracking_upload.php" class="btn-primary-pro"><i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch</a>
 </div>
 
 <div class="row g-4 px-4 mb-4">
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-light text-primary"><i class="bi bi-sim"></i></div><div><h6 class="text-muted small fw-bold mb-0">TOTAL INVENTORY</h6><h3 class="fw-bold mb-0"><?= number_format($total_sys_sims) ?></h3></div></div></div>
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-success-subtle text-success"><i class="bi bi-check-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">ACTIVE SIMS</h6><h3 class="fw-bold mb-0"><?= number_format($total_sys_act) ?></h3></div></div></div>
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-danger-subtle text-danger"><i class="bi bi-x-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">TERMINATED</h6><h3 class="fw-bold mb-0"><?= number_format($total_sys_term) ?></h3></div></div></div>
+    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-light text-primary"><i class="bi bi-sim"></i></div><div><h6 class="text-muted small fw-bold mb-0">TOTAL INVENTORY</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_sims)?></h3></div></div></div>
+    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-success-subtle text-success"><i class="bi bi-check-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">ACTIVE SIMS</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_act)?></h3></div></div></div>
+    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-danger-subtle text-danger"><i class="bi bi-x-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">TERMINATED</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_term)?></h3></div></div></div>
 </div>
 
 <div class="px-4 mb-4">
@@ -137,116 +105,32 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     <div class="card-pro">
         <div class="table-responsive">
             <table class="table w-100 mb-0 table-pro align-middle">
-                <thead>
-                    <tr>
-                        <th width="30%">Entity & Project</th>
-                        <th width="20%">Source PO</th>
-                        <th width="35%">Status Distribution</th>
-                        <th width="15%" class="text-center">Manage</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Entity Info</th><th>Source</th><th>Inventory Status</th><th class="text-center">Manage</th></tr></thead>
                 <tbody>
-                    <?php if(empty($dashboard_data)): ?>
-                        <tr><td colspan="4" class="text-center py-5 text-muted">No data available. Please upload master data.</td></tr>
-                    <?php else: ?>
-                        <?php foreach($dashboard_data as $row): 
-                            $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
-                            $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
-                            $json = htmlspecialchars(json_encode(['id'=>$row['po_id'], 'po'=>$row['provider_po'], 'batch'=>$row['batch_name'], 'comp'=>$row['company_name']]), ENT_QUOTES);
-                        ?>
-                        <tr>
-                            <td>
-                                <div class="fw-bold text-dark"><?=e($row['company_name'])?></div>
-                                <div class="small text-muted">PO Client: <?=e($row['client_po'])?:'-'?></div>
-                                <span class="badge bg-light text-primary border mt-1"><?=e($row['project_name'])?></span>
-                            </td>
-                            <td>
-                                <span class="badge bg-white border text-dark"><?=e($row['provider_po'])?></span>
-                                <div class="small fw-bold mt-1 text-muted"><?=e($row['batch_name'])?></div>
-                            </td>
-                            <td>
-                                <div class="d-flex justify-content-between small fw-bold mb-1">
-                                    <span>Total: <?=number_format($tot)?></span>
-                                    <span class="text-success">Avail: <?=number_format($avail)?></span>
-                                </div>
-                                <div class="progress-track">
-                                    <div class="bar-seg bg-a" style="width:<?=$pA?>%"></div>
-                                    <div class="bar-seg bg-t" style="width:<?=$pT?>%"></div>
-                                    <div class="bar-seg bg-v" style="width:<?=$pV?>%"></div>
-                                </div>
-                                <div class="d-flex gap-3 small mt-1">
-                                    <span class="text-act fw-bold">Act: <?=number_format($act)?></span>
-                                    <span class="text-term fw-bold">Term: <?=number_format($term)?></span>
-                                </div>
-                            </td>
-                            <td>
-                                <button class="btn-act" onclick='openMgr(<?=$json?>,"activate")'>Activate</button>
-                                <button class="btn-term" onclick='openMgr(<?=$json?>,"terminate")'>Terminate</button>
-                                <button class="btn-log" onclick='fetchLogs(<?=$json?>)'>Logs</button>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
+                    <?php if(empty($dashboard_data)): ?><tr><td colspan="4" class="text-center py-5 text-muted">No data available. Please upload master data.</td></tr><?php else: ?>
+                    <?php foreach($dashboard_data as $row): 
+                        $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
+                        $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
+                        $json = htmlspecialchars(json_encode(['id'=>$row['po_id'], 'po'=>$row['provider_po'], 'batch'=>$row['batch_name'], 'comp'=>$row['company_name']]), ENT_QUOTES);
+                    ?>
+                    <tr>
+                        <td><div class="fw-bold text-dark"><?=e($row['company_name'])?></div><small class="text-muted">PO Client: <?=e($row['client_po'])?:'-'?></small><br><span class="badge bg-light text-primary border mt-1"><?=e($row['project_name'])?></span></td>
+                        <td><span class="badge bg-white border text-dark"><?=e($row['provider_po'])?></span><div class="small fw-bold mt-1 text-muted"><?=e($row['batch_name'])?></div></td>
+                        <td>
+                            <div class="d-flex justify-content-between small fw-bold mb-1"><span>Total: <?=number_format($tot)?></span><span class="text-act">Avail: <?=number_format($avail)?></span></div>
+                            <div class="progress-track"><div class="bar-seg bg-a" style="width:<?=$pA?>%"></div><div class="bar-seg bg-t" style="width:<?=$pT?>%"></div><div class="bar-seg bg-v" style="width:<?=$pV?>%"></div></div>
+                            <div class="d-flex gap-3 small mt-1"><span class="text-act fw-bold">Act: <?=number_format($act)?></span><span class="text-term fw-bold">Term: <?=number_format($term)?></span></div>
+                        </td>
+                        <td>
+                            <button class="btn-act" onclick='openMgr(<?=$json?>,"activate")'>Activate</button>
+                            <button class="btn-term" onclick='openMgr(<?=$json?>,"terminate")'>Terminate</button>
+                            <button class="btn-log" onclick='fetchLogs(<?=$json?>)'>Logs</button>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
             </table>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="modalUpload" tabindex="-1" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-primary text-white">
-                <h6 class="modal-title fw-bold">Upload Master Data</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <form id="formUploadMaster">
-                    <input type="hidden" name="action" value="upload_master_bulk">
-                    <input type="hidden" name="is_ajax" value="1">
-                    
-                    <div class="mb-3">
-                        <label class="small fw-bold text-muted">Select Provider PO</label>
-                        <select name="po_provider_id" id="poSelect" class="form-select" required onchange="fetchBatchInfo(this.value)">
-                            <option value="">-- Choose PO --</option>
-                            <?php foreach($list_providers_new as $p): ?>
-                                <option value="<?=$p['id']?>"><?=$p['po_number']?> (Alloc: <?=number_format($p['sim_qty'])?>)</option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="upload-zone">
-                            <input type="file" name="upload_file" id="fIn" style="position:absolute;width:100%;height:100%;top:0;left:0;opacity:0;cursor:pointer" onchange="$('#fTxt').text(this.files[0].name).addClass('text-primary')">
-                            <i class="bi bi-cloud-arrow-up display-4 text-secondary"></i>
-                            <div id="fTxt" class="mt-2 fw-bold">Click/Drag CSV or Excel Here</div>
-                            <div class="small text-muted">Header Required: <code>MSISDN</code></div>
-                        </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col">
-                            <label class="small fw-bold text-muted">Batch Name (Auto)</label>
-                            <input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required>
-                        </div>
-                        <div class="col">
-                            <label class="small fw-bold text-muted">Date</label>
-                            <input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary w-100 fw-bold" id="btnUp">Start Upload</button>
-                </form>
-
-                <div class="prog-cont" id="pgCont">
-                    <div class="d-flex justify-content-between small fw-bold mb-1">
-                        <span id="pgTxt">Uploading...</span><span id="pgPct">0%</span>
-                    </div>
-                    <div class="progress" style="height:10px">
-                        <div class="prog-bar" id="pgBar" style="width:0%"></div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -262,12 +146,12 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                 <div class="mgr-layout">
                     <div class="mgr-left">
                         <label class="small fw-bold text-muted mb-2">BULK SEARCH / PASTE LIST</label>
-                        <textarea id="sKey" class="form-control mb-3 flex-grow-1" style="resize:none" placeholder="Paste 6000 MSISDNs here...&#10;0812xxx&#10;0813xxx"></textarea>
+                        <textarea id="sKey" class="form-control mb-3 flex-grow-1" style="resize:none" placeholder="Paste multiple MSISDNs here...&#10;0812xxx&#10;0813xxx"></textarea>
                         <button class="btn btn-dark w-100 fw-bold mb-2" onclick="doSearch()">
                             <i class="bi bi-search me-2"></i> Find Matches
                         </button>
                         <div class="alert alert-info small mb-0 p-2">
-                            <i class="bi bi-info-circle me-1"></i> Paste multiple numbers to select them instantly.
+                            <i class="bi bi-info-circle me-1"></i> Or leave empty to view first 500 records.
                         </div>
                     </div>
                     
@@ -283,7 +167,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                         <div class="mgr-list-box" id="sList">
                             <div class="text-center text-muted py-5 mt-5">
                                 <i class="bi bi-search display-4 text-light"></i>
-                                <p class="mt-3">Paste list and click search.</p>
+                                <p class="mt-3">Loading data...</p>
                             </div>
                         </div>
                         
@@ -307,7 +191,14 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     </div>
 </div>
 
-<div class="modal fade" id="modalLog" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content border-0"><div class="modal-header"><h6 class="modal-title fw-bold">History Logs</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><div id="logList" class="list-group list-group-flush"></div></div></div></div></div>
+<div class="modal fade" id="modalLog" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0">
+            <div class="modal-header"><h6 class="modal-title fw-bold">History Logs</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body p-0"><div id="logList" class="list-group list-group-flush"></div></div>
+        </div>
+    </div>
+</div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -322,79 +213,41 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#toastCont').append(h); setTimeout(()=>$('#toastCont').children().first().remove(), 4000); 
     }
 
-    // --- UPLOAD & AUTO BATCH LOGIC (FIXED) ---
-    function openUploadModal() { 
-        $('#formUploadMaster')[0].reset(); 
-        $('#pgCont').hide(); 
-        $('#btnUp').prop('disabled',false).text('Start Upload'); 
-        $('#batchInput').val(''); // Reset Batch input
-        new bootstrap.Modal(document.getElementById('modalUpload')).show(); 
-    }
-
-    // FUNGSI FETCH BATCH DARI DATABASE
-    function fetchBatchInfo(id) {
-        if(!id) { $('#batchInput').val(''); return; }
-        
-        // Panggil backend dengan action 'get_po_details'
-        $.post('process_sim_tracking.php', { action: 'get_po_details', id: id }, function(res){
-            if(res.status === 'success') {
-                // ISI INPUT BATCH SECARA OTOMATIS
-                $('#batchInput').val(res.batch_name || 'BATCH 1'); 
-            } else {
-                toast('error', res.message);
-                $('#batchInput').val('');
-            }
-        }, 'json');
-    }
-    
-    // UPLOAD SUBMIT
-    $('#formUploadMaster').on('submit', function(e){
-        e.preventDefault(); 
-        let fd = new FormData(this);
-        
-        // Validasi batch harus terisi (sudah readonly, tapi memastikan)
-        if($('#batchInput').val() === '') {
-            toast('error', 'Batch Name is missing. Please select PO again.');
-            return;
-        }
-
-        $('#btnUp').prop('disabled',true); 
-        $('#pgCont').slideDown();
-        
-        $.ajax({
-            xhr: function(){var x=new window.XMLHttpRequest(); x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100); $('#pgBar').css('width',p+'%'); $('#pgTxt').text(p+'%');}},false); return x;},
-            type:'POST', url:'process_sim_tracking.php', data:fd, contentType:false, processData:false, dataType:'json',
-            success: function(r){ 
-                if(r.status==='success'){ $('#pgBar').addClass('bg-success'); toast('success',r.message); setTimeout(()=>location.reload(),1500); }
-                else { $('#pgBar').addClass('bg-danger'); toast('error',r.message); $('#btnUp').prop('disabled',false).text('Retry'); }
-            },
-            error: function(x){ toast('error', x.responseText); $('#btnUp').prop('disabled',false).text('Retry'); }
-        });
-    });
-
-    // --- MANAGER LOGIC (SEARCH) ---
+    // MANAGER (SEARCH) LOGIC
     let cId=0, cMode='', cBatch='';
     
     function openMgr(d,m) { 
         cId=d.id; cMode=m; cBatch=d.batch; 
+        
+        // 1. SET TITLE
         $('#mgrTitle').text(m==='activate'?'Activate SIMs':'Terminate SIMs'); 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
+        
+        // 2. SET BUTTON TEXT DYNAMICALLY
+        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminate';
+        $('#btnProc').text(btnText);
+
+        // 3. RESET & AUTO FETCH
         $('#sKey').val(''); 
         $('#sList').html('<div class="text-center py-5 text-muted">Ready to search.</div>'); 
         $('#resCount').text(0); $('#selCount').text(0); $('#btnProc').prop('disabled',true); 
+        
         new bootstrap.Modal(document.getElementById('modalMgr')).show(); 
+        
+        // 4. TRIGGER SEARCH IMMEDIATELY
+        doSearch();
     }
 
     function doSearch() {
         let k = $('#sKey').val().trim();
-        if(!k) return toast('error', 'Please enter MSISDNs');
+        // REMOVED validation: if(!k) return toast... to allow empty search
         
         $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 small">Searching Database...</div></div>');
         
         $.post('process_sim_tracking.php', {action:'fetch_sims', po_id:cId, mode:cMode, search_bulk:k}, function(r){
             if(r.status==='success'){
                 let h=''; 
-                if(r.data.length===0) h='<div class="text-center py-5 text-muted">No matching data found.</div>';
+                if(r.data.length===0) h='<div class="text-center py-5 text-muted">No data found available for this action.</div>';
                 else r.data.forEach(s => { 
                     h += `<div class="sim-item" onclick="tog(this)">
                             <div><div class="fw-bold font-monospace">${s.msisdn}</div><small class="text-muted">ICCID: ${s.iccid||'-'}</small></div>
@@ -415,7 +268,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 
     function doProc() {
         let ids=[]; $('.chk:checked').each(function(){ids.push($(this).val())});
-        if(!confirm(`Proceed with ${ids.length} items?`)) return;
+        if(!confirm(`Proceed to ${cMode.toUpperCase()} ${ids.length} items?`)) return;
         
         $('#btnProc').prop('disabled',true).text('Processing...');
         $.post('process_sim_tracking.php', {
@@ -426,7 +279,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // --- LOGS & CHART ---
+    // LOGS LOGIC
     function fetchLogs(d) {
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
         new bootstrap.Modal(document.getElementById('modalLog')).show();
@@ -445,6 +298,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
+    // CHART LOGIC
     const lbl=<?php echo json_encode($lbls??[]); ?>; 
     const sa=<?php echo json_encode($s_a??[]); ?>; 
     const st=<?php echo json_encode($s_t??[]); ?>;
