@@ -5,11 +5,11 @@
 // =======================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
-ob_start(); 
+ob_start(); // Buffer output untuk mencegah error text muncul sebelum JSON
 
 require_once 'includes/auth_check.php';
 if (file_exists('includes/config.php')) require_once 'includes/config.php';
-require_once 'includes/sim_helper.php'; 
+require_once 'includes/sim_helper.php'; // Helper DB & Reader
 
 // Cek Koneksi DB
 if (!$db) {
@@ -38,18 +38,33 @@ $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
 try { if ($db_type === 'pdo') $db->exec($sql_inv); else mysqli_query($db, $sql_inv); } catch (Exception $e) {}
 
 // =======================================================================
-// 2. AJAX HANDLERS (FITUR BARU: UPLOAD PROGRESS & HIGH PERF SEARCH)
+// 2. AJAX HANDLERS (FITUR BARU & UPLOAD)
 // =======================================================================
 
-// A. UPLOAD MASTER (Response JSON untuk Progress Bar)
+// --- A. GET PO DETAILS (Untuk Auto-fill Batch di Halaman Upload) ---
+if ($action == 'get_po_details') {
+    $id = $_POST['id'];
+    try {
+        $stmt = $db->prepare("SELECT batch_name, sim_qty FROM sim_tracking_po WHERE id = ?");
+        $stmt->execute([$id]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if($data) jsonResponse('success', 'Found', $data);
+        else jsonResponse('error', 'PO Data not found');
+    } catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
+}
+
+// --- B. UPLOAD MASTER BULK (With Preview & Progress) ---
 if ($action == 'upload_master_bulk') {
     try {
         $po_id = $_POST['po_provider_id'];
         
+        // 1. Validasi File
         if (!isset($_FILES['upload_file']) || $_FILES['upload_file']['error'] != 0) {
             jsonResponse('error', 'File tidak ditemukan atau error upload.');
         }
 
+        // 2. Baca File
         $rows = readSpreadsheet($_FILES['upload_file']['tmp_name'], $_FILES['upload_file']['name']);
         if (!$rows || count($rows) < 2) jsonResponse('error', 'File kosong atau format salah.');
 
@@ -61,11 +76,21 @@ if ($action == 'upload_master_bulk') {
 
         if ($idx_msisdn === false) jsonResponse('error', 'Header MSISDN tidak ditemukan.');
 
+        // 3. Cek Duplikasi Upload (Opsional, agar tidak double)
+        $chk = $db->prepare("SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id = ?");
+        $chk->execute([$po_id]);
+        if ($chk->fetchColumn() > 0) {
+            jsonResponse('error', 'PO Provider ini sudah pernah di-upload sebelumnya. Silakan pilih PO lain atau hapus data lama.');
+        }
+
+        // 4. Proses Insert
         if($db_type === 'pdo') $db->beginTransaction();
         
         $c = 0;
         $stmt = $db->prepare("INSERT INTO sim_inventory (po_provider_id, msisdn, iccid, imsi, sn, status) VALUES (?, ?, ?, ?, ?, 'Available')");
         
+        $previewData = []; // Array untuk menampung preview
+
         for ($i=1; $i<count($rows); $i++) {
             $r = $rows[$i];
             $msisdn = isset($r[$idx_msisdn]) ? trim($r[$idx_msisdn]) : '';
@@ -77,17 +102,35 @@ if ($action == 'upload_master_bulk') {
 
             $stmt->execute([$po_id, $msisdn, $iccid, $imsi, $sn]);
             $c++;
+
+            // Ambil 5 data pertama untuk dikirim balik sebagai preview
+            if ($c <= 5) {
+                $previewData[] = [
+                    'msisdn' => $msisdn,
+                    'iccid' => $iccid,
+                    'imsi' => $imsi,
+                    'sn' => $sn
+                ];
+            }
         }
         
         if($db_type === 'pdo') $db->commit();
-        jsonResponse('success', "Berhasil menyimpan $c data ke Inventory.", ['count'=>$c]);
+        
+        // Return JSON dengan Preview Data
+        jsonResponse('success', "Berhasil menyimpan $c data ke Inventory.", [
+            'count' => $c,
+            'preview' => $previewData
+        ]);
 
     } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); jsonResponse('error', $e->getMessage()); }
 }
 
-// B. FETCH SIMS (ADVANCED SEARCH - SUPPORT 6000+ DATA)
+// --- C. FETCH SIMS (SMART SEARCH: 6000+ DATA SUPPORT) ---
 if ($action == 'fetch_sims') {
-    $po_id = $_POST['po_id']; $mode = $_POST['mode']; $search = trim($_POST['search_bulk'] ?? '');
+    $po_id = $_POST['po_id']; 
+    $mode = $_POST['mode']; 
+    $search = trim($_POST['search_bulk'] ?? '');
+    
     $status = ($mode === 'activate') ? 'Available' : 'Active';
     
     // Base Query
@@ -96,35 +139,29 @@ if ($action == 'fetch_sims') {
     $is_bulk = false;
 
     if (!empty($search)) {
-        // Deteksi apakah input adalah list banyak baris (Bulk Search)
-        // Jika ada koma atau baris baru, anggap user paste list excel
+        // Deteksi input list panjang (newline/koma)
         if (strpos($search, "\n") !== false || strpos($search, ",") !== false) {
-            // Pisahkan berdasarkan spasi, koma, atau enter
             $nums = preg_split('/[\s,]+/', str_replace([',', ';'], "\n", $search));
-            // Hapus entry kosong
             $nums = array_filter(array_map('trim', $nums)); 
-            $nums = array_unique($nums); // Hapus duplikat input
+            $nums = array_unique($nums); 
             
             if (!empty($nums)) {
-                // Gunakan WHERE IN (...) untuk pencarian presisi banyak data
                 $placeholders = implode(',', array_fill(0, count($nums), '?'));
                 $q .= " AND msisdn IN ($placeholders)";
                 $p = array_merge($p, $nums);
-                $is_bulk = true; // Tandai sebagai bulk search
+                $is_bulk = true; 
             }
         } else {
-            // Jika cuma satu kata/nomor, gunakan LIKE %...% (Partial Search)
+            // Single Keyword Search
             $q .= " AND (msisdn LIKE ? OR iccid LIKE ?)";
             $p[] = "%$search%";
             $p[] = "%$search%";
         }
     }
     
-    // LOGIC LIMIT:
-    // Jika Bulk Search (paste list), limit dinaikkan drastis agar semua data 6000 baris terpilih.
-    // Jika Search biasa (ketik manual), limit 500 agar UI tidak berat.
+    // Logic Limit
     if ($is_bulk) {
-        $q .= " ORDER BY msisdn ASC LIMIT 10000"; // Support up to 10k lines
+        $q .= " ORDER BY msisdn ASC LIMIT 10000"; // Support large bulk
     } else {
         $q .= " ORDER BY msisdn ASC LIMIT 500"; 
     }
@@ -137,14 +174,13 @@ if ($action == 'fetch_sims') {
         jsonResponse('success', 'OK', [
             'data' => $data, 
             'count' => count($data),
-            'mode' => $is_bulk ? 'bulk_list' : 'partial_search',
-            'limit_msg' => (count($data) >= 10000) ? 'Max limit 10.000 items reached.' : ''
+            'mode' => $is_bulk ? 'bulk_list' : 'partial_search'
         ]); 
     } 
     catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
 }
 
-// C. FETCH LOGS (AJAX FIX)
+// --- D. FETCH LOGS (AJAX) ---
 if ($action == 'fetch_logs') {
     $po_id = $_POST['po_id'];
     try {
@@ -160,10 +196,15 @@ if ($action == 'fetch_logs') {
     } catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
 }
 
-// D. PROCESS BULK ACTION (SAFETY CHUNKING FOR 6000+ DATA)
+// --- E. PROCESS BULK ACTION (CHUNKING FOR SAFETY) ---
 if ($action == 'process_bulk_sim_action') {
     try {
-        $ids = $_POST['sim_ids'] ?? []; $mode = $_POST['mode']; $date = $_POST['date_field']; $batch = $_POST['batch_name']; $po = $_POST['po_provider_id'];
+        $ids = $_POST['sim_ids'] ?? []; 
+        $mode = $_POST['mode']; 
+        $date = $_POST['date_field']; 
+        $batch = $_POST['batch_name']; 
+        $po = $_POST['po_provider_id'];
+        
         if(empty($ids)) jsonResponse('error', 'No selection');
 
         $st = ($mode === 'activate') ? 'Active' : 'Terminated';
@@ -171,20 +212,18 @@ if ($action == 'process_bulk_sim_action') {
         
         $db->beginTransaction();
         
-        // 1. Update Inventory (Status Individual) - CHUNKED
-        // Kita pecah menjadi batch kecil (per 1000) untuk menghindari error query length atau timeout
+        // 1. Update Inventory (Chunked per 1000)
         $chunkSize = 1000;
         $chunks = array_chunk($ids, $chunkSize);
         
         foreach ($chunks as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
-            // Gunakan UPDATE IN (...)
             $sql = "UPDATE sim_inventory SET status = ?, $dc = ? WHERE id IN ($ph)";
             $params = array_merge([$st, $date], $chunk);
             $db->prepare($sql)->execute($params);
         }
         
-        // 2. Insert Log Summary (Agar Chart di Dashboard tetap jalan)
+        // 2. Insert Log Summary (Sync Chart)
         $tbl = ($mode === 'activate') ? 'sim_activations' : 'sim_terminations';
         $qty = ($mode === 'activate') ? 'active_qty' : 'terminated_qty';
         $dbc = ($mode === 'activate') ? 'activation_date' : 'termination_date';
@@ -201,8 +240,7 @@ if ($action == 'process_bulk_sim_action') {
 }
 
 // =======================================================================
-// 3. LEGACY HANDLERS (PO, LOGISTIC - FORM POST POSTINGAN LAMA)
-// Bagian ini menangani fitur lama yang tidak pakai AJAX (Tetap Berjalan)
+// 3. LEGACY HANDLERS (PO, LOGISTIC, COMPANY - FORM POST)
 // =======================================================================
 
 // A. PO CREATE/UPDATE
