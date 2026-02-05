@@ -161,18 +161,18 @@ if($db) {
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
-    // 1. AUTO FILL BATCH (AJAX CALL)
+    // 1. AUTO FILL BATCH NAME (LOCKED)
     function fetchBatchInfo(id) {
         if(!id) { $('#batchInput').val(''); return; }
         
-        // Panggil backend process_sim_tracking.php
+        // Panggil backend process_sim_tracking.php dengan action get_po_details
         $.post('process_sim_tracking.php', { action: 'get_po_details', id: id }, function(res){
             if(res.status === 'success') {
-                $('#batchInput').val(res.batch_name || 'BATCH 1'); // Isi dan biarkan readonly
+                // Isi input dan biarkan readonly
+                $('#batchInput').val(res.batch_name || 'BATCH-PO-' + id);
             } else {
-                alert(res.message);
-                $('#poSelect').val(''); // Reset jika error
                 $('#batchInput').val('');
+                alert(res.message);
             }
         }, 'json');
     }
