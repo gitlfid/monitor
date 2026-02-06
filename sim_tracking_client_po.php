@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_client_po.php
-// UPDATE: Pixel Perfect Icon Alignment (Folder & Button)
+// UPDATE: Fixed Search Bar Alignment & Centered Icons
 // =========================================================================
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
@@ -83,92 +83,153 @@ try {
         --text-secondary: #64748b;
         --brand-color: #4f46e5;
         --brand-hover: #4338ca;
-        --tbl-header: #f1f5f9;
+        --tbl-header: #f8fafc;
     }
 
     body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-primary); }
 
     /* CARD MODERN */
-    .card-modern { background: #fff; border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); margin-bottom: 24px; overflow: hidden; }
-    .card-header-modern { padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #fff; }
+    .card-modern { 
+        background: #fff; 
+        border: 1px solid var(--border-color); 
+        border-radius: 12px; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02); 
+        margin-bottom: 24px; 
+        overflow: hidden; 
+    }
+    .card-header-modern { 
+        padding: 20px 24px; 
+        border-bottom: 1px solid var(--border-color); 
+        display: flex; justify-content: space-between; align-items: center; 
+        background: #fff; 
+    }
+
+    /* FILTER BAR IMPROVED */
+    .filter-bar { background: #fff; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
+    .form-label-sm { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
+    
+    /* FIX: Search Input & Select Height Alignment */
+    .form-control, .form-select { 
+        border-color: #e2e8f0; 
+        font-size: 0.9rem; 
+        padding: 0.6rem 0.8rem; /* Konsisten padding */
+        border-radius: 8px; 
+        height: 42px; /* Force height agar sejajar */
+    }
+    .form-control:focus, .form-select:focus { 
+        border-color: var(--brand-color); 
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); 
+    }
+
+    /* FIX: Search Box with Icon Inside */
+    .search-input-group {
+        position: relative;
+        width: 100%;
+    }
+    .search-input-group i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+        font-size: 1rem;
+        pointer-events: none;
+    }
+    .search-input-group input {
+        padding-left: 38px; /* Geser teks agar tidak menumpuk dengan icon */
+    }
 
     /* TABLE STYLING */
     .table-responsive { border-radius: 0 0 12px 12px; overflow-x: auto; }
     .table-modern { width: 100%; border-collapse: collapse; white-space: nowrap; }
-    .table-modern th { background-color: var(--tbl-header); color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 16px 24px; border-bottom: 1px solid var(--border-color); text-align: left; }
-    .table-modern td { padding: 18px 24px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; color: var(--text-primary); }
+    
+    .table-modern th { 
+        background-color: var(--tbl-header); 
+        color: var(--text-secondary); 
+        font-size: 0.7rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+        letter-spacing: 0.5px;
+        padding: 16px 24px; 
+        border-bottom: 1px solid var(--border-color); 
+        text-align: left;
+    }
+    
+    .table-modern td { 
+        padding: 18px 24px; 
+        vertical-align: middle; 
+        border-bottom: 1px solid var(--border-color); 
+        font-size: 0.9rem; 
+        color: var(--text-primary);
+    }
     .table-modern tr:last-child td { border-bottom: none; }
     .table-modern tr:hover td { background-color: #fcfcfc; }
+
+    /* FIX: Button Icon Centering */
+    .btn-icon-soft { 
+        width: 36px; height: 36px; /* Kotak sempurna */
+        display: inline-flex; 
+        align-items: center; 
+        justify-content: center; /* Center Horizontal & Vertikal */
+        border-radius: 8px; 
+        border: 1px solid #e2e8f0; 
+        background: #fff; 
+        color: #64748b; 
+        transition: all 0.2s; 
+        text-decoration: none;
+        padding: 0; /* Reset padding */
+        line-height: 0; /* Reset line height agar icon tidak turun */
+    }
+    .btn-icon-soft i {
+        font-size: 1.1rem;
+        display: block;
+    }
+    .btn-icon-soft:hover { background: #f8fafc; color: var(--text-primary); border-color: #cbd5e1; }
+    
+    /* Specific Colors for File Icon */
+    .btn-file-icon {
+        color: var(--brand-color);
+        background: #eef2ff;
+        border-color: #c7d2fe;
+    }
+    .btn-file-icon:hover {
+        background: #e0e7ff;
+        border-color: #a5b4fc;
+        color: #4338ca;
+    }
 
     /* COLUMN WIDTHS */
     .w-date   { width: 15%; min-width: 160px; }
     .w-client { width: 25%; min-width: 240px; } 
     .w-prod   { width: 20%; min-width: 200px; }
     .w-qty    { width: 10%; min-width: 100px; text-align: right !important; }
-    .w-file   { width: 8%; min-width: 80px; text-align: center !important; }
+    .w-file   { width: 10%; min-width: 80px; text-align: center !important; }
     .w-action { width: 10%; min-width: 80px; text-align: center !important; }
 
-    /* BADGES & TEXT */
+    /* CONTENT STYLING */
     .badge-po { font-family: 'Consolas', monospace; font-weight: 600; color: var(--brand-color); background: #eef2ff; padding: 4px 8px; border-radius: 6px; border: 1px solid #c7d2fe; font-size: 0.8rem; }
     .badge-batch { font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; border: 1px solid #e2e8f0; text-transform: uppercase; }
     .text-date { font-weight: 600; color: #64748b; font-size: 0.8rem; display: block; margin-bottom: 4px; }
-    .client-name { font-weight: 700; color: #0f172a; display: block; margin-bottom: 3px; font-size: 0.9rem; white-space: normal; line-height: 1.3; }
-    
-    /* --- FIX: PROJECT NAME ALIGNMENT --- */
-    .project-name { 
-        font-size: 0.85rem; 
-        color: var(--text-secondary); 
-        display: flex; 
-        align-items: center; /* Kunci vertical center */
-        gap: 6px; 
-    }
-    .project-name i {
-        font-size: 1.1em;
-        line-height: 1; /* Reset line height icon */
-        display: flex;
-        margin-top: -2px; /* Visual tweak agar lurus dengan text */
-    }
-    
-    /* --- FIX: BUTTON CREATE NEW PO --- */
+    .client-name { font-weight: 700; color: #0f172a; display: block; margin-bottom: 3px; font-size: 0.9rem; }
+    .project-name { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 5px; }
+    .badge-product { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
+    .detail-text { font-size: 0.85rem; color: #64748b; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: block; }
+    .qty-text { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.95rem; color: #0f172a; }
+
+    /* CREATE BUTTON */
     .btn-primary-new { 
-        background: var(--brand-color); 
-        color: white; 
-        border: none; 
-        padding: 10px 24px; /* Padding balanced */
-        border-radius: 8px; 
-        font-weight: 600; 
-        font-size: 0.9rem; 
-        box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); 
-        transition: 0.2s; 
-        display: inline-flex; 
-        align-items: center; 
-        justify-content: center; /* Center content */
-        gap: 8px; 
-        text-decoration: none; 
-        line-height: 1.2; /* Consistent line height */
-    }
-    .btn-primary-new i {
-        font-size: 1.2rem;
-        line-height: 0; 
-        display: flex; 
-        margin-top: -2px; /* Visual tweak for plus icon */
+        background: var(--brand-color); color: white; border: none; padding: 0 24px; height: 42px; /* Match filter height */
+        border-radius: 8px; font-weight: 600; font-size: 0.9rem; 
+        box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); transition: 0.2s; 
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; 
     }
     .btn-primary-new:hover { background: var(--brand-hover); color: white; transform: translateY(-1px); }
 
-    /* Other Styles */
-    .badge-product { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
-    .detail-text { font-size: 0.85rem; color: #64748b; font-style: italic; white-space: normal; line-height: 1.3; max-width: 250px; display: block; }
-    .qty-text { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.95rem; color: #0f172a; }
-    .btn-icon-soft { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; transition: all 0.2s; }
-    .btn-icon-soft:hover { background: #f8fafc; color: var(--text-primary); border-color: #cbd5e1; }
-    .filter-bar { background: #fff; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
-    .form-label-sm { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
-    .form-control, .form-select { border-color: #e2e8f0; font-size: 0.9rem; padding: 0.5rem 0.75rem; border-radius: 6px; }
-    .form-control:focus, .form-select:focus { border-color: var(--brand-color); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+    /* MODAL */
     .modal-content { border: none; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
     .modal-header { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
     .modal-body { padding: 24px; background-color: #f8fafc; }
-    .card-form { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.02); height: 100%; }
+    .card-form { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; height: 100%; }
     .modal-footer { padding: 16px 24px; background: #fff; border-top: 1px solid #e2e8f0; }
 </style>
 
@@ -178,7 +239,7 @@ try {
         <p class="text-muted mb-0 small">Track and manage incoming client orders efficiently.</p>
     </div>
     <button class="btn-primary-new" onclick="openAddModal()">
-        <i class="bi bi-plus"></i> Create New PO
+        <i class="bi bi-plus-lg"></i> Create New PO
     </button>
 </div>
 
@@ -208,9 +269,9 @@ try {
         <div class="row g-3">
             <div class="col-md-3">
                 <label class="form-label-sm">Search</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" id="customSearch" class="form-control border-start-0 ps-0" placeholder="Type to search...">
+                <div class="search-input-group">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="customSearch" class="form-control" placeholder="Type keyword...">
                 </div>
             </div>
             <div class="col-md-3">
@@ -237,7 +298,7 @@ try {
                     <th class="w-date ps-4">Date & PO Info</th>
                     <th class="w-client">Client & Project</th>
                     <th class="w-prod">Product & Details</th>
-                    <th class="w-qty">Qty</th>
+                    <th class="w-qty">Quantity</th>
                     <th class="w-file">File</th>
                     <th class="w-action pe-4">Action</th>
                 </tr>
@@ -261,7 +322,7 @@ try {
                     <td>
                         <span class="client-name"><?= htmlspecialchars($row['display_company'] ?? '-') ?></span>
                         <div class="project-name">
-                            <i class="bi bi-folder2 text-warning"></i> 
+                            <i class="bi bi-folder2 text-warning me-1"></i> 
                             <?= htmlspecialchars($row['display_project'] ?? '-') ?>
                         </div>
                     </td>
@@ -274,7 +335,7 @@ try {
                     </td>
                     <td style="text-align: center;">
                         <?php if(!empty($row['po_file'])): ?>
-                            <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="btn-icon-soft text-primary bg-primary bg-opacity-10 border-primary" title="View Document">
+                            <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="btn-icon-soft btn-file-icon" title="View Document">
                                 <i class="bi bi-file-earmark-text-fill"></i>
                             </a>
                         <?php else: ?>
@@ -309,7 +370,7 @@ try {
         <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
             <input type="hidden" name="action" value="create"><input type="hidden" name="type" value="client">
             <div class="modal-header bg-primary text-white py-3">
-                <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Create New Client PO</h6>
+                <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Create New PO</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
