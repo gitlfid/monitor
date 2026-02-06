@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_client_po.php
-// UPDATE: UI Presisi, Tabel Rapi, Icon Center
+// UPDATE: Ultra Clean Table, High Contrast UI, Precision Layout
 // =========================================================================
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
@@ -66,92 +66,143 @@ try {
         if(empty($providers)) $providers = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         $projects_raw = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        // Fallback MySQLi logic omitted for brevity but assumed compatible
+        // MySQLi Fallback Logic (Standard)
+        $r1 = mysqli_query($db, "SELECT id, company_name FROM companies WHERE company_type='client' ORDER BY company_name ASC"); while($r=mysqli_fetch_assoc($r1))$clients[]=$r;
+        $r2 = mysqli_query($db, "SELECT id, company_name FROM companies WHERE company_type='provider' ORDER BY company_name ASC"); while($r=mysqli_fetch_assoc($r2))$providers[]=$r;
+        $r3 = mysqli_query($db, "SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC"); while($r=mysqli_fetch_assoc($r3))$projects_raw[]=$r;
     }
 } catch (Exception $e) {}
 ?>
 
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-    body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; }
-
-    /* CARD STYLING */
-    .card-modern { border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background: #fff; margin-bottom: 24px; }
-    .card-header-modern { background: #fff; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    /* TABLE PRESISI */
+    :root {
+        --tbl-header-bg: #f1f5f9;
+        --tbl-border: #e2e8f0;
+        --text-dark: #0f172a;
+        --text-gray: #64748b;
+        --primary: #4f46e5;
+    }
+
+    body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: var(--text-dark); }
+
+    /* CARD MODERN */
+    .card-modern { background: #fff; border: 1px solid var(--tbl-border); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 24px; }
+    .card-header-modern { padding: 20px 24px; border-bottom: 1px solid var(--tbl-border); display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
+
+    /* TABLE PRECISION STYLING */
     .table-responsive { border-radius: 0 0 12px 12px; overflow-x: auto; }
     .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; }
+    
+    /* Header Table */
     .table-modern th { 
-        background-color: #f8fafc; color: #64748b; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-        padding: 14px 20px; border-bottom: 1px solid #e2e8f0; border-top: 1px solid #e2e8f0; white-space: nowrap; 
+        background-color: var(--tbl-header-bg); 
+        color: var(--text-gray); 
+        font-size: 0.75rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+        letter-spacing: 0.05em;
+        padding: 16px 20px; 
+        border-bottom: 2px solid var(--tbl-border); 
+        white-space: nowrap; 
     }
+    
+    /* Body Table */
     .table-modern td { 
-        padding: 16px 20px; vertical-align: middle; /* KUNCI PRESISI VERTIKAL */
-        border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; color: #1e293b;
+        padding: 18px 20px; 
+        vertical-align: middle; 
+        border-bottom: 1px solid var(--tbl-border); 
+        font-size: 0.9rem; 
+        color: var(--text-dark);
     }
     .table-modern tr:last-child td { border-bottom: none; }
-    .table-modern tr:hover td { background-color: #fcfcfc; }
+    .table-modern tr:hover td { background-color: #f8fafc; }
 
-    /* COLUMN WIDTHS (Agar tidak berantakan) */
-    .col-date   { width: 15%; min-width: 140px; }
-    .col-info   { width: 25%; min-width: 200px; }
-    .col-prod   { width: 25%; min-width: 200px; }
-    .col-qty    { width: 15%; text-align: right; white-space: nowrap; }
-    .col-file   { width: 10%; text-align: center; }
-    .col-action { width: 10%; text-align: center; }
+    /* COLUMN WIDTHS (Agar Presisi & Tidak Berantakan) */
+    .col-w-date { width: 15%; min-width: 160px; }
+    .col-w-client { width: 25%; min-width: 220px; }
+    .col-w-prod { width: 25%; min-width: 220px; }
+    .col-w-qty { width: 12%; text-align: right; min-width: 100px; }
+    .col-w-file { width: 8%; text-align: center; min-width: 60px; }
+    .col-w-action { width: 15%; text-align: center; min-width: 100px; }
 
-    /* TEXT TRUNCATE (Agar tidak melebar) */
-    .text-truncate-box { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-
-    /* BADGES & DECORATION */
-    .po-badge { font-family: 'Consolas', monospace; font-weight: 600; color: #4f46e5; background: #eef2ff; padding: 4px 8px; border-radius: 6px; border: 1px solid #e0e7ff; display: inline-block; }
-    .product-badge { background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; display: inline-block; margin-bottom: 4px; }
-    
-    /* BUTTONS & ICONS PRESISI */
-    .btn-icon-soft { 
-        width: 32px; height: 32px; 
-        display: inline-flex; align-items: center; justify-content: center; /* Center Icon */
-        border-radius: 8px; border: 1px solid transparent; 
-        color: #64748b; transition: all 0.2s; background: transparent;
+    /* BADGES & TEXT STYLES */
+    .badge-po { 
+        font-family: 'Consolas', monospace; 
+        font-weight: 600; 
+        color: var(--primary); 
+        background: #eef2ff; 
+        padding: 4px 8px; 
+        border-radius: 6px; 
+        border: 1px solid #c7d2fe;
+        display: inline-block;
     }
-    .btn-icon-soft:hover { background-color: #f1f5f9; color: #0f172a; border-color: #e2e8f0; }
-    
-    .btn-new { 
-        background: #4f46e5; color: white; border: none; padding: 10px 20px; 
-        border-radius: 8px; font-weight: 600; font-size: 0.9rem;
-        display: inline-flex; align-items: center; gap: 8px; 
-        box-shadow: 0 2px 5px rgba(79, 70, 229, 0.2); transition: 0.2s; 
+    .badge-batch {
+        font-size: 0.75rem;
+        background: #f1f5f9;
+        color: #475569;
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid #e2e8f0;
     }
-    .btn-new:hover { background: #4338ca; transform: translateY(-1px); color: white; }
+    .text-date { font-weight: 600; color: #64748b; font-size: 0.85rem; display: block; margin-bottom: 4px; }
+    .text-client { font-weight: 700; color: #0f172a; display: block; margin-bottom: 2px; }
+    .text-project { font-size: 0.85rem; color: #64748b; display: flex; align-items: center; gap: 5px; }
+    .badge-product { 
+        background: #ecfdf5; color: #047857; 
+        border: 1px solid #a7f3d0; 
+        font-weight: 700; font-size: 0.75rem; 
+        padding: 3px 8px; border-radius: 4px; 
+        display: inline-block; margin-bottom: 4px;
+    }
+    .text-detail { font-size: 0.85rem; color: #64748b; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; display: block; }
+    .text-qty { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 1rem; color: #0f172a; }
 
-    /* FILTER BOX */
-    .filter-container { background: #fff; padding: 20px; border-bottom: 1px solid #f1f5f9; }
+    /* ACTION BUTTONS */
+    .btn-action-soft {
+        width: 34px; height: 34px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 8px; border: 1px solid #e2e8f0;
+        background: #fff; color: #64748b;
+        transition: all 0.2s;
+    }
+    .btn-action-soft:hover { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
+    
+    /* MODALS & FORMS */
+    .modal-content { border: none; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    .modal-header { padding: 20px 30px; border-bottom: 1px solid #f1f5f9; }
+    .modal-body { padding: 30px; background-color: #f8fafc; }
+    .card-form { background: #fff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%; }
+    .modal-footer { padding: 20px 30px; background: #fff; border-top: 1px solid #f1f5f9; }
+    
+    /* FILTERS */
+    .filter-bar { background: #fff; padding: 20px; border-bottom: 1px solid #e2e8f0; }
 </style>
 
 <div class="page-heading mb-4">
     <div class="d-flex justify-content-between align-items-center">
         <div>
-            <h3 class="mb-1 fw-bold text-dark">Client PO</h3>
-            <p class="text-muted mb-0 small">Manage purchase orders & product details.</p>
+            <h3 class="mb-1 text-dark fw-bold">Client Purchase Orders</h3>
+            <p class="text-muted mb-0 small">Manage incoming orders, products, and details.</p>
         </div>
-        <button class="btn-new" onclick="openAddModal()">
-            <i class="bi bi-plus-lg"></i> New PO
+        <button class="btn btn-primary fw-bold px-4 py-2 rounded-3 shadow-sm" onclick="openAddModal()">
+            <i class="bi bi-plus-lg me-2"></i> New PO
         </button>
     </div>
 </div>
 
 <section>
     <div class="card-modern">
-        <div class="card-body pt-4">
-            <div class="d-flex align-items-center mb-3 ms-2">
-                <div class="bg-primary bg-opacity-10 p-2 rounded me-3"><i class="bi bi-bar-chart-fill text-primary"></i></div>
-                <h6 class="fw-bold text-dark m-0">Order Trends</h6>
-            </div>
+        <div class="card-body pt-4 px-4">
+            <h6 class="fw-bold text-dark mb-4 d-flex align-items-center">
+                <span class="bg-primary bg-opacity-10 p-2 rounded-3 me-3 text-primary"><i class="bi bi-graph-up-arrow"></i></span>
+                Order Volume Trends
+            </h6>
             <?php if(empty($js_chart_series) || array_sum($js_chart_series) == 0): ?>
                 <div class="text-center py-5 bg-light rounded text-muted small">No chart data available.</div>
             <?php else: ?>
-                <div id="clientChart" style="height: 240px;"></div>
+                <div id="clientChart" style="height: 260px;"></div>
             <?php endif; ?>
         </div>
     </div>
@@ -159,32 +210,32 @@ try {
     <div class="card-modern">
         <div class="card-header-modern border-0 pb-0">
             <div class="d-flex align-items-center">
-                <div class="bg-warning bg-opacity-10 p-2 rounded me-3"><i class="bi bi-table text-warning"></i></div>
+                <span class="bg-warning bg-opacity-10 p-2 rounded-3 me-3 text-warning"><i class="bi bi-database"></i></span>
                 <h6 class="m-0 fw-bold text-dark">PO Database</h6>
             </div>
         </div>
         
-        <div class="filter-container">
+        <div class="filter-bar">
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Search Keyword</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
-                        <input type="text" id="customSearch" class="form-control border-start-0" placeholder="PO, Client, Product...">
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" id="customSearch" class="form-control border-start-0 ps-0" placeholder="Type keyword...">
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Client Filter</label>
-                    <select id="filterClient" class="form-select form-select-sm"><option value="">All Clients</option><?php foreach($clients as $c): ?><option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option><?php endforeach; ?></select>
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Client</label>
+                    <select id="filterClient" class="form-select"><option value="">All Clients</option><?php foreach($clients as $c): ?><option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option><?php endforeach; ?></select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold text-muted mb-1">Project Filter</label>
-                    <select id="filterProject" class="form-select form-select-sm"><option value="">All Projects</option><?php $unique_projects = []; foreach($projects_raw as $p) $unique_projects[$p['project_name']] = $p['project_name']; foreach($unique_projects as $pname): ?><option value="<?= htmlspecialchars($pname) ?>"><?= htmlspecialchars($pname) ?></option><?php endforeach; ?></select>
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Project</label>
+                    <select id="filterProject" class="form-select"><option value="">All Projects</option><?php $unique_projects = []; foreach($projects_raw as $p) $unique_projects[$p['project_name']] = $p['project_name']; foreach($unique_projects as $pname): ?><option value="<?= htmlspecialchars($pname) ?>"><?= htmlspecialchars($pname) ?></option><?php endforeach; ?></select>
                 </div>
                 <div class="col-md-3 text-end d-flex align-items-end justify-content-end">
                     <div class="d-flex align-items-center">
-                        <span class="small text-muted me-2">Show:</span>
-                        <select id="customLength" class="form-select form-select-sm w-auto"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select>
+                        <span class="small text-muted me-2 fw-bold text-uppercase">Show</span>
+                        <select id="customLength" class="form-select w-auto"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select>
                     </div>
                 </div>
             </div>
@@ -194,12 +245,12 @@ try {
             <table class="table-modern" id="table-client">
                 <thead>
                     <tr>
-                        <th class="col-date">Date & PO Info</th>
-                        <th class="col-info">Client & Project</th>
-                        <th class="col-prod">Product & Detail</th>
-                        <th class="col-qty">Qty</th>
-                        <th class="col-file">File</th>
-                        <th class="col-action">Action</th>
+                        <th class="col-w-date ps-4">Date & PO Info</th>
+                        <th class="col-w-client">Client & Project</th>
+                        <th class="col-w-prod">Product & Details</th>
+                        <th class="col-w-qty">Qty</th>
+                        <th class="col-w-file">File</th>
+                        <th class="col-w-action pe-4">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -213,51 +264,49 @@ try {
                         $batch = htmlspecialchars($row['batch_name'] ?? '-');
                     ?>
                     <tr>
-                        <td class="col-date">
-                            <div class="d-flex flex-column">
-                                <span class="small fw-bold text-secondary mb-1"><?= $p_date ?></span>
-                                <span class="po-badge"><?= htmlspecialchars($row['po_number']) ?></span>
-                                <small class="text-muted mt-1" style="font-size: 0.75rem;">Batch: <?= $batch ?></small>
-                            </div>
+                        <td class="ps-4">
+                            <span class="text-date"><?= $p_date ?></span>
+                            <span class="badge-po"><?= htmlspecialchars($row['po_number']) ?></span>
+                            <div class="mt-1"><span class="badge-batch"><?= $batch ?></span></div>
                         </td>
-                        <td class="col-info">
-                            <div class="fw-bold text-dark text-truncate-box" title="<?= htmlspecialchars($row['display_company']) ?>">
+                        <td>
+                            <span class="text-client text-truncate" style="max-width: 220px;" title="<?= htmlspecialchars($row['display_company']) ?>">
                                 <?= htmlspecialchars($row['display_company'] ?? '-') ?>
-                            </div>
-                            <div class="small text-muted mt-1 d-flex align-items-center">
-                                <i class="bi bi-folder2 me-1"></i> 
-                                <span class="text-truncate-box" style="max-width: 180px;"><?= htmlspecialchars($row['display_project'] ?? '-') ?></span>
+                            </span>
+                            <div class="text-project">
+                                <i class="bi bi-folder2 text-warning"></i> 
+                                <span class="text-truncate" style="max-width: 200px;"><?= htmlspecialchars($row['display_project'] ?? '-') ?></span>
                             </div>
                         </td>
-                        <td class="col-prod">
-                            <span class="product-badge"><?= $prod ?></span>
-                            <span class="d-block small text-secondary text-truncate-box fst-italic" title="<?= $detail ?>">
+                        <td>
+                            <span class="badge-product"><?= $prod ?></span>
+                            <span class="text-detail" title="<?= $detail ?>">
                                 <?= $detail ?>
                             </span>
                         </td>
-                        <td class="col-qty">
-                            <span class="fw-bold text-dark fs-6"><?= $q_fmt ?></span>
+                        <td class="text-end">
+                            <span class="text-qty"><?= $q_fmt ?></span>
                         </td>
-                        <td class="col-file">
+                        <td class="text-center">
                             <?php if(!empty($row['po_file'])): ?>
-                                <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="btn-icon-soft text-primary" title="View Document">
-                                    <i class="bi bi-file-earmark-text-fill fs-5"></i>
+                                <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="btn-action-soft text-primary border-primary bg-primary bg-opacity-10" title="View File">
+                                    <i class="bi bi-file-earmark-text-fill"></i>
                                 </a>
                             <?php else: ?>
-                                <span class="text-muted opacity-25"><i class="bi bi-dash-lg"></i></span>
+                                <span class="text-muted opacity-25"><i class="bi bi-dash"></i></span>
                             <?php endif; ?>
                         </td>
-                        <td class="col-action">
+                        <td class="text-center pe-4">
                             <div class="dropdown">
-                                <button class="btn-icon-soft" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button class="btn-action-soft" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="bi bi-three-dots-vertical"></i>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" style="min-width: 160px;">
-                                    <li><a class="dropdown-item py-2" href="#" onclick='openEditModal(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-pencil-square me-2 text-warning"></i> Edit</a></li>
-                                    <li><a class="dropdown-item py-2" href="#" onclick='openToProviderModal(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-truck me-2 text-info"></i> To Provider</a></li>
-                                    <li><a class="dropdown-item py-2" href="#" onclick='printPO(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-printer me-2 text-secondary"></i> Print</a></li>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 py-2">
+                                    <li><a class="dropdown-item px-3 py-2" href="#" onclick='openEditModal(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-pencil-square me-2 text-warning"></i> Edit Details</a></li>
+                                    <li><a class="dropdown-item px-3 py-2" href="#" onclick='openToProviderModal(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-box-seam me-2 text-info"></i> Send to Provider</a></li>
+                                    <li><a class="dropdown-item px-3 py-2" href="#" onclick='printPO(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-printer me-2 text-secondary"></i> Print Document</a></li>
                                     <li><hr class="dropdown-divider my-1"></li>
-                                    <li><a class="dropdown-item py-2 text-danger" href="process_sim_tracking.php?action=delete&id=<?= $row['id'] ?>&type=client" onclick="return confirm('Permanently delete this PO?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                    <li><a class="dropdown-item px-3 py-2 text-danger" href="process_sim_tracking.php?action=delete&id=<?= $row['id'] ?>&type=client" onclick="return confirm('Are you sure you want to delete this PO?')"><i class="bi bi-trash me-2"></i> Delete Record</a></li>
                                 </ul>
                             </div>
                         </td>
@@ -269,139 +318,130 @@ try {
     </div>
 </section>
 
-<datalist id="product_list">
-    <?php foreach($existing_products as $prod): ?>
-        <option value="<?= htmlspecialchars($prod) ?>">
-    <?php endforeach; ?>
-</datalist>
+<datalist id="product_list"><?php foreach($existing_products as $prod): ?><option value="<?= htmlspecialchars($prod) ?>"><?php endforeach; ?></datalist>
 
 <div class="modal fade" id="modalAdd" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
+        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="action" value="create"><input type="hidden" name="type" value="client">
-            <div class="modal-header bg-primary text-white py-3">
-                <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Create New Client PO</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold text-primary"><i class="bi bi-plus-circle me-2"></i>Create New Client PO</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-4 bg-light">
+            <div class="modal-body">
                 <div class="d-flex justify-content-center mb-4">
-                    <div class="btn-group bg-white shadow-sm p-1 rounded-pill">
+                    <div class="btn-group bg-white shadow-sm p-1 rounded-pill border">
                         <input type="radio" class="btn-check" name="add_input_mode" id="add_mode_datapool" value="datapool" checked onchange="toggleInputMode('add')">
-                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_datapool">From Database</label>
-                        
+                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_datapool">Database</label>
                         <input type="radio" class="btn-check" name="add_input_mode" id="add_mode_manual" value="manual" onchange="toggleInputMode('add')">
-                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_manual">Manual Input</label>
+                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_manual">Manual</label>
                     </div>
                 </div>
-
-                <div class="card border-0 shadow-sm mb-3">
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6 border-end">
-                                <h6 class="text-uppercase text-muted fw-bold small mb-3">Client Information</h6>
-                                <div id="add_section_datapool">
-                                    <div class="mb-3"><label class="form-label small fw-bold">Client</label><select name="company_id" id="add_company_id" class="form-select" onchange="filterProjects('add')"><option value="">-- Select --</option><?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?></select></div>
-                                    <div class="mb-3"><label class="form-label small fw-bold">Project</label><select name="project_id" id="add_project_id" class="form-select"><option value="">-- Select --</option></select></div>
-                                </div>
-                                <div id="add_section_manual" class="d-none">
-                                    <div class="mb-3"><label class="form-label small fw-bold">Client Name</label><input type="text" name="manual_company_name" id="add_manual_company" class="form-control"></div>
-                                    <div class="mb-3"><label class="form-label small fw-bold">Project Name</label><input type="text" name="manual_project_name" id="add_manual_project" class="form-control"></div>
-                                </div>
-                                
-                                <h6 class="text-uppercase text-muted fw-bold small mt-4 mb-3">Product Info</h6>
-                                <div class="mb-2"><label class="form-label small fw-bold">Product</label><input type="text" name="product_name" class="form-control" list="product_list" placeholder="Type or select..."></div>
-                                <div><label class="form-label small fw-bold">Detail</label><textarea name="detail" class="form-control" rows="2" placeholder="Specs, Notes..."></textarea></div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <h6 class="text-uppercase text-muted fw-bold small mb-3">Order Details</h6>
-                                <div class="row g-2 mb-3">
-                                    <div class="col-6"><label class="form-label small fw-bold">Date</label><input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>"></div>
-                                    <div class="col-6"><label class="form-label small fw-bold">Qty</label><input type="number" name="sim_qty" class="form-control fw-bold" placeholder="0"></div>
-                                </div>
-                                <div class="mb-3"><label class="form-label small fw-bold">PO Number</label><input type="text" name="po_number" class="form-control font-monospace" required></div>
-                                <div class="mb-3"><label class="form-label small fw-bold">Batch Name</label><input type="text" name="batch_name" class="form-control" required></div>
-                                <div><label class="form-label small fw-bold">Attachment</label><input type="file" name="po_file" class="form-control"></div>
-                            </div>
+                <div class="row g-4 h-100">
+                    <div class="col-md-6 d-flex"><div class="card-form w-100">
+                        <h6 class="text-uppercase text-primary fw-bold small mb-3 border-bottom pb-2">Client Info</h6>
+                        <div id="add_section_datapool">
+                            <div class="mb-3"><label class="form-label small fw-bold">Client</label><select name="company_id" id="add_company_id" class="form-select" onchange="filterProjects('add')"><option value="">-- Select --</option><?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?></select></div>
+                            <div class="mb-3"><label class="form-label small fw-bold">Project</label><select name="project_id" id="add_project_id" class="form-select"><option value="">-- Select --</option></select></div>
                         </div>
-                    </div>
+                        <div id="add_section_manual" class="d-none">
+                            <div class="mb-3"><label class="form-label small fw-bold">Client Name</label><input type="text" name="manual_company_name" id="add_manual_company" class="form-control"></div>
+                            <div class="mb-3"><label class="form-label small fw-bold">Project Name</label><input type="text" name="manual_project_name" id="add_manual_project" class="form-control"></div>
+                        </div>
+                        <h6 class="text-uppercase text-primary fw-bold small mt-4 mb-3 border-bottom pb-2">Product Info</h6>
+                        <div class="mb-3"><label class="form-label small fw-bold">Product</label><input type="text" name="product_name" class="form-control" list="product_list" placeholder="Search or Type..."></div>
+                        <div><label class="form-label small fw-bold">Detail</label><textarea name="detail" class="form-control" rows="2" placeholder="e.g. Specification..."></textarea></div>
+                    </div></div>
+                    <div class="col-md-6 d-flex"><div class="card-form w-100">
+                        <h6 class="text-uppercase text-primary fw-bold small mb-3 border-bottom pb-2">Order Details</h6>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6"><label class="form-label small fw-bold">Date</label><input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>"></div>
+                            <div class="col-6"><label class="form-label small fw-bold">Qty</label><input type="number" name="sim_qty" class="form-control fw-bold" placeholder="0"></div>
+                        </div>
+                        <div class="mb-3"><label class="form-label small fw-bold">PO Number</label><input type="text" name="po_number" class="form-control font-monospace" required></div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Batch Name</label><input type="text" name="batch_name" class="form-control" required></div>
+                        <div><label class="form-label small fw-bold">Attachment</label><input type="file" name="po_file" class="form-control"></div>
+                    </div></div>
                 </div>
             </div>
-            <div class="modal-footer border-0 pt-0 bg-light"><button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Save Record</button></div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm rounded-3">Save Record</button></div>
         </form>
     </div>
 </div>
 
 <div class="modal fade" id="modalEdit" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
+        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="action" value="update"><input type="hidden" name="type" value="client"><input type="hidden" name="id" id="edit_id"><input type="hidden" name="existing_file" id="edit_existing_file">
-            <div class="modal-header bg-warning text-dark py-3"><h6 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit PO</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body p-4 bg-light">
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold text-warning"><i class="bi bi-pencil-square me-2"></i>Edit PO Details</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
                 <div class="d-flex justify-content-center mb-4">
-                    <div class="btn-group bg-white shadow-sm p-1 rounded-pill">
+                    <div class="btn-group bg-white shadow-sm p-1 rounded-pill border">
                         <input type="radio" class="btn-check" name="edit_input_mode" id="edit_mode_datapool" value="datapool" onchange="toggleInputMode('edit')"><label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="edit_mode_datapool">Database</label>
                         <input type="radio" class="btn-check" name="edit_input_mode" id="edit_mode_manual" value="manual" onchange="toggleInputMode('edit')"><label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="edit_mode_manual">Manual</label>
                     </div>
                 </div>
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <div class="row g-4">
-                            <div class="col-md-6 border-end">
-                                <div id="edit_section_datapool">
-                                    <div class="mb-3"><label class="form-label small fw-bold">Client</label><select name="company_id" id="edit_company_id" class="form-select" onchange="filterProjects('edit')"><option value="">-- Select --</option><?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?></select></div>
-                                    <div class="mb-3"><label class="form-label small fw-bold">Project</label><select name="project_id" id="edit_project_id" class="form-select"><option value="">-- Select --</option></select></div>
-                                </div>
-                                <div id="edit_section_manual" class="d-none">
-                                    <div class="mb-3"><label class="form-label small fw-bold">Client</label><input type="text" name="manual_company_name" id="edit_manual_company" class="form-control"></div>
-                                    <div class="mb-3"><label class="form-label small fw-bold">Project</label><input type="text" name="manual_project_name" id="edit_manual_project" class="form-control"></div>
-                                </div>
-                                <div class="mb-2"><label class="form-label small fw-bold">Product</label><input type="text" name="product_name" id="edit_product_name" class="form-control" list="product_list"></div>
-                                <div><label class="form-label small fw-bold">Detail</label><textarea name="detail" id="edit_detail" class="form-control" rows="2"></textarea></div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="row g-2 mb-3"><div class="col-6"><label class="form-label small fw-bold">Date</label><input type="date" name="po_date" id="edit_po_date" class="form-control"></div><div class="col-6"><label class="form-label small fw-bold">Qty</label><input type="number" name="sim_qty" id="edit_sim_qty" class="form-control"></div></div>
-                                <div class="mb-3"><label class="form-label small fw-bold">PO No</label><input type="text" name="po_number" id="edit_po_number" class="form-control font-monospace"></div>
-                                <div class="mb-3"><label class="form-label small fw-bold">Batch</label><input type="text" name="batch_name" id="edit_batch_name" class="form-control"></div>
-                                <div><label class="form-label small fw-bold">File</label><input type="file" name="po_file" class="form-control"><small id="current_file_info" class="text-muted d-block mt-1 fst-italic"></small></div>
-                            </div>
+                <div class="row g-4 h-100">
+                    <div class="col-md-6 d-flex"><div class="card-form w-100">
+                        <h6 class="text-uppercase text-warning fw-bold small mb-3 border-bottom pb-2">Client & Product</h6>
+                        <div id="edit_section_datapool">
+                            <div class="mb-3"><label class="form-label small fw-bold">Client</label><select name="company_id" id="edit_company_id" class="form-select" onchange="filterProjects('edit')"><option value="">-- Select --</option><?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?></select></div>
+                            <div class="mb-3"><label class="form-label small fw-bold">Project</label><select name="project_id" id="edit_project_id" class="form-select"><option value="">-- Select --</option></select></div>
                         </div>
-                    </div>
+                        <div id="edit_section_manual" class="d-none">
+                            <div class="mb-3"><label class="form-label small fw-bold">Client</label><input type="text" name="manual_company_name" id="edit_manual_company" class="form-control"></div>
+                            <div class="mb-3"><label class="form-label small fw-bold">Project</label><input type="text" name="manual_project_name" id="edit_manual_project" class="form-control"></div>
+                        </div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Product</label><input type="text" name="product_name" id="edit_product_name" class="form-control" list="product_list"></div>
+                        <div><label class="form-label small fw-bold">Detail</label><textarea name="detail" id="edit_detail" class="form-control" rows="2"></textarea></div>
+                    </div></div>
+                    <div class="col-md-6 d-flex"><div class="card-form w-100">
+                        <h6 class="text-uppercase text-warning fw-bold small mb-3 border-bottom pb-2">Order Details</h6>
+                        <div class="row g-2 mb-3"><div class="col-6"><label class="form-label small fw-bold">Date</label><input type="date" name="po_date" id="edit_po_date" class="form-control"></div><div class="col-6"><label class="form-label small fw-bold">Qty</label><input type="number" name="sim_qty" id="edit_sim_qty" class="form-control"></div></div>
+                        <div class="mb-3"><label class="form-label small fw-bold">PO No</label><input type="text" name="po_number" id="edit_po_number" class="form-control font-monospace"></div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Batch</label><input type="text" name="batch_name" id="edit_batch_name" class="form-control"></div>
+                        <div><label class="form-label small fw-bold">File</label><input type="file" name="po_file" class="form-control"><small id="current_file_info" class="text-muted d-block mt-1 fst-italic"></small></div>
+                    </div></div>
                 </div>
             </div>
-            <div class="modal-footer border-0 pt-0 bg-light"><button type="submit" class="btn btn-warning px-4 fw-bold shadow-sm">Update Changes</button></div>
+            <div class="modal-footer"><button type="submit" class="btn btn-warning px-4 fw-bold shadow-sm rounded-3">Save Changes</button></div>
         </form>
     </div>
 </div>
 
 <div class="modal fade" id="modalToProvider" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
+        <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content">
             <input type="hidden" name="action" value="create_provider_from_client"><input type="hidden" name="link_client_po_id" id="tp_client_po_id">
-            <div class="modal-header bg-info text-white py-3"><h6 class="modal-title fw-bold"><i class="bi bi-truck me-2"></i>To Provider</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body p-4 bg-light">
-                <div class="alert alert-white border shadow-sm d-flex align-items-center mb-4">
-                    <i class="bi bi-link-45deg fs-3 text-info me-3"></i>
-                    <div><small class="text-uppercase text-muted fw-bold">Source PO</small><div class="fw-bold text-dark"><span id="tp_display_client"></span> | <span id="tp_display_po" class="font-monospace"></span></div></div>
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold text-success"><i class="bi bi-truck me-2"></i>Send to Provider</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border d-flex align-items-center mb-4">
+                    <i class="bi bi-info-circle-fill fs-4 text-success me-3"></i>
+                    <div><small class="text-uppercase text-muted fw-bold">Source</small><div class="fw-bold text-dark"><span id="tp_display_client"></span> | <span id="tp_display_po" class="font-monospace"></span></div></div>
                 </div>
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold">Provider</label>
-                                <select name="provider_company_id" class="form-select mb-2" required><option value="">-- Choose --</option><?php foreach($providers as $p): ?><option value="<?= $p['id'] ?>"><?= $p['company_name'] ?></option><?php endforeach; ?></select>
-                                <input type="text" name="manual_provider_name" class="form-control form-control-sm" placeholder="Or Manual Provider Name">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold">Provider PO No.</label><input type="text" name="provider_po_number" class="form-control mb-2" required>
-                                <div class="row"><div class="col-6"><label class="form-label small fw-bold">Date</label><input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>"></div><div class="col-6"><label class="form-label small fw-bold">Qty</label><input type="number" name="sim_qty" id="tp_sim_qty" class="form-control" required></div></div>
-                            </div>
-                            <input type="hidden" name="batch_name" id="tp_batch_name"><div class="col-12"><label class="form-label small fw-bold">File</label><input type="file" name="po_file" class="form-control"></div>
+                <div class="card-form">
+                    <h6 class="text-uppercase text-success fw-bold small mb-3 border-bottom pb-2">Provider Details</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Provider</label>
+                            <select name="provider_company_id" class="form-select mb-2" required><option value="">-- Choose --</option><?php foreach($providers as $p): ?><option value="<?= $p['id'] ?>"><?= $p['company_name'] ?></option><?php endforeach; ?></select>
+                            <input type="text" name="manual_provider_name" class="form-control form-control-sm" placeholder="Or Manual Provider Name">
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Provider PO No.</label><input type="text" name="provider_po_number" class="form-control mb-2" required>
+                            <div class="row"><div class="col-6"><label class="form-label small fw-bold">Date</label><input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>"></div><div class="col-6"><label class="form-label small fw-bold">Qty</label><input type="number" name="sim_qty" id="tp_sim_qty" class="form-control" required></div></div>
+                        </div>
+                        <input type="hidden" name="batch_name" id="tp_batch_name"><div class="col-12"><label class="form-label small fw-bold">File</label><input type="file" name="po_file" class="form-control"></div>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer border-0 pt-0 bg-light"><button type="submit" class="btn btn-info text-white px-4 fw-bold shadow-sm">Process</button></div>
+            <div class="modal-footer"><button type="submit" class="btn btn-success px-4 fw-bold shadow-sm rounded-3">Process Transfer</button></div>
         </form>
     </div>
 </div>
@@ -419,12 +459,14 @@ try {
     if (chartSeries.length > 0) {
         new ApexCharts(document.querySelector('#clientChart'), {
             series: [{ name: 'Quantity', data: chartSeries }],
-            chart: { type: 'area', height: 250, toolbar: { show: false }, fontFamily: 'Plus Jakarta Sans, sans-serif' },
+            chart: { type: 'area', height: 260, toolbar: { show: false }, fontFamily: 'Inter, sans-serif' },
             stroke: { curve: 'smooth', width: 2 },
             fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.1 } },
-            xaxis: { categories: chartLabels, labels: { style: { fontSize: '11px', fontWeight: '600', colors: '#64748b' } } },
+            dataLabels: { enabled: true, style: { colors: ['#4f46e5'] } },
+            xaxis: { categories: chartLabels, labels: { style: { fontSize: '11px', fontWeight: 'bold' } } },
             colors: ['#4f46e5'],
-            grid: { borderColor: '#f1f5f9' }
+            grid: { borderColor: '#f1f5f9' },
+            tooltip: { y: { formatter: function (val) { return new Intl.NumberFormat('id-ID').format(val) + ' Pcs' } } }
         }).render();
     }
 
@@ -444,9 +486,11 @@ try {
         let projSel = $('#' + mode + '_project_id');
         projSel.empty().append('<option value="">-- Select --</option>');
         if (compId) {
-            allProjects.filter(p => p.company_id == compId).forEach(p => {
-                let s = (selId && p.id == selId) ? 'selected' : '';
-                projSel.append(`<option value="${p.id}" ${s}>${p.project_name}</option>`);
+            allProjects.forEach(p => {
+                if (p.company_id == compId) {
+                    let s = (selId && p.id == selId) ? 'selected' : '';
+                    projSel.append(`<option value="${p.id}" ${s}>${p.project_name}</option>`);
+                }
             });
         }
     }
@@ -463,13 +507,13 @@ try {
         $('#edit_po_number').val(data.po_number);
         let pd = (data.po_date && data.po_date !== '0000-00-00') ? data.po_date : new Date().toISOString().split('T')[0];
         $('#edit_po_date').val(pd);
-        $('#edit_sim_qty').val(String(data.sim_qty).replace(/[^0-9]/g, ''));
+        let qtyClean = String(data.sim_qty).replace(/[^0-9]/g, '');
+        $('#edit_sim_qty').val(qtyClean);
         $('#edit_batch_name').val(data.batch_name);
         $('#edit_product_name').val(data.product_name);
         $('#edit_detail').val(data.detail);
         $('#edit_existing_file').val(data.po_file);
         $('#current_file_info').text(data.po_file ? data.po_file : 'No file');
-        
         if (data.company_id && data.company_id != 0) {
             $('#edit_mode_datapool').prop('checked', true); toggleInputMode('edit');
             $('#edit_company_id').val(data.company_id);
@@ -485,18 +529,27 @@ try {
     function openToProviderModal(data) {
         $('#tp_client_po_id').val(data.id);
         $('#tp_display_client').text(data.display_company || 'Manual');
+        $('#tp_display_project').text(data.display_project || '-');
         $('#tp_display_po').text(data.po_number);
-        $('#tp_sim_qty').val(String(data.sim_qty).replace(/[^0-9]/g, ''));
+        $('#tp_display_batch').text(data.batch_name || '-');
+        let qtyClean = String(data.sim_qty).replace(/[^0-9]/g, '');
+        $('#tp_sim_qty').val(qtyClean);
         $('#tp_batch_name').val(data.batch_name);
         new bootstrap.Modal(document.getElementById('modalToProvider')).show();
     }
 
     function printPO(data) {
-        let poDate = data.po_date ? new Date(data.po_date).toLocaleDateString('id-ID') : '-';
+        let poDate = data.po_date ? new Date(data.po_date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : '-';
         let qty = new Intl.NumberFormat('id-ID').format(String(data.sim_qty).replace(/[^0-9]/g, ''));
+        let company = data.display_company || '-';
+        let project = data.display_project || '-';
+        let batch = data.batch_name || '-';
+        let poNum = data.po_number || '-';
         let win = window.open('', '', 'width=800,height=600');
-        win.document.write(`<html><head><title>Print PO</title><style>body{font-family:sans-serif;padding:40px;color:#333}.box{border:1px solid #ccc;padding:20px;border-radius:8px}.header{text-align:center;border-bottom:2px solid #333;margin-bottom:20px;padding-bottom:10px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:12px;text-align:left}th{background:#f9f9f9}</style></head><body><div class="box"><div class="header"><h2>PURCHASE ORDER</h2><p>${data.po_number}</p></div><p><strong>To:</strong> ${data.display_company||data.manual_company_name}<br><strong>Date:</strong> ${poDate}<br><strong>Product:</strong> ${data.product_name||'-'}</p><table><thead><tr><th>Description</th><th style="text-align:right">Quantity</th></tr></thead><tbody><tr><td>${data.detail||'SIM Cards'}</td><td style="text-align:right"><strong>${qty}</strong></td></tr></tbody></table></div></body></html>`);
-        win.document.close(); win.print();
+        win.document.write(`<html><head><title>Print PO</title><style>body{font-family:Arial;padding:40px;color:#333}.header{text-align:center;border-bottom:2px solid #333;margin-bottom:30px}.meta td{padding:5px 15px 5px 0}.label{font-weight:bold}.content{width:100%;border-collapse:collapse;margin-top:20px}.content th,.content td{border:1px solid #ddd;padding:10px}.footer{margin-top:60px;display:flex;justify-content:space-between}.sig{text-align:center;border-top:1px solid #333;width:200px;margin-top:50px}</style></head><body><div class="header"><h1>Purchase Order</h1><p>${poNum}</p></div><table class="meta"><tr><td class="label">Client:</td><td>${company}</td><td class="label">Date:</td><td>${poDate}</td></tr><tr><td class="label">Project:</td><td>${project}</td><td class="label">Batch:</td><td>${batch}</td></tr></table><table class="content"><thead><tr><th>Item</th><th style="text-align:right">Qty</th></tr></thead><tbody><tr><td>SIM Card Procurement</td><td style="text-align:right"><strong>${qty} Pcs</strong></td></tr></tbody></table><div class="footer"><div class="sig">Prepared By</div><div class="sig">Approved By</div></div></body></html>`);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); win.close(); }, 500);
     }
 
     $(document).ready(function() {
@@ -509,7 +562,7 @@ try {
         $('#customSearch').on('keyup', function() { table.search(this.value).draw(); });
         $('#customLength').on('change', function() { table.page.len(this.value).draw(); });
         $('#filterClient').on('change', function() { table.column(1).search(this.value).draw(); });
-        $('#filterProject').on('change', function() { table.column(1).search(this.value).draw(); });
+        $('#filterProject').on('change', function() { table.column(2).search(this.value).draw(); });
     });
 </script>
 
