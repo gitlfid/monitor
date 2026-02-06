@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_client_po.php
-// UPDATE: Fixed Search Bar Alignment & Centered Icons
+// UPDATE: Modern Search Bar, Precision Icons, Perfect Alignment
 // =========================================================================
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
@@ -83,160 +83,120 @@ try {
         --text-secondary: #64748b;
         --brand-color: #4f46e5;
         --brand-hover: #4338ca;
-        --tbl-header: #f8fafc;
+        --input-height: 44px; /* Fixed Height for Alignment */
     }
 
     body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-primary); }
 
-    /* CARD MODERN */
-    .card-modern { 
-        background: #fff; 
-        border: 1px solid var(--border-color); 
-        border-radius: 12px; 
-        box-shadow: 0 1px 3px rgba(0,0,0,0.02); 
-        margin-bottom: 24px; 
-        overflow: hidden; 
-    }
-    .card-header-modern { 
-        padding: 20px 24px; 
-        border-bottom: 1px solid var(--border-color); 
-        display: flex; justify-content: space-between; align-items: center; 
-        background: #fff; 
-    }
+    /* CARD STYLING */
+    .card-modern { background: #fff; border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); margin-bottom: 24px; overflow: hidden; }
+    .card-header-modern { padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #fff; }
 
-    /* FILTER BAR IMPROVED */
-    .filter-bar { background: #fff; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
-    .form-label-sm { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
-    
-    /* FIX: Search Input & Select Height Alignment */
-    .form-control, .form-select { 
-        border-color: #e2e8f0; 
-        font-size: 0.9rem; 
-        padding: 0.6rem 0.8rem; /* Konsisten padding */
-        border-radius: 8px; 
-        height: 42px; /* Force height agar sejajar */
-    }
-    .form-control:focus, .form-select:focus { 
-        border-color: var(--brand-color); 
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); 
-    }
-
-    /* FIX: Search Box with Icon Inside */
-    .search-input-group {
+    /* --- MODERN SEARCH BAR (FIXED) --- */
+    .search-wrapper {
         position: relative;
         width: 100%;
     }
-    .search-input-group i {
+    .search-icon {
         position: absolute;
-        left: 12px;
+        left: 14px;
         top: 50%;
         transform: translateY(-50%);
         color: #94a3b8;
-        font-size: 1rem;
+        font-size: 1.1rem;
         pointer-events: none;
     }
-    .search-input-group input {
-        padding-left: 38px; /* Geser teks agar tidak menumpuk dengan icon */
-    }
-
-    /* TABLE STYLING */
-    .table-responsive { border-radius: 0 0 12px 12px; overflow-x: auto; }
-    .table-modern { width: 100%; border-collapse: collapse; white-space: nowrap; }
-    
-    .table-modern th { 
-        background-color: var(--tbl-header); 
-        color: var(--text-secondary); 
-        font-size: 0.7rem; 
-        font-weight: 700; 
-        text-transform: uppercase; 
-        letter-spacing: 0.5px;
-        padding: 16px 24px; 
-        border-bottom: 1px solid var(--border-color); 
-        text-align: left;
-    }
-    
-    .table-modern td { 
-        padding: 18px 24px; 
-        vertical-align: middle; 
-        border-bottom: 1px solid var(--border-color); 
-        font-size: 0.9rem; 
+    .modern-input {
+        padding-left: 42px; /* Space for icon */
+        padding-right: 15px;
+        height: var(--input-height);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 0.9rem;
+        width: 100%;
         color: var(--text-primary);
+        transition: all 0.2s;
     }
-    .table-modern tr:last-child td { border-bottom: none; }
-    .table-modern tr:hover td { background-color: #fcfcfc; }
+    .modern-input:focus, .modern-select:focus {
+        border-color: var(--brand-color);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        outline: none;
+    }
+    .modern-select {
+        height: var(--input-height);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+        padding: 0 15px;
+        cursor: pointer;
+    }
 
-    /* FIX: Button Icon Centering */
+    /* --- PRECISION ICON BUTTONS --- */
     .btn-icon-soft { 
-        width: 36px; height: 36px; /* Kotak sempurna */
+        width: 36px; 
+        height: 36px; 
+        padding: 0;
         display: inline-flex; 
         align-items: center; 
-        justify-content: center; /* Center Horizontal & Vertikal */
+        justify-content: center; 
         border-radius: 8px; 
-        border: 1px solid #e2e8f0; 
+        border: 1px solid var(--border-color); 
         background: #fff; 
-        color: #64748b; 
+        color: var(--text-secondary); 
         transition: all 0.2s; 
         text-decoration: none;
-        padding: 0; /* Reset padding */
-        line-height: 0; /* Reset line height agar icon tidak turun */
     }
     .btn-icon-soft i {
-        font-size: 1.1rem;
-        display: block;
+        font-size: 1.15rem;
+        line-height: 1; /* Reset line height for centering */
+        display: flex;
     }
-    .btn-icon-soft:hover { background: #f8fafc; color: var(--text-primary); border-color: #cbd5e1; }
+    .btn-icon-soft:hover { background: #f8fafc; color: var(--text-primary); border-color: #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     
-    /* Specific Colors for File Icon */
-    .btn-file-icon {
-        color: var(--brand-color);
-        background: #eef2ff;
-        border-color: #c7d2fe;
-    }
-    .btn-file-icon:hover {
-        background: #e0e7ff;
-        border-color: #a5b4fc;
-        color: #4338ca;
-    }
+    .btn-file { color: var(--brand-color); background: #eef2ff; border-color: #c7d2fe; }
+    .btn-file:hover { background: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
 
-    /* COLUMN WIDTHS */
-    .w-date   { width: 15%; min-width: 160px; }
-    .w-client { width: 25%; min-width: 240px; } 
-    .w-prod   { width: 20%; min-width: 200px; }
-    .w-qty    { width: 10%; min-width: 100px; text-align: right !important; }
-    .w-file   { width: 10%; min-width: 80px; text-align: center !important; }
-    .w-action { width: 10%; min-width: 80px; text-align: center !important; }
+    /* TABLE */
+    .table-responsive { border-radius: 0 0 12px 12px; overflow-x: auto; }
+    .table-modern { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    .table-modern th { background-color: #f8fafc; color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 16px 24px; border-bottom: 1px solid var(--border-color); text-align: left; }
+    .table-modern td { padding: 18px 24px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; color: var(--text-primary); }
+    .table-modern tr:hover td { background-color: #fcfcfc; }
 
-    /* CONTENT STYLING */
+    /* BADGES & TEXT */
     .badge-po { font-family: 'Consolas', monospace; font-weight: 600; color: var(--brand-color); background: #eef2ff; padding: 4px 8px; border-radius: 6px; border: 1px solid #c7d2fe; font-size: 0.8rem; }
-    .badge-batch { font-size: 0.7rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; border: 1px solid #e2e8f0; text-transform: uppercase; }
-    .text-date { font-weight: 600; color: #64748b; font-size: 0.8rem; display: block; margin-bottom: 4px; }
+    .text-date { font-weight: 600; color: var(--text-secondary); font-size: 0.8rem; display: block; margin-bottom: 4px; }
     .client-name { font-weight: 700; color: #0f172a; display: block; margin-bottom: 3px; font-size: 0.9rem; }
-    .project-name { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 5px; }
+    .project-name { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
     .badge-product { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
-    .detail-text { font-size: 0.85rem; color: #64748b; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; display: block; }
-    .qty-text { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.95rem; color: #0f172a; }
-
+    
     /* CREATE BUTTON */
     .btn-primary-new { 
-        background: var(--brand-color); color: white; border: none; padding: 0 24px; height: 42px; /* Match filter height */
+        background: var(--brand-color); color: white; border: none; padding: 0 24px; height: var(--input-height);
         border-radius: 8px; font-weight: 600; font-size: 0.9rem; 
         box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); transition: 0.2s; 
         display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; 
     }
     .btn-primary-new:hover { background: var(--brand-hover); color: white; transform: translateY(-1px); }
 
-    /* MODAL */
+    /* FILTERS & MODAL */
+    .filter-bar { background: #fff; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
+    .form-label-sm { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
     .modal-content { border: none; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
     .modal-header { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
     .modal-body { padding: 24px; background-color: #f8fafc; }
     .card-form { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; height: 100%; }
     .modal-footer { padding: 16px 24px; background: #fff; border-top: 1px solid #e2e8f0; }
+    
+    /* Bootstrap Reset */
+    .form-control, .form-select { border-color: var(--border-color); border-radius: 8px; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-4 px-1">
     <div>
         <h4 class="mb-1 fw-bold text-dark">Client Purchase Orders</h4>
-        <p class="text-muted mb-0 small">Track and manage incoming client orders efficiently.</p>
+        <p class="text-muted mb-0 small">Manage and track incoming client orders.</p>
     </div>
     <button class="btn-primary-new" onclick="openAddModal()">
         <i class="bi bi-plus-lg"></i> Create New PO
@@ -250,7 +210,7 @@ try {
             <h6 class="fw-bold m-0">Order Volume Analysis</h6>
         </div>
         <?php if(empty($js_chart_series) || array_sum($js_chart_series) == 0): ?>
-            <div class="text-center py-5 bg-light rounded text-muted small">No data available to display.</div>
+            <div class="text-center py-5 bg-light rounded text-muted small">No chart data available.</div>
         <?php else: ?>
             <div id="clientChart" style="height: 260px;"></div>
         <?php endif; ?>
@@ -269,23 +229,23 @@ try {
         <div class="row g-3">
             <div class="col-md-3">
                 <label class="form-label-sm">Search</label>
-                <div class="search-input-group">
-                    <i class="bi bi-search"></i>
-                    <input type="text" id="customSearch" class="form-control" placeholder="Type keyword...">
+                <div class="search-wrapper">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" id="customSearch" class="modern-input" placeholder="Keyword...">
                 </div>
             </div>
             <div class="col-md-3">
                 <label class="form-label-sm">Client</label>
-                <select id="filterClient" class="form-select"><option value="">All Clients</option><?php foreach($clients as $c): ?><option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option><?php endforeach; ?></select>
+                <select id="filterClient" class="form-select modern-select"><option value="">All Clients</option><?php foreach($clients as $c): ?><option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option><?php endforeach; ?></select>
             </div>
             <div class="col-md-3">
                 <label class="form-label-sm">Project</label>
-                <select id="filterProject" class="form-select"><option value="">All Projects</option><?php $unique_projects = []; foreach($projects_raw as $p) $unique_projects[$p['project_name']] = $p['project_name']; foreach($unique_projects as $pname): ?><option value="<?= htmlspecialchars($pname) ?>"><?= htmlspecialchars($pname) ?></option><?php endforeach; ?></select>
+                <select id="filterProject" class="form-select modern-select"><option value="">All Projects</option><?php $unique_projects = []; foreach($projects_raw as $p) $unique_projects[$p['project_name']] = $p['project_name']; foreach($unique_projects as $pname): ?><option value="<?= htmlspecialchars($pname) ?>"><?= htmlspecialchars($pname) ?></option><?php endforeach; ?></select>
             </div>
             <div class="col-md-3 text-end d-flex align-items-end justify-content-end">
                 <div class="d-flex align-items-center">
                     <span class="small text-muted me-2 fw-bold text-uppercase" style="font-size: 0.7rem;">Show</span>
-                    <select id="customLength" class="form-select w-auto"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select>
+                    <select id="customLength" class="form-select modern-select w-auto"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select>
                 </div>
             </div>
         </div>
@@ -295,12 +255,12 @@ try {
         <table class="table-modern" id="table-client">
             <thead>
                 <tr>
-                    <th class="w-date ps-4">Date & PO Info</th>
-                    <th class="w-client">Client & Project</th>
-                    <th class="w-prod">Product & Details</th>
-                    <th class="w-qty">Quantity</th>
-                    <th class="w-file">File</th>
-                    <th class="w-action pe-4">Action</th>
+                    <th style="width: 15%; min-width: 160px;" class="ps-4">Date & PO Info</th>
+                    <th style="width: 25%; min-width: 240px;">Client & Project</th>
+                    <th style="width: 20%; min-width: 200px;">Product & Details</th>
+                    <th style="width: 10%; min-width: 100px; text-align: right;">Qty</th>
+                    <th style="width: 10%; min-width: 80px; text-align: center;">File</th>
+                    <th style="width: 10%; min-width: 80px; text-align: center;" class="pe-4">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -308,7 +268,6 @@ try {
                     $q_fmt = number_format((int)preg_replace('/[^0-9]/', '', $row['sim_qty']));
                     $d_val = (!empty($row['po_date']) && $row['po_date'] != '0000-00-00') ? $row['po_date'] : $row['created_at'];
                     $p_date = date('d M Y', strtotime($d_val));
-                    
                     $prod = !empty($row['product_name']) ? htmlspecialchars($row['product_name']) : 'General';
                     $detail = !empty($row['detail']) ? htmlspecialchars($row['detail']) : '-';
                     $batch = htmlspecialchars($row['batch_name'] ?? '-');
@@ -317,29 +276,33 @@ try {
                     <td class="ps-4">
                         <span class="text-date"><?= $p_date ?></span>
                         <span class="badge-po"><?= htmlspecialchars($row['po_number']) ?></span>
-                        <div class="mt-1"><span class="badge-batch"><?= $batch ?></span></div>
+                        <div class="mt-1" style="font-size: 0.75rem; color: #64748b;">Batch: <span class="fw-bold text-dark"><?= $batch ?></span></div>
                     </td>
                     <td>
-                        <span class="client-name"><?= htmlspecialchars($row['display_company'] ?? '-') ?></span>
+                        <span class="client-name text-truncate" style="max-width: 220px;" title="<?= htmlspecialchars($row['display_company']) ?>">
+                            <?= htmlspecialchars($row['display_company'] ?? '-') ?>
+                        </span>
                         <div class="project-name">
-                            <i class="bi bi-folder2 text-warning me-1"></i> 
-                            <?= htmlspecialchars($row['display_project'] ?? '-') ?>
+                            <i class="bi bi-folder2 text-warning"></i> 
+                            <span class="text-truncate" style="max-width: 200px;"><?= htmlspecialchars($row['display_project'] ?? '-') ?></span>
                         </div>
                     </td>
                     <td>
                         <span class="badge-product"><?= $prod ?></span>
-                        <span class="detail-text" title="<?= $detail ?>"><?= $detail ?></span>
+                        <span class="d-block small text-secondary text-truncate fst-italic" style="max-width: 200px;" title="<?= $detail ?>">
+                            <?= $detail ?>
+                        </span>
                     </td>
                     <td style="text-align: right;">
-                        <span class="qty-text"><?= $q_fmt ?></span>
+                        <span class="fw-bold text-dark fs-6 font-monospace"><?= $q_fmt ?></span>
                     </td>
                     <td style="text-align: center;">
                         <?php if(!empty($row['po_file'])): ?>
-                            <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="btn-icon-soft btn-file-icon" title="View Document">
+                            <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="btn-icon-soft btn-file" title="View Document">
                                 <i class="bi bi-file-earmark-text-fill"></i>
                             </a>
                         <?php else: ?>
-                            <span class="text-muted opacity-25"><i class="bi bi-dash"></i></span>
+                            <span class="text-muted opacity-25"><i class="bi bi-dash-lg"></i></span>
                         <?php endif; ?>
                     </td>
                     <td style="text-align: center;" class="pe-4">
@@ -352,7 +315,7 @@ try {
                                 <li><a class="dropdown-item py-2 px-3" href="#" onclick='openToProviderModal(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-box-seam me-2 text-info"></i> Send to Provider</a></li>
                                 <li><a class="dropdown-item py-2 px-3" href="#" onclick='printPO(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)'><i class="bi bi-printer me-2 text-secondary"></i> Print Document</a></li>
                                 <li><hr class="dropdown-divider my-1"></li>
-                                <li><a class="dropdown-item py-2 px-3 text-danger" href="process_sim_tracking.php?action=delete&id=<?= $row['id'] ?>&type=client" onclick="return confirm('Are you sure you want to delete this record?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
+                                <li><a class="dropdown-item py-2 px-3 text-danger" href="process_sim_tracking.php?action=delete&id=<?= $row['id'] ?>&type=client" onclick="return confirm('Delete this record?')"><i class="bi bi-trash me-2"></i> Delete</a></li>
                             </ul>
                         </div>
                     </td>
@@ -370,7 +333,7 @@ try {
         <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
             <input type="hidden" name="action" value="create"><input type="hidden" name="type" value="client">
             <div class="modal-header bg-primary text-white py-3">
-                <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Create New PO</h6>
+                <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Create New Client PO</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
