@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Smart Filter Logic for Activation/Termination)
+// DESC: Dashboard & Manager (Fixed Logs & Smart Filter Logic)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -136,8 +136,13 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <div id="toastCont"></div>
 
 <div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div><h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
-    <button class="btn btn-primary-pro" onclick="openUploadModal()"><i class="bi bi-cloud-upload-fill me-2"></i> Upload Batch</button>
+    <div>
+        <h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3>
+        <p class="text-muted small m-0">Inventory Management Dashboard</p>
+    </div>
+    <button class="btn btn-primary-pro" onclick="openUploadModal()">
+        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload New Batch
+    </button>
 </div>
 
 <div class="row g-4 px-4 mb-4">
@@ -288,7 +293,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col"><label class="small fw-bold text-muted">Batch Name</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div>
+                        <div class="col"><label class="small fw-bold text-muted">Batch Name (Auto)</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div>
                         <div class="col"><label class="small fw-bold text-muted">Date</label><input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required></div>
                     </div>
 
@@ -329,7 +334,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     function fetchBatchInfo(id) { if(!id){$('#batchInput').val('');return;} $.post('process_sim_tracking.php', {action:'get_po_details', id:id}, function(res){ if(res.status==='success'){$('#batchInput').val(res.batch_name||'BATCH 1');} else{toast('error',res.message);$('#batchInput').val('');} },'json'); }
     $('#formUploadMaster').on('submit', function(e){ e.preventDefault(); let fd=new FormData(this); if($('#batchInput').val()===''){toast('error','Batch Name Missing');return;} $('#btnUp').prop('disabled',true); $('#pgCont').slideDown(); $.ajax({xhr:function(){var x=new window.XMLHttpRequest();x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100);$('#pgBar').css('width',p+'%');$('#pgTxt').text(p+'%');}},false);return x;},type:'POST',url:'process_sim_tracking.php',data:fd,contentType:false,processData:false,dataType:'json',success:function(r){if(r.status==='success'){$('#pgBar').addClass('bg-success');toast('success',r.message);setTimeout(()=>location.reload(),1500);}else{$('#pgBar').addClass('bg-danger');toast('error',r.message);$('#btnUp').prop('disabled',false).text('Retry');}},error:function(x){toast('error',x.responseText);$('#btnUp').prop('disabled',false).text('Retry');}}); });
 
-    // --- MANAGER LOGIC (SMART CONTEXT FILTER) ---
+    // --- MANAGER LOGIC (UNIFIED VIEW) ---
     let cId=0, cMode='', cBatch='', cPage=1, totalPages=1, cSearch='';
     
     function openMgr(d,m) { 
@@ -338,9 +343,9 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         
-        // Setup Button Color & Filter Hint
+        // Setup Button Color
         let btnClass = (m === 'activate') ? 'btn-success' : 'btn-danger';
-        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminated';
+        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminate';
         let hintMsg = (m === 'activate') 
             ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' 
             : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
@@ -366,28 +371,26 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         if(n > 0 && n <= totalPages) { cPage = n; loadData(); }
     }
 
-    // MAIN LOAD DATA FUNCTION
     function loadData() {
         $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Loading data...</div></div>');
         $('#selCount').text(0);
         
-        // CALL BACKEND WITH target_action PARAMETER
         $.post('process_sim_tracking.php', {
             action:'fetch_sims', 
             po_id:cId, 
             search_bulk:cSearch, 
             page:cPage,
-            target_action: cMode // This triggers the backend filter logic
+            target_action: cMode // SEND MODE TO BACKEND
         }, function(res){
             if(res.status==='success'){
-                // 1. UPDATE SUMMARY STATS (These always show totals, regardless of filter)
+                // 1. UPDATE SUMMARY STATS
                 if(res.stats) {
                     $('#stTotal').text(parseInt(res.stats.total).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated).toLocaleString());
                 }
 
-                // 2. RENDER LIST (Filtered by Context)
+                // 2. RENDER LIST
                 let h=''; 
                 if(res.data.length===0) {
                     let emptyMsg = (cMode === 'activate') ? 'No available SIMs to activate.' : 'No active SIMs to terminate.';
@@ -437,7 +440,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         if(d.stats) {
             let s = d.stats;
-            $('#logStatsContainer').html(`<div class="log-summary"><div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(s.total).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(s.active).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(s.terminated).toLocaleString()}</div></div></div>`);
+            $('#logStatsContainer').html(`<div class="log-summary"><div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(s.total).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(s.active).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(s.term).toLocaleString()}</div></div></div>`);
         }
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); new bootstrap.Modal(document.getElementById('modalLog')).show();
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
