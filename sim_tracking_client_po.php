@@ -1,28 +1,54 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_client_po.php
-// UPDATE: Modern Search Bar, Precision Icons, Perfect Alignment
+// DESC: Client Purchase Order Management (Full Feature & UI Precision)
 // =========================================================================
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 $current_page = 'sim_tracking_client_po.php';
 
+// INCLUDE SYSTEM FILES
 if (file_exists('includes/config.php')) require_once 'includes/config.php';
 require_once 'includes/header.php'; 
 require_once 'includes/sidebar.php'; 
 
-// Database Connection
-$db = null; $db_type = '';
-$candidates = ['pdo', 'conn', 'db', 'link', 'mysqli'];
-foreach ($candidates as $var) { if (isset($$var)) { if ($$var instanceof PDO) { $db = $$var; $db_type = 'pdo'; break; } if ($$var instanceof mysqli) { $db = $$var; $db_type = 'mysqli'; break; } } if (isset($GLOBALS[$var])) { if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } } }
-if (!$db && defined('DB_HOST')) { try { $db = new PDO("mysql:host=".DB_HOST.";dbname=".DB_NAME, DB_USER, DB_PASS); $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); $db_type = 'pdo'; } catch (Exception $e) {} }
+// DATABASE CONNECTION SETUP
+$db = null; 
+$db_type = '';
 
-// FETCH DATA
+// Auto-detect connection variable from includes
+$candidates = ['pdo', 'conn', 'db', 'link', 'mysqli'];
+foreach ($candidates as $var) { 
+    if (isset($$var)) { 
+        if ($$var instanceof PDO) { $db = $$var; $db_type = 'pdo'; break; } 
+        if ($$var instanceof mysqli) { $db = $$var; $db_type = 'mysqli'; break; } 
+    } 
+    if (isset($GLOBALS[$var])) { 
+        if ($GLOBALS[$var] instanceof PDO) { $db = $GLOBALS[$var]; $db_type = 'pdo'; break; } 
+        if ($GLOBALS[$var] instanceof mysqli) { $db = $GLOBALS[$var]; $db_type = 'mysqli'; break; } 
+    } 
+}
+
+// Fallback connection if not found
+if (!$db && defined('DB_HOST')) { 
+    try { 
+        $db = new PDO("mysql:host=".DB_HOST.";dbname=".DB_NAME, DB_USER, DB_PASS); 
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); 
+        $db_type = 'pdo'; 
+    } catch (Exception $e) {
+        die("Database Connection Error: " . $e->getMessage());
+    } 
+}
+
+// -------------------------------------------------------------------------
+// DATA FETCHING LOGIC
+// -------------------------------------------------------------------------
 $data = [];
 $chart_data_grouped = [];
 $existing_products = []; 
 
 try {
+    // 1. MAIN QUERY: FETCH CLIENT PO DATA
     $sql = "SELECT st.*, 
             COALESCE(c.company_name, st.manual_company_name) as display_company,
             COALESCE(p.project_name, st.manual_project_name) as display_project
@@ -34,41 +60,63 @@ try {
 
     if ($db_type === 'pdo') {
         $data = $db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        
+        // 2. FETCH PRODUCTS FOR DATALIST (AUTO-COMPLETE)
         $prodSql = "SELECT DISTINCT product_name FROM sim_tracking_po WHERE product_name IS NOT NULL AND product_name != '' ORDER BY product_name ASC";
         $existing_products = $db->query($prodSql)->fetchAll(PDO::FETCH_COLUMN);
     } else {
+        // MySQLi Version
         $res = mysqli_query($db, $sql);
         if ($res) { while ($row = mysqli_fetch_assoc($res)) $data[] = $row; }
+        
         $prodRes = mysqli_query($db, "SELECT DISTINCT product_name FROM sim_tracking_po WHERE product_name IS NOT NULL AND product_name != '' ORDER BY product_name ASC");
         while($r = mysqli_fetch_assoc($prodRes)) $existing_products[] = $r['product_name'];
     }
 
+    // 3. PROCESS CHART DATA (Group by Date)
     foreach ($data as $row) {
         $raw_date = (!empty($row['po_date']) && $row['po_date'] != '0000-00-00') ? $row['po_date'] : $row['created_at'];
         $date_label = date('d M Y', strtotime($raw_date));
         $qty = (int)preg_replace('/[^0-9]/', '', $row['sim_qty']);
-        if (!isset($chart_data_grouped[$date_label])) $chart_data_grouped[$date_label] = 0;
+        
+        if (!isset($chart_data_grouped[$date_label])) {
+            $chart_data_grouped[$date_label] = 0;
+        }
         $chart_data_grouped[$date_label] += $qty;
     }
-    $chart_data_grouped = array_reverse(array_slice($chart_data_grouped, 0, 7, true));
-} catch (Exception $e) {}
+    // Take last 7 entries for chart
+    $chart_data_grouped = array_reverse(array_slice($chart_data_grouped, 0, 10, true));
+
+} catch (Exception $e) {
+    echo "<div class='alert alert-danger'>Error Fetching Data: " . $e->getMessage() . "</div>";
+}
 
 $js_chart_labels = array_keys($chart_data_grouped);
 $js_chart_series = array_values($chart_data_grouped);
 
-// DROPDOWN DATA
-$clients = []; $providers = []; $projects_raw = [];
+// 4. FETCH DROPDOWN OPTIONS (CLIENTS, PROVIDERS, PROJECTS)
+$clients = []; 
+$providers = []; 
+$projects_raw = [];
+
 try {
     if ($db_type === 'pdo') {
         $clients = $db->query("SELECT id, company_name FROM companies WHERE company_type='client' ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         if(empty($clients)) $clients = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        
         $providers = $db->query("SELECT id, company_name FROM companies WHERE company_type='provider' ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
         if(empty($providers)) $providers = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+        
         $projects_raw = $db->query("SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC")->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $r1 = mysqli_query($db, "SELECT id, company_name FROM companies WHERE company_type='client' ORDER BY company_name ASC"); while($r=mysqli_fetch_assoc($r1))$clients[]=$r;
-        $r2 = mysqli_query($db, "SELECT id, company_name FROM companies WHERE company_type='provider' ORDER BY company_name ASC"); while($r=mysqli_fetch_assoc($r2))$providers[]=$r;
-        $r3 = mysqli_query($db, "SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC"); while($r=mysqli_fetch_assoc($r3))$projects_raw[]=$r;
+        $r1 = mysqli_query($db, "SELECT id, company_name FROM companies WHERE company_type='client' ORDER BY company_name ASC"); 
+        while($r=mysqli_fetch_assoc($r1))$clients[]=$r;
+        
+        $r2 = mysqli_query($db, "SELECT id, company_name FROM companies WHERE company_type='provider' ORDER BY company_name ASC"); 
+        while($r=mysqli_fetch_assoc($r2))$providers[]=$r;
+        
+        $r3 = mysqli_query($db, "SELECT id, project_name, company_id FROM projects ORDER BY project_name ASC"); 
+        while($r=mysqli_fetch_assoc($r3))$projects_raw[]=$r;
     }
 } catch (Exception $e) {}
 ?>
@@ -83,95 +131,103 @@ try {
         --text-secondary: #64748b;
         --brand-color: #4f46e5;
         --brand-hover: #4338ca;
-        --input-height: 44px; /* Fixed Height for Alignment */
+        --tbl-header: #f8fafc;
+        --input-height: 44px;
     }
 
     body { background-color: var(--bg-body); font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-primary); }
 
     /* CARD STYLING */
-    .card-modern { background: #fff; border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); margin-bottom: 24px; overflow: hidden; }
-    .card-header-modern { padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #fff; }
-
-    /* --- MODERN SEARCH BAR (FIXED) --- */
-    .search-wrapper {
-        position: relative;
-        width: 100%;
-    }
-    .search-icon {
-        position: absolute;
-        left: 14px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #94a3b8;
-        font-size: 1.1rem;
-        pointer-events: none;
-    }
-    .modern-input {
-        padding-left: 42px; /* Space for icon */
-        padding-right: 15px;
-        height: var(--input-height);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        font-size: 0.9rem;
-        width: 100%;
-        color: var(--text-primary);
-        transition: all 0.2s;
-    }
-    .modern-input:focus, .modern-select:focus {
-        border-color: var(--brand-color);
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        outline: none;
-    }
-    .modern-select {
-        height: var(--input-height);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        font-size: 0.9rem;
-        color: var(--text-primary);
-        padding: 0 15px;
-        cursor: pointer;
-    }
-
-    /* --- PRECISION ICON BUTTONS --- */
-    .btn-icon-soft { 
-        width: 36px; 
-        height: 36px; 
-        padding: 0;
-        display: inline-flex; 
-        align-items: center; 
-        justify-content: center; 
-        border-radius: 8px; 
-        border: 1px solid var(--border-color); 
+    .card-modern { 
         background: #fff; 
-        color: var(--text-secondary); 
-        transition: all 0.2s; 
-        text-decoration: none;
+        border: 1px solid var(--border-color); 
+        border-radius: 12px; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02); 
+        margin-bottom: 24px; 
+        overflow: hidden; 
     }
-    .btn-icon-soft i {
-        font-size: 1.15rem;
-        line-height: 1; /* Reset line height for centering */
-        display: flex;
+    .card-header-modern { 
+        padding: 20px 24px; 
+        border-bottom: 1px solid var(--border-color); 
+        display: flex; justify-content: space-between; align-items: center; 
+        background: #fff; 
     }
+
+    /* SEARCH BAR PRECISION */
+    .search-wrapper { position: relative; width: 100%; }
+    .search-icon { 
+        position: absolute; left: 14px; top: 50%; transform: translateY(-50%); 
+        color: #94a3b8; font-size: 1.1rem; pointer-events: none; 
+    }
+    .modern-input { 
+        padding-left: 42px; padding-right: 15px; height: var(--input-height); 
+        border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem; 
+        width: 100%; color: var(--text-primary); transition: all 0.2s; 
+    }
+    .modern-input:focus, .modern-select:focus { 
+        border-color: var(--brand-color); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); outline: none; 
+    }
+    .modern-select { 
+        height: var(--input-height); border: 1px solid var(--border-color); 
+        border-radius: 8px; font-size: 0.9rem; color: var(--text-primary); 
+        padding: 0 15px; cursor: pointer; 
+    }
+
+    /* TABLE STYLING */
+    .table-responsive { border-radius: 0 0 12px 12px; overflow-x: auto; }
+    .table-modern { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    
+    .table-modern th { 
+        background-color: var(--tbl-header); color: var(--text-secondary); 
+        font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; 
+        padding: 16px 24px; border-bottom: 1px solid var(--border-color); text-align: left; 
+    }
+    .table-modern td { 
+        padding: 18px 24px; vertical-align: middle; 
+        border-bottom: 1px solid var(--border-color); font-size: 0.9rem; color: var(--text-primary); 
+    }
+    .table-modern tr:hover td { background-color: #fcfcfc; }
+
+    /* COLUMN WIDTHS (FIXED FOR PRECISION) */
+    .w-date   { width: 15%; min-width: 160px; }
+    .w-client { width: 25%; min-width: 240px; } 
+    .w-prod   { width: 20%; min-width: 200px; }
+    .w-qty    { width: 10%; min-width: 100px; text-align: right !important; }
+    .w-file   { width: 10%; min-width: 80px; text-align: center !important; }
+    .w-action { width: 10%; min-width: 80px; text-align: center !important; }
+
+    /* TEXT & BADGES */
+    .badge-po { 
+        font-family: 'Consolas', monospace; font-weight: 600; color: var(--brand-color); 
+        background: #eef2ff; padding: 4px 8px; border-radius: 6px; border: 1px solid #c7d2fe; font-size: 0.8rem; 
+    }
+    .badge-batch { 
+        font-size: 0.7rem; background: #f1f5f9; color: #475569; 
+        padding: 2px 8px; border-radius: 4px; border: 1px solid #e2e8f0; text-transform: uppercase; 
+    }
+    .text-date { font-weight: 600; color: #64748b; font-size: 0.8rem; display: block; margin-bottom: 4px; }
+    .client-name { font-weight: 700; color: #0f172a; display: block; margin-bottom: 3px; font-size: 0.9rem; }
+    .project-name { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 6px; }
+    .badge-product { 
+        background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; 
+        font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; 
+        display: inline-block; margin-bottom: 4px; 
+    }
+    .detail-text { font-size: 0.85rem; color: #64748b; font-style: italic; white-space: normal; line-height: 1.3; max-width: 250px; display: block; }
+    .qty-text { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.95rem; color: #0f172a; }
+
+    /* ACTION BUTTONS (CENTERED) */
+    .btn-icon-soft { 
+        width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; 
+        border-radius: 8px; border: 1px solid var(--border-color); background: #fff; color: #64748b; 
+        transition: all 0.2s; text-decoration: none; 
+    }
+    .btn-icon-soft i { font-size: 1.15rem; line-height: 1; display: flex; }
     .btn-icon-soft:hover { background: #f8fafc; color: var(--text-primary); border-color: #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     
     .btn-file { color: var(--brand-color); background: #eef2ff; border-color: #c7d2fe; }
     .btn-file:hover { background: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
 
-    /* TABLE */
-    .table-responsive { border-radius: 0 0 12px 12px; overflow-x: auto; }
-    .table-modern { width: 100%; border-collapse: collapse; white-space: nowrap; }
-    .table-modern th { background-color: #f8fafc; color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 16px 24px; border-bottom: 1px solid var(--border-color); text-align: left; }
-    .table-modern td { padding: 18px 24px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; color: var(--text-primary); }
-    .table-modern tr:hover td { background-color: #fcfcfc; }
-
-    /* BADGES & TEXT */
-    .badge-po { font-family: 'Consolas', monospace; font-weight: 600; color: var(--brand-color); background: #eef2ff; padding: 4px 8px; border-radius: 6px; border: 1px solid #c7d2fe; font-size: 0.8rem; }
-    .text-date { font-weight: 600; color: var(--text-secondary); font-size: 0.8rem; display: block; margin-bottom: 4px; }
-    .client-name { font-weight: 700; color: #0f172a; display: block; margin-bottom: 3px; font-size: 0.9rem; }
-    .project-name { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
-    .badge-product { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
-    
-    /* CREATE BUTTON */
     .btn-primary-new { 
         background: var(--brand-color); color: white; border: none; padding: 0 24px; height: var(--input-height);
         border-radius: 8px; font-weight: 600; font-size: 0.9rem; 
@@ -180,7 +236,7 @@ try {
     }
     .btn-primary-new:hover { background: var(--brand-hover); color: white; transform: translateY(-1px); }
 
-    /* FILTERS & MODAL */
+    /* LAYOUT UTILS */
     .filter-bar { background: #fff; padding: 20px 24px; border-bottom: 1px solid var(--border-color); }
     .form-label-sm { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
     .modal-content { border: none; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
@@ -189,14 +245,14 @@ try {
     .card-form { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; height: 100%; }
     .modal-footer { padding: 16px 24px; background: #fff; border-top: 1px solid #e2e8f0; }
     
-    /* Bootstrap Reset */
+    /* Bootstrap Fixes */
     .form-control, .form-select { border-color: var(--border-color); border-radius: 8px; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-4 px-1">
     <div>
         <h4 class="mb-1 fw-bold text-dark">Client Purchase Orders</h4>
-        <p class="text-muted mb-0 small">Manage and track incoming client orders.</p>
+        <p class="text-muted mb-0 small">Manage and track incoming client orders efficiently.</p>
     </div>
     <button class="btn-primary-new" onclick="openAddModal()">
         <i class="bi bi-plus-lg"></i> Create New PO
@@ -210,7 +266,7 @@ try {
             <h6 class="fw-bold m-0">Order Volume Analysis</h6>
         </div>
         <?php if(empty($js_chart_series) || array_sum($js_chart_series) == 0): ?>
-            <div class="text-center py-5 bg-light rounded text-muted small">No chart data available.</div>
+            <div class="text-center py-5 bg-light rounded text-muted small">No data available to display.</div>
         <?php else: ?>
             <div id="clientChart" style="height: 260px;"></div>
         <?php endif; ?>
@@ -231,21 +287,39 @@ try {
                 <label class="form-label-sm">Search</label>
                 <div class="search-wrapper">
                     <i class="bi bi-search search-icon"></i>
-                    <input type="text" id="customSearch" class="modern-input" placeholder="Keyword...">
+                    <input type="text" id="customSearch" class="modern-input" placeholder="Type keyword...">
                 </div>
             </div>
             <div class="col-md-3">
                 <label class="form-label-sm">Client</label>
-                <select id="filterClient" class="form-select modern-select"><option value="">All Clients</option><?php foreach($clients as $c): ?><option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option><?php endforeach; ?></select>
+                <select id="filterClient" class="form-select modern-select">
+                    <option value="">All Clients</option>
+                    <?php foreach($clients as $c): ?>
+                        <option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-md-3">
                 <label class="form-label-sm">Project</label>
-                <select id="filterProject" class="form-select modern-select"><option value="">All Projects</option><?php $unique_projects = []; foreach($projects_raw as $p) $unique_projects[$p['project_name']] = $p['project_name']; foreach($unique_projects as $pname): ?><option value="<?= htmlspecialchars($pname) ?>"><?= htmlspecialchars($pname) ?></option><?php endforeach; ?></select>
+                <select id="filterProject" class="form-select modern-select">
+                    <option value="">All Projects</option>
+                    <?php 
+                        $unique_projects = []; 
+                        foreach($projects_raw as $p) $unique_projects[$p['project_name']] = $p['project_name']; 
+                        foreach($unique_projects as $pname): 
+                    ?>
+                        <option value="<?= htmlspecialchars($pname) ?>"><?= htmlspecialchars($pname) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-md-3 text-end d-flex align-items-end justify-content-end">
                 <div class="d-flex align-items-center">
                     <span class="small text-muted me-2 fw-bold text-uppercase" style="font-size: 0.7rem;">Show</span>
-                    <select id="customLength" class="form-select modern-select w-auto"><option value="10">10</option><option value="50">50</option><option value="100">100</option></select>
+                    <select id="customLength" class="form-select modern-select w-auto">
+                        <option value="10">10</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
                 </div>
             </div>
         </div>
@@ -255,12 +329,12 @@ try {
         <table class="table-modern" id="table-client">
             <thead>
                 <tr>
-                    <th style="width: 15%; min-width: 160px;" class="ps-4">Date & PO Info</th>
-                    <th style="width: 25%; min-width: 240px;">Client & Project</th>
-                    <th style="width: 20%; min-width: 200px;">Product & Details</th>
-                    <th style="width: 10%; min-width: 100px; text-align: right;">Qty</th>
-                    <th style="width: 10%; min-width: 80px; text-align: center;">File</th>
-                    <th style="width: 10%; min-width: 80px; text-align: center;" class="pe-4">Action</th>
+                    <th class="w-date ps-4">Date & PO Info</th>
+                    <th class="w-client">Client & Project</th>
+                    <th class="w-prod">Product & Details</th>
+                    <th class="w-qty">Qty</th>
+                    <th class="w-file">File</th>
+                    <th class="w-action pe-4">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -326,12 +400,17 @@ try {
     </div>
 </div>
 
-<datalist id="product_list"><?php foreach($existing_products as $prod): ?><option value="<?= htmlspecialchars($prod) ?>"><?php endforeach; ?></datalist>
+<datalist id="product_list">
+    <?php foreach($existing_products as $prod): ?>
+        <option value="<?= htmlspecialchars($prod) ?>">
+    <?php endforeach; ?>
+</datalist>
 
 <div class="modal fade" id="modalAdd" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
-            <input type="hidden" name="action" value="create"><input type="hidden" name="type" value="client">
+            <input type="hidden" name="action" value="create">
+            <input type="hidden" name="type" value="client">
             <div class="modal-header bg-primary text-white py-3">
                 <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Create New Client PO</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -339,38 +418,84 @@ try {
             <div class="modal-body">
                 <div class="d-flex justify-content-center mb-4">
                     <div class="btn-group bg-white shadow-sm p-1 rounded-pill border">
-                        <input type="radio" class="btn-check" name="add_input_mode" id="add_mode_datapool" value="datapool" checked onchange="toggleInputMode('add')"><label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_datapool">Database</label>
-                        <input type="radio" class="btn-check" name="add_input_mode" id="add_mode_manual" value="manual" onchange="toggleInputMode('add')"><label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_manual">Manual</label>
+                        <input type="radio" class="btn-check" name="add_input_mode" id="add_mode_datapool" value="datapool" checked onchange="toggleInputMode('add')">
+                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_datapool">Database</label>
+                        <input type="radio" class="btn-check" name="add_input_mode" id="add_mode_manual" value="manual" onchange="toggleInputMode('add')">
+                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="add_mode_manual">Manual</label>
                     </div>
                 </div>
                 <div class="row g-4 h-100">
-                    <div class="col-md-6 d-flex"><div class="card-form w-100">
-                        <h6 class="text-uppercase text-primary fw-bold small mb-3 border-bottom pb-2">Client Info</h6>
-                        <div id="add_section_datapool">
-                            <div class="mb-3"><label class="form-label-sm">Client Name</label><select name="company_id" id="add_company_id" class="form-select" onchange="filterProjects('add')"><option value="">-- Select --</option><?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?></select></div>
-                            <div class="mb-3"><label class="form-label-sm">Project</label><select name="project_id" id="add_project_id" class="form-select"><option value="">-- Select --</option></select></div>
+                    <div class="col-md-6 d-flex">
+                        <div class="card-form w-100">
+                            <h6 class="text-uppercase text-primary fw-bold small mb-3 border-bottom pb-2">Client Info</h6>
+                            <div id="add_section_datapool">
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Client Name</label>
+                                    <select name="company_id" id="add_company_id" class="form-select" onchange="filterProjects('add')">
+                                        <option value="">-- Select --</option>
+                                        <?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Project</label>
+                                    <select name="project_id" id="add_project_id" class="form-select">
+                                        <option value="">-- Select --</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="add_section_manual" class="d-none">
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Client Name</label>
+                                    <input type="text" name="manual_company_name" id="add_manual_company" class="form-control">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Project Name</label>
+                                    <input type="text" name="manual_project_name" id="add_manual_project" class="form-control">
+                                </div>
+                            </div>
+                            <h6 class="text-uppercase text-primary fw-bold small mt-4 mb-3 border-bottom pb-2">Product Info</h6>
+                            <div class="mb-3">
+                                <label class="form-label-sm">Product</label>
+                                <input type="text" name="product_name" class="form-control" list="product_list" placeholder="Search or Type...">
+                            </div>
+                            <div>
+                                <label class="form-label-sm">Detail</label>
+                                <textarea name="detail" class="form-control" rows="2" placeholder="e.g. Specification..."></textarea>
+                            </div>
                         </div>
-                        <div id="add_section_manual" class="d-none">
-                            <div class="mb-3"><label class="form-label-sm">Client Name</label><input type="text" name="manual_company_name" id="add_manual_company" class="form-control"></div>
-                            <div class="mb-3"><label class="form-label-sm">Project Name</label><input type="text" name="manual_project_name" id="add_manual_project" class="form-control"></div>
+                    </div>
+                    <div class="col-md-6 d-flex">
+                        <div class="card-form w-100">
+                            <h6 class="text-uppercase text-primary fw-bold small mb-3 border-bottom pb-2">Order Details</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label-sm">Date</label>
+                                    <input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label-sm">Qty</label>
+                                    <input type="number" name="sim_qty" class="form-control fw-bold" placeholder="0">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-sm">PO Number</label>
+                                <input type="text" name="po_number" class="form-control font-monospace" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-sm">Batch Name</label>
+                                <input type="text" name="batch_name" class="form-control" required>
+                            </div>
+                            <div>
+                                <label class="form-label-sm">Attachment</label>
+                                <input type="file" name="po_file" class="form-control">
+                            </div>
                         </div>
-                        <h6 class="text-uppercase text-primary fw-bold small mt-4 mb-3 border-bottom pb-2">Product Info</h6>
-                        <div class="mb-3"><label class="form-label-sm">Product</label><input type="text" name="product_name" class="form-control" list="product_list" placeholder="Search or Type..."></div>
-                        <div><label class="form-label-sm">Detail</label><textarea name="detail" class="form-control" rows="2" placeholder="e.g. Specification..."></textarea></div>
-                    </div></div>
-                    <div class="col-md-6 d-flex"><div class="card-form w-100">
-                        <h6 class="text-uppercase text-primary fw-bold small mb-3 border-bottom pb-2">Order Details</h6>
-                        <div class="row g-2 mb-3">
-                            <div class="col-6"><label class="form-label-sm">Date</label><input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>"></div>
-                            <div class="col-6"><label class="form-label-sm">Qty</label><input type="number" name="sim_qty" class="form-control fw-bold" placeholder="0"></div>
-                        </div>
-                        <div class="mb-3"><label class="form-label-sm">PO Number</label><input type="text" name="po_number" class="form-control font-monospace" required></div>
-                        <div class="mb-3"><label class="form-label-sm">Batch Name</label><input type="text" name="batch_name" class="form-control" required></div>
-                        <div><label class="form-label-sm">Attachment</label><input type="file" name="po_file" class="form-control"></div>
-                    </div></div>
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer bg-white border-top"><button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Save Record</button></div>
+            <div class="modal-footer bg-white border-top">
+                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Save Record</button>
+            </div>
         </form>
     </div>
 </div>
@@ -378,39 +503,96 @@ try {
 <div class="modal fade" id="modalEdit" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
-            <input type="hidden" name="action" value="update"><input type="hidden" name="type" value="client"><input type="hidden" name="id" id="edit_id"><input type="hidden" name="existing_file" id="edit_existing_file">
-            <div class="modal-header bg-warning text-dark py-3"><h6 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit PO</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <input type="hidden" name="action" value="update">
+            <input type="hidden" name="type" value="client">
+            <input type="hidden" name="id" id="edit_id">
+            <input type="hidden" name="existing_file" id="edit_existing_file">
+            
+            <div class="modal-header bg-warning text-dark py-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit PO</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
             <div class="modal-body">
                 <div class="d-flex justify-content-center mb-4">
                     <div class="btn-group bg-white shadow-sm p-1 rounded-pill border">
-                        <input type="radio" class="btn-check" name="edit_input_mode" id="edit_mode_datapool" value="datapool" onchange="toggleInputMode('edit')"><label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="edit_mode_datapool">Database</label>
-                        <input type="radio" class="btn-check" name="edit_input_mode" id="edit_mode_manual" value="manual" onchange="toggleInputMode('edit')"><label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="edit_mode_manual">Manual</label>
+                        <input type="radio" class="btn-check" name="edit_input_mode" id="edit_mode_datapool" value="datapool" onchange="toggleInputMode('edit')">
+                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="edit_mode_datapool">Database</label>
+                        <input type="radio" class="btn-check" name="edit_input_mode" id="edit_mode_manual" value="manual" onchange="toggleInputMode('edit')">
+                        <label class="btn btn-sm btn-light rounded-pill fw-bold px-4" for="edit_mode_manual">Manual</label>
                     </div>
                 </div>
                 <div class="row g-4 h-100">
-                    <div class="col-md-6 d-flex"><div class="card-form w-100">
-                        <h6 class="text-uppercase text-warning fw-bold small mb-3 border-bottom pb-2">Client & Product</h6>
-                        <div id="edit_section_datapool">
-                            <div class="mb-3"><label class="form-label-sm">Client</label><select name="company_id" id="edit_company_id" class="form-select" onchange="filterProjects('edit')"><option value="">-- Select --</option><?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?></select></div>
-                            <div class="mb-3"><label class="form-label-sm">Project</label><select name="project_id" id="edit_project_id" class="form-select"><option value="">-- Select --</option></select></div>
+                    <div class="col-md-6 d-flex">
+                        <div class="card-form w-100">
+                            <h6 class="text-uppercase text-warning fw-bold small mb-3 border-bottom pb-2">Client & Product</h6>
+                            <div id="edit_section_datapool">
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Client</label>
+                                    <select name="company_id" id="edit_company_id" class="form-select" onchange="filterProjects('edit')">
+                                        <option value="">-- Select --</option>
+                                        <?php foreach($clients as $c) echo "<option value='{$c['id']}'>{$c['company_name']}</option>"; ?>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Project</label>
+                                    <select name="project_id" id="edit_project_id" class="form-select">
+                                        <option value="">-- Select --</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="edit_section_manual" class="d-none">
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Client</label>
+                                    <input type="text" name="manual_company_name" id="edit_manual_company" class="form-control">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label-sm">Project</label>
+                                    <input type="text" name="manual_project_name" id="edit_manual_project" class="form-control">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-sm">Product</label>
+                                <input type="text" name="product_name" id="edit_product_name" class="form-control" list="product_list">
+                            </div>
+                            <div>
+                                <label class="form-label-sm">Detail</label>
+                                <textarea name="detail" id="edit_detail" class="form-control" rows="2"></textarea>
+                            </div>
                         </div>
-                        <div id="edit_section_manual" class="d-none">
-                            <div class="mb-3"><label class="form-label-sm">Client</label><input type="text" name="manual_company_name" id="edit_manual_company" class="form-control"></div>
-                            <div class="mb-3"><label class="form-label-sm">Project</label><input type="text" name="manual_project_name" id="edit_manual_project" class="form-control"></div>
+                    </div>
+                    <div class="col-md-6 d-flex">
+                        <div class="card-form w-100">
+                            <h6 class="text-uppercase text-warning fw-bold small mb-3 border-bottom pb-2">Order Details</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label-sm">Date</label>
+                                    <input type="date" name="po_date" id="edit_po_date" class="form-control">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label-sm">Qty</label>
+                                    <input type="number" name="sim_qty" id="edit_sim_qty" class="form-control">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-sm">PO No</label>
+                                <input type="text" name="po_number" id="edit_po_number" class="form-control font-monospace">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-sm">Batch</label>
+                                <input type="text" name="batch_name" id="edit_batch_name" class="form-control">
+                            </div>
+                            <div>
+                                <label class="form-label-sm">File</label>
+                                <input type="file" name="po_file" class="form-control">
+                                <small id="current_file_info" class="text-muted d-block mt-1 fst-italic"></small>
+                            </div>
                         </div>
-                        <div class="mb-3"><label class="form-label-sm">Product</label><input type="text" name="product_name" id="edit_product_name" class="form-control" list="product_list"></div>
-                        <div><label class="form-label-sm">Detail</label><textarea name="detail" id="edit_detail" class="form-control" rows="2"></textarea></div>
-                    </div></div>
-                    <div class="col-md-6 d-flex"><div class="card-form w-100">
-                        <h6 class="text-uppercase text-warning fw-bold small mb-3 border-bottom pb-2">Order Details</h6>
-                        <div class="row g-2 mb-3"><div class="col-6"><label class="form-label-sm">Date</label><input type="date" name="po_date" id="edit_po_date" class="form-control"></div><div class="col-6"><label class="form-label-sm">Qty</label><input type="number" name="sim_qty" id="edit_sim_qty" class="form-control"></div></div>
-                        <div class="mb-3"><label class="form-label-sm">PO No</label><input type="text" name="po_number" id="edit_po_number" class="form-control font-monospace"></div>
-                        <div class="mb-3"><label class="form-label-sm">Batch</label><input type="text" name="batch_name" id="edit_batch_name" class="form-control"></div>
-                        <div><label class="form-label-sm">File</label><input type="file" name="po_file" class="form-control"><small id="current_file_info" class="text-muted d-block mt-1 fst-italic"></small></div>
-                    </div></div>
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer bg-white border-top"><button type="submit" class="btn btn-warning px-4 fw-bold shadow-sm">Update Changes</button></div>
+            <div class="modal-footer bg-white border-top">
+                <button type="submit" class="btn btn-warning px-4 fw-bold shadow-sm">Update Changes</button>
+            </div>
         </form>
     </div>
 </div>
@@ -418,29 +600,58 @@ try {
 <div class="modal fade" id="modalToProvider" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg">
-            <input type="hidden" name="action" value="create_provider_from_client"><input type="hidden" name="link_client_po_id" id="tp_client_po_id">
-            <div class="modal-header bg-success text-white py-3"><h6 class="modal-title fw-bold"><i class="bi bi-truck me-2"></i>To Provider</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <input type="hidden" name="action" value="create_provider_from_client">
+            <input type="hidden" name="link_client_po_id" id="tp_client_po_id">
+            
+            <div class="modal-header bg-success text-white py-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-truck me-2"></i>To Provider</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
             <div class="modal-body p-4 bg-light">
                 <div class="alert alert-white border-success shadow-sm d-flex align-items-center mb-4">
                     <i class="bi bi-arrow-right-circle-fill fs-3 text-success me-3"></i>
-                    <div><small class="text-uppercase text-muted fw-bold">Source Reference</small><div class="fw-bold text-dark"><span id="tp_display_client"></span> | <span id="tp_display_po" class="font-monospace"></span></div></div>
+                    <div>
+                        <small class="text-uppercase text-muted fw-bold">Source Reference</small>
+                        <div class="fw-bold text-dark"><span id="tp_display_client"></span> | <span id="tp_display_po" class="font-monospace"></span></div>
+                    </div>
                 </div>
                 <div class="card border-0 shadow-sm p-3">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label-sm">Provider</label>
-                            <select name="provider_company_id" class="form-select mb-2" required><option value="">-- Choose --</option><?php foreach($providers as $p): ?><option value="<?= $p['id'] ?>"><?= $p['company_name'] ?></option><?php endforeach; ?></select>
+                            <select name="provider_company_id" class="form-select mb-2" required>
+                                <option value="">-- Choose --</option>
+                                <?php foreach($providers as $p): ?>
+                                    <option value="<?= $p['id'] ?>"><?= $p['company_name'] ?></option>
+                                <?php endforeach; ?>
+                            </select>
                             <input type="text" name="manual_provider_name" class="form-control form-control-sm" placeholder="Or Manual Name">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label-sm">Provider PO No.</label><input type="text" name="provider_po_number" class="form-control mb-2" required>
-                            <div class="row"><div class="col-6"><label class="form-label-sm">Date</label><input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>"></div><div class="col-6"><label class="form-label-sm">Qty</label><input type="number" name="sim_qty" id="tp_sim_qty" class="form-control" required></div></div>
+                            <label class="form-label-sm">Provider PO No.</label>
+                            <input type="text" name="provider_po_number" class="form-control mb-2" required>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label-sm">Date</label>
+                                    <input type="date" name="po_date" class="form-control" value="<?= date('Y-m-d') ?>">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label-sm">Qty</label>
+                                    <input type="number" name="sim_qty" id="tp_sim_qty" class="form-control" required>
+                                </div>
+                            </div>
                         </div>
-                        <input type="hidden" name="batch_name" id="tp_batch_name"><div class="col-12"><label class="form-label-sm">File</label><input type="file" name="po_file" class="form-control"></div>
+                        <input type="hidden" name="batch_name" id="tp_batch_name">
+                        <div class="col-12">
+                            <label class="form-label-sm">File</label>
+                            <input type="file" name="po_file" class="form-control">
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer bg-white border-top"><button type="submit" class="btn btn-success px-4 fw-bold shadow-sm">Process Transfer</button></div>
+            <div class="modal-footer bg-white border-top">
+                <button type="submit" class="btn btn-success px-4 fw-bold shadow-sm">Process Transfer</button>
+            </div>
         </form>
     </div>
 </div>
@@ -455,6 +666,7 @@ try {
     const chartLabels = <?php echo json_encode($js_chart_labels); ?>;
     const chartSeries = <?php echo json_encode($js_chart_series); ?>;
 
+    // 1. Chart Rendering
     if (chartSeries.length > 0) {
         new ApexCharts(document.querySelector('#clientChart'), {
             series: [{ name: 'Quantity', data: chartSeries }],
@@ -469,6 +681,7 @@ try {
         }).render();
     }
 
+    // 2. Logic Toggle Input (Database / Manual)
     function toggleInputMode(mode) {
         let isDP = $('#' + mode + '_mode_datapool').is(':checked');
         if (isDP) {
@@ -480,6 +693,7 @@ try {
         }
     }
 
+    // 3. Logic Filter Projects based on Company
     function filterProjects(mode, selId = null) {
         let compId = $('#' + mode + '_company_id').val();
         let projSel = $('#' + mode + '_project_id');
@@ -494,6 +708,7 @@ try {
         }
     }
 
+    // 4. Modal Functions
     function openAddModal() {
         $('#add_mode_datapool').prop('checked', true); toggleInputMode('add'); 
         $('#add_company_id').val(''); $('#add_manual_company').val('');
@@ -528,15 +743,14 @@ try {
     function openToProviderModal(data) {
         $('#tp_client_po_id').val(data.id);
         $('#tp_display_client').text(data.display_company || 'Manual');
-        $('#tp_display_project').text(data.display_project || '-');
         $('#tp_display_po').text(data.po_number);
-        $('#tp_display_batch').text(data.batch_name || '-');
         let qtyClean = String(data.sim_qty).replace(/[^0-9]/g, '');
         $('#tp_sim_qty').val(qtyClean);
         $('#tp_batch_name').val(data.batch_name);
         new bootstrap.Modal(document.getElementById('modalToProvider')).show();
     }
 
+    // 5. Print Function
     function printPO(data) {
         let poDate = data.po_date ? new Date(data.po_date).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : '-';
         let qty = new Intl.NumberFormat('id-ID').format(String(data.sim_qty).replace(/[^0-9]/g, ''));
@@ -551,6 +765,7 @@ try {
         setTimeout(() => { win.print(); win.close(); }, 500);
     }
 
+    // 6. DataTables Init
     $(document).ready(function() {
         var table = $('#table-client').DataTable({
             language: { search: '', searchPlaceholder: '' },
