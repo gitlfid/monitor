@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Single Page Manager + Stats Visuals)
+// DESC: Frontend Dashboard (Smart Filter Logic for Activation/Termination)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -207,7 +207,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     </button>
                     
                     <div class="alert alert-info small mb-0 p-2 border-0 bg-info-subtle">
-                        <i class="bi bi-info-circle me-1"></i> Use this to find specific SIMs to activate or terminate.
+                        <i class="bi bi-info-circle me-1"></i> <span id="hintText">Use this to find specific SIMs.</span>
                     </div>
                 </div>
                 
@@ -329,7 +329,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     function fetchBatchInfo(id) { if(!id){$('#batchInput').val('');return;} $.post('process_sim_tracking.php', {action:'get_po_details', id:id}, function(res){ if(res.status==='success'){$('#batchInput').val(res.batch_name||'BATCH 1');} else{toast('error',res.message);$('#batchInput').val('');} },'json'); }
     $('#formUploadMaster').on('submit', function(e){ e.preventDefault(); let fd=new FormData(this); if($('#batchInput').val()===''){toast('error','Batch Name Missing');return;} $('#btnUp').prop('disabled',true); $('#pgCont').slideDown(); $.ajax({xhr:function(){var x=new window.XMLHttpRequest();x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100);$('#pgBar').css('width',p+'%');$('#pgTxt').text(p+'%');}},false);return x;},type:'POST',url:'process_sim_tracking.php',data:fd,contentType:false,processData:false,dataType:'json',success:function(r){if(r.status==='success'){$('#pgBar').addClass('bg-success');toast('success',r.message);setTimeout(()=>location.reload(),1500);}else{$('#pgBar').addClass('bg-danger');toast('error',r.message);$('#btnUp').prop('disabled',false).text('Retry');}},error:function(x){toast('error',x.responseText);$('#btnUp').prop('disabled',false).text('Retry');}}); });
 
-    // --- MANAGER LOGIC (UNIFIED VIEW) ---
+    // --- MANAGER LOGIC (SMART CONTEXT FILTER) ---
     let cId=0, cMode='', cBatch='', cPage=1, totalPages=1, cSearch='';
     
     function openMgr(d,m) { 
@@ -338,10 +338,15 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         
-        // Setup Button Color
+        // Setup Button Color & Filter Hint
         let btnClass = (m === 'activate') ? 'btn-success' : 'btn-danger';
-        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminate';
-        $('#btnProc').removeClass('btn-success btn-danger').addClass(btnClass).text(btnText).prop('disabled',true);
+        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminated';
+        let hintMsg = (m === 'activate') 
+            ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' 
+            : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
+            
+        $('#btnProc').removeClass('btn-primary-pro btn-success btn-danger').addClass(btnClass).text(btnText).prop('disabled',true);
+        $('#hintText').html(hintMsg);
         
         // Reset Stats placeholders
         $('#stTotal').text('-'); $('#stActive').text('-'); $('#stTerm').text('-');
@@ -361,39 +366,46 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         if(n > 0 && n <= totalPages) { cPage = n; loadData(); }
     }
 
+    // MAIN LOAD DATA FUNCTION
     function loadData() {
         $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Loading data...</div></div>');
         $('#selCount').text(0);
         
+        // CALL BACKEND WITH target_action PARAMETER
         $.post('process_sim_tracking.php', {
             action:'fetch_sims', 
             po_id:cId, 
             search_bulk:cSearch, 
-            page:cPage
+            page:cPage,
+            target_action: cMode // This triggers the backend filter logic
         }, function(res){
             if(res.status==='success'){
-                // 1. UPDATE SUMMARY STATS
+                // 1. UPDATE SUMMARY STATS (These always show totals, regardless of filter)
                 if(res.stats) {
                     $('#stTotal').text(parseInt(res.stats.total).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated).toLocaleString());
                 }
 
-                // 2. RENDER LIST
+                // 2. RENDER LIST (Filtered by Context)
                 let h=''; 
-                if(res.data.length===0) h='<div class="text-center py-5 text-muted">No data found matching your criteria.</div>';
-                else res.data.forEach(s => { 
-                    let badgeClass = s.status==='Active'?'sb-active':(s.status==='Terminated'?'sb-term':'sb-avail');
-                    let dateInfo = s.activation_date ? `<small class="text-muted ms-2"><i class="bi bi-calendar-event"></i> ${s.activation_date}</small>` : '';
-                    
-                    h += `<div class="sim-item" onclick="togRow(this)">
-                            <div>
-                                <div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div>
-                                <div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div>
-                            </div>
-                            <input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()">
-                          </div>`; 
-                });
+                if(res.data.length===0) {
+                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs to activate.' : 'No active SIMs to terminate.';
+                    h = `<div class="text-center py-5 text-muted">${emptyMsg}</div>`;
+                } else {
+                    res.data.forEach(s => { 
+                        let badgeClass = s.status==='Active'?'sb-active':(s.status==='Terminated'?'sb-term':'sb-avail');
+                        let dateInfo = s.activation_date ? `<small class="text-muted ms-2"><i class="bi bi-calendar-event"></i> ${s.activation_date}</small>` : '';
+                        
+                        h += `<div class="sim-item" onclick="togRow(this)">
+                                <div>
+                                    <div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div>
+                                    <div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div>
+                                </div>
+                                <input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()">
+                              </div>`; 
+                    });
+                }
                 $('#sList').html(h);
                 
                 // 3. PAGINATION

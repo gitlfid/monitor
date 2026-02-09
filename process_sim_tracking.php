@@ -1,7 +1,7 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Fixed SQL Keyword 'TERMINATED' Error)
+// DESC: Backend Processor (Full Version - Logic Activation/Termination Fixed)
 // =======================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -38,10 +38,10 @@ $sql_inv = "CREATE TABLE IF NOT EXISTS sim_inventory (
 try { if ($db_type === 'pdo') $db->exec($sql_inv); else mysqli_query($db, $sql_inv); } catch (Exception $e) {}
 
 // =======================================================================
-// 2. AJAX HANDLERS
+// 2. AJAX HANDLERS (MODERN FEATURES)
 // =======================================================================
 
-// --- A. GET PO DETAILS ---
+// --- A. GET PO DETAILS (Untuk Auto-fill Batch di Upload) ---
 if ($action == 'get_po_details') {
     $id = $_POST['id'];
     try {
@@ -120,19 +120,37 @@ if ($action == 'upload_master_bulk') {
     } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); jsonResponse('error', $e->getMessage()); }
 }
 
-// --- C. FETCH SIMS (PERBAIKAN UTAMA DI SINI) ---
+// --- C. FETCH SIMS (UPDATED LOGIC: FILTER BY ACTION MODE) ---
 if ($action == 'fetch_sims') {
     $po_id = $_POST['po_id']; 
     $search = trim($_POST['search_bulk'] ?? '');
+    
+    // Parameter baru untuk Logic Filter
+    $target_action = $_POST['target_action'] ?? 'all'; // 'activate', 'terminate', atau 'all'
+
     $page = isset($_POST['page']) ? (int)$_POST['page'] : 1;
     $limit = 500; 
     $offset = ($page - 1) * $limit;
 
+    // Base Filter Query
     $where = " WHERE po_provider_id = ? ";
     $params = [$po_id];
 
+    // --- LOGIC FILTER STRICT ---
+    // 1. Jika mode 'activate', hanya tampilkan 'Available'
+    if ($target_action === 'activate') {
+        $where .= " AND status = 'Available' ";
+    }
+    // 2. Jika mode 'terminate', hanya tampilkan 'Active'
+    elseif ($target_action === 'terminate') {
+        $where .= " AND status = 'Active' ";
+    }
+    // Jika 'all', tampilkan semua (opsional, jika ingin view saja)
+
+    // Filter Search (Global Search)
     if (!empty($search)) {
         if (strpos($search, "\n") !== false || strpos($search, ",") !== false) {
+            // Bulk Search (Paste Multiple MSISDN)
             $nums = preg_split('/[\s,]+/', str_replace([',', ';'], "\n", $search));
             $nums = array_filter(array_map('trim', $nums)); $nums = array_unique($nums);
             if (!empty($nums)) {
@@ -141,6 +159,7 @@ if ($action == 'fetch_sims') {
                 $params = array_merge($params, $nums);
             }
         } else {
+            // Single Keyword Search
             $where .= " AND (msisdn LIKE ? OR iccid LIKE ?)";
             $params[] = "%$search%";
             $params[] = "%$search%";
@@ -148,8 +167,8 @@ if ($action == 'fetch_sims') {
     }
 
     try { 
-        // 1. STATISTIK (FIXED KEYWORD ERROR)
-        // Menggunakan tanda backtick ` ` pada alias active dan terminated
+        // 1. STATISTIK GLOBAL (Hitung Total, Active, Terminated untuk PO ini secara keseluruhan)
+        // Statistik ini TIDAK terpengaruh filter status agar user tetap tau progress keseluruhan
         $stats = ['total'=>0, 'active'=>0, 'terminated'=>0];
         if ($db_type === 'pdo') {
             $stmtStats = $db->prepare("SELECT 
@@ -161,7 +180,7 @@ if ($action == 'fetch_sims') {
             $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
         }
 
-        // 2. HITUNG TOTAL ROW (Pagination)
+        // 2. HITUNG TOTAL ROW (Sesuai Filter Status & Search)
         $countSql = "SELECT COUNT(*) as total FROM sim_inventory $where";
         if ($db_type === 'pdo') {
             $stmtCount = $db->prepare($countSql);
@@ -171,7 +190,7 @@ if ($action == 'fetch_sims') {
             $totalRows = 0; 
         }
 
-        // 3. AMBIL DATA
+        // 3. AMBIL DATA LIST (Limit & Offset)
         $sql = "SELECT id, msisdn, iccid, status, activation_date, termination_date 
                 FROM sim_inventory $where 
                 ORDER BY msisdn ASC 
@@ -254,7 +273,7 @@ if ($action == 'process_bulk_sim_action') {
 }
 
 // =======================================================================
-// 3. LEGACY HANDLERS (PO, LOGISTIC, COMPANY)
+// 3. LEGACY HANDLERS (PO, LOGISTIC, COMPANY) - TETAP UTUH
 // =======================================================================
 
 // A. PO CREATE/UPDATE
