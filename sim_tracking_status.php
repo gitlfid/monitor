@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Smart Filter Logic: Activation vs Termination)
+// DESC: Frontend Dashboard (Fixed Responsive Layout & Footer)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -22,7 +22,7 @@ $terminations_raw = [];
 $total_sys_sims = 0; $total_sys_act = 0; $total_sys_term = 0;
 
 if($db) {
-    // Dropdown Upload (All Providers)
+    // Dropdown Upload
     try { 
         $list_providers_new = $db->query("SELECT id, po_number, sim_qty FROM sim_tracking_po WHERE type='provider' ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC); 
     } catch(Exception $e){}
@@ -93,21 +93,37 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
 
-    /* MODAL MANAGER LAYOUT (SINGLE PAGE) */
-    .mgr-layout { display: flex; height: 85vh; max-height: 800px; }
-    .mgr-left { width: 30%; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 20px; display: flex; flex-direction: column; }
-    .mgr-right { width: 70%; padding: 0; display: flex; flex-direction: column; background: #fff; }
+    /* LAYOUT MODAL FIXED (FULL HEIGHT RESPONSIVE) */
+    .modal-content-full { height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+    .mgr-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; } /* FIX: Flex Grow to fill space */
+    
+    .mgr-left { width: 30%; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
+    .mgr-right { width: 70%; display: flex; flex-direction: column; background: #fff; min-width: 0; }
     
     /* SUMMARY VISUAL CARDS */
-    .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; }
-    .mgr-stat-item { flex: 1; padding: 20px 15px; text-align: center; border-right: 1px solid #e2e8f0; }
+    .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
+    .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; }
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 5px; }
-    .mgr-stat-val { font-size: 1.4rem; font-weight: 800; color: #334155; }
+    .mgr-stat-val { font-size: 1.25rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* CONTENT LIST */
-    .mgr-list-box { flex-grow: 1; overflow-y: auto; position: relative; } 
+    /* CONTENT LIST (SCROLLABLE AREA) */
+    .mgr-list-box { flex-grow: 1; overflow-y: auto; position: relative; min-height: 0; } 
+    
+    /* FOOTER FIXED (RESPONSIVE WRAP) */
+    .mgr-footer { 
+        padding: 15px 20px; 
+        border-top: 1px solid #e2e8f0; 
+        background: #fff; 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        flex-shrink: 0; /* Prevent shrinking */
+        flex-wrap: wrap; /* Allow wrapping on small screens */
+        gap: 10px;
+    }
+
     .sim-item { padding: 10px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
     .sim-item:hover { background: #f8fafc; }
     .sim-item.selected { background: #eff6ff; border-left: 4px solid #4f46e5; }
@@ -136,8 +152,13 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <div id="toastCont"></div>
 
 <div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div><h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
-    <button class="btn btn-primary-pro" onclick="openUploadModal()"><i class="bi bi-cloud-upload-fill me-2"></i> Upload Batch</button>
+    <div>
+        <h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3>
+        <p class="text-muted small m-0">Inventory Management Dashboard</p>
+    </div>
+    <button class="btn btn-primary-pro" onclick="openUploadModal()">
+        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch
+    </button>
 </div>
 
 <div class="row g-4 px-4 mb-4">
@@ -190,8 +211,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 
 <div class="modal fade" id="modalMgr" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content border-0 shadow" style="height:85vh; display:flex; flex-direction:column;">
-            
+        <div class="modal-content border-0 shadow modal-content-full">
             <div class="modal-header bg-white border-bottom">
                 <div><h6 class="modal-title fw-bold" id="mgrTitle">Manage SIMs</h6><div class="small text-muted" id="mgrSubtitle">-</div></div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -234,20 +254,20 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                         </div>
                     </div>
                     
-                    <div class="p-3 border-top bg-light d-flex align-items-center justify-content-between">
+                    <div class="mgr-footer">
                         <div class="d-flex align-items-center gap-2">
                             <button class="btn btn-sm btn-outline-secondary" onclick="changePage(-1)" id="btnPrev">Previous</button>
-                            <span class="small fw-bold mx-2" id="pageInfo">Page 1</span>
+                            <span class="small fw-bold mx-2 text-nowrap" id="pageInfo">Page 1</span>
                             <button class="btn btn-sm btn-outline-secondary" onclick="changePage(1)" id="btnNext">Next</button>
                         </div>
                         
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="text-end lh-1">
+                        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                            <div class="text-end lh-1 me-2 d-none d-md-block">
                                 <div class="small text-muted">Selected</div>
                                 <div class="fw-bold text-primary h5 m-0" id="selCount">0</div>
                             </div>
                             <input type="date" id="actDate" class="form-control form-control-sm w-auto" value="<?=date('Y-m-d')?>">
-                            <button class="btn px-4 fw-bold" id="btnProc" disabled onclick="doProc()">Execute</button>
+                            <button class="btn px-4 fw-bold text-nowrap" id="btnProc" disabled onclick="doProc()">Execute</button>
                         </div>
                     </div>
                 </div>
@@ -318,20 +338,18 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
 <script>
-    // HELPER: Toast Notification
     function toast(t,m){ 
-        let c=t==='success'?'toast-success':'toast-error'; 
-        let i=t==='success'?'bi-check-circle-fill text-success':'bi-exclamation-triangle-fill text-danger'; 
+        let c=t==='success'?'toast-success':'toast-error'; let i=t==='success'?'bi-check-circle-fill text-success':'bi-exclamation-triangle-fill text-danger';
         let h=`<div class="toast-item ${c}"><i class="bi ${i} fs-4"></i><div><div class="fw-bold text-uppercase">${t}</div><div class="small text-muted">${m}</div></div></div>`;
         $('#toastCont').append(h); setTimeout(()=>$('#toastCont').children().first().remove(), 4000); 
     }
 
-    // UPLOAD LOGIC
+    // UPLOAD
     function openUploadModal() { $('#formUploadMaster')[0].reset(); $('#pgCont').hide(); $('#btnUp').prop('disabled',false).text('Start Upload'); $('#batchInput').val(''); new bootstrap.Modal(document.getElementById('modalUpload')).show(); }
     function fetchBatchInfo(id) { if(!id){$('#batchInput').val('');return;} $.post('process_sim_tracking.php', {action:'get_po_details', id:id}, function(res){ if(res.status==='success'){$('#batchInput').val(res.batch_name||'BATCH 1');} else{toast('error',res.message);$('#batchInput').val('');} },'json'); }
     $('#formUploadMaster').on('submit', function(e){ e.preventDefault(); let fd=new FormData(this); if($('#batchInput').val()===''){toast('error','Batch Name Missing');return;} $('#btnUp').prop('disabled',true); $('#pgCont').slideDown(); $.ajax({xhr:function(){var x=new window.XMLHttpRequest();x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100);$('#pgBar').css('width',p+'%');$('#pgTxt').text(p+'%');}},false);return x;},type:'POST',url:'process_sim_tracking.php',data:fd,contentType:false,processData:false,dataType:'json',success:function(r){if(r.status==='success'){$('#pgBar').addClass('bg-success');toast('success',r.message);setTimeout(()=>location.reload(),1500);}else{$('#pgBar').addClass('bg-danger');toast('error',r.message);$('#btnUp').prop('disabled',false).text('Retry');}},error:function(x){toast('error',x.responseText);$('#btnUp').prop('disabled',false).text('Retry');}}); });
 
-    // --- SMART MANAGER LOGIC ---
+    // MANAGER
     let cId=0, cMode='', cBatch='', cPage=1, totalPages=1, cSearch='';
     
     function openMgr(d,m) { 
@@ -340,17 +358,12 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         
-        // Setup Smart Filter Buttons
         let btnClass = (m === 'activate') ? 'btn-success' : 'btn-danger';
-        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminated';
-        let hintMsg = (m === 'activate') 
-            ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' 
-            : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
+        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminate';
+        let hintMsg = (m === 'activate') ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
             
         $('#btnProc').removeClass('btn-primary-pro btn-success btn-danger').addClass(btnClass).text(btnText).prop('disabled',true);
         $('#hintText').html(hintMsg);
-        
-        // Reset Stats
         $('#stTotal').text('-'); $('#stActive').text('-'); $('#stTerm').text('-');
         
         new bootstrap.Modal(document.getElementById('modalMgr')).show(); 
@@ -365,47 +378,30 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#selCount').text(0);
         
         $.post('process_sim_tracking.php', {
-            action:'fetch_sims', 
-            po_id:cId, 
-            search_bulk:cSearch, 
-            page:cPage,
-            target_action: cMode // CRITICAL: Send mode to backend for strict filtering
+            action:'fetch_sims', po_id:cId, search_bulk:cSearch, page:cPage, target_action: cMode
         }, function(res){
             if(res.status==='success'){
-                // STATS
                 if(res.stats) {
                     $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
-
-                // LIST
                 let h=''; 
                 if(res.data.length===0) {
-                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs found to activate.' : 'No active SIMs found to terminate.';
+                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs found.' : 'No active SIMs found.';
                     h = `<div class="text-center py-5 text-muted">${emptyMsg}</div>`;
                 } else {
                     res.data.forEach(s => { 
                         let badgeClass = s.status==='Active'?'sb-active':(s.status==='Terminated'?'sb-term':'sb-avail');
                         let dateInfo = s.activation_date ? `<small class="text-muted ms-2"><i class="bi bi-calendar-event"></i> ${s.activation_date}</small>` : '';
-                        
-                        h += `<div class="sim-item" onclick="togRow(this)">
-                                <div>
-                                    <div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div>
-                                    <div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div>
-                                </div>
-                                <input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()">
-                              </div>`; 
+                        h += `<div class="sim-item" onclick="togRow(this)"><div><div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div><div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div></div><input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()"></div>`; 
                     });
                 }
                 $('#sList').html(h);
-                
-                // PAGINATION
                 totalPages = res.total_pages;
                 $('#pageInfo').text(`Page ${cPage} of ${totalPages} (${res.total_rows} items)`);
                 $('#btnPrev').prop('disabled', cPage <= 1);
                 $('#btnNext').prop('disabled', cPage >= totalPages);
-                
             } else toast('error', res.message);
         },'json');
     }
@@ -426,20 +422,10 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     // LOGS
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
-        
-        // Populate Summary Stats
         let st = d.stats || {total:0, active:0, term:0};
-        $('#logStatsContainer').html(`
-            <div class="log-summary">
-                <div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div>
-                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div>
-                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div>
-            </div>
-        `);
-
+        $('#logStatsContainer').html(`<div class="log-summary"><div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div></div>`);
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
         new bootstrap.Modal(document.getElementById('modalLog')).show();
-        
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
                 let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs found.</div>';
@@ -452,7 +438,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     }
 
     const lbl=<?php echo json_encode($lbls??[]); ?>; const sa=<?php echo json_encode($s_a??[]); ?>; const st=<?php echo json_encode($s_t??[]); ?>;
-    if(lbl.length>0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:280,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
+    if(lbl.length > 0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:280,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
     
     const dz=document.getElementById('dropZone'), fi=document.getElementById('fIn');
     ['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.backgroundColor='#eef2ff';dz.style.borderColor='#4f46e5'},false));
