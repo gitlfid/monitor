@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Smart Dynamic Action Button)
+// DESC: Frontend Dashboard (Fixed Stats Label & Logs Display)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -83,6 +83,8 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-term:hover { background: #991b1b; color: #fff; }
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
+    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
+    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
     
     /* MODAL LAYOUT */
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
@@ -117,30 +119,25 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 
     .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; text-align: center; padding: 30px; cursor: pointer; position: relative; transition: 0.2s; }
     .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
-    
-    /* LOGS */
-    .log-summary { display: flex; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
-    .log-stat-box { flex: 1; text-align: center; border-right: 1px solid #e2e8f0; }
-    .log-stat-box:last-child { border-right: none; }
+    .prog-cont { display: none; margin-top: 20px; }
+    .prog-bar { height: 10px; background: #4f46e5; width: 0%; transition: width 0.2s; border-radius: 5px; }
     
     #toastCont { position: fixed; top: 20px; right: 20px; z-index: 9999; }
     .toast-item { min-width: 300px; padding: 15px; border-radius: 8px; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin-bottom: 10px; border-left: 4px solid; display: flex; gap: 12px; align-items: center; animation: slideIn 0.3s ease; }
     .toast-success { border-color: #10b981; } .toast-error { border-color: #ef4444; }
     @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
-    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
+    
+    /* LOGS */
+    .log-summary { display: flex; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+    .log-stat-box { flex: 1; text-align: center; border-right: 1px solid #e2e8f0; }
+    .log-stat-box:last-child { border-right: none; }
 </style>
 
 <div id="toastCont"></div>
 
 <div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div>
-        <h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3>
-        <p class="text-muted small m-0">Inventory Management Dashboard</p>
-    </div>
-    <button class="btn btn-primary-pro" onclick="openUploadModal()">
-        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch
-    </button>
+    <div><h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
+    <button class="btn btn-primary-pro" onclick="openUploadModal()"><i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch</button>
 </div>
 
 <div class="row g-4 px-4 mb-4">
@@ -204,8 +201,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             
             <div class="mgr-stats-row">
                 <div class="mgr-stat-item" id="btnFilterTotal" onclick="switchFilter('all')">
-                    <div class="mgr-stat-label">Total Inventory</div>
-                    <div class="mgr-stat-val" id="stTotal">-</div>
+                    <div class="mgr-stat-label">Total Available</div> <div class="mgr-stat-val" id="stTotal">-</div>
                 </div>
                 <div class="mgr-stat-item" id="btnFilterActive" onclick="switchFilter('terminate')">
                     <div class="mgr-stat-label text-success">Active</div>
@@ -300,7 +296,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         }
 
         $('#hintText').html(hint);
-        // Reset button state, logic moved to upd()
         $('#btnProc').prop('disabled', true).removeClass('btn-success btn-danger btn-secondary').addClass('btn-primary-pro').text('Select Items');
         loadData();
     }
@@ -318,18 +313,20 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             action:'fetch_sims', po_id:cId, search_bulk:cSearch, page:cPage, target_action: cMode
         }, function(res){
             if(res.status==='success'){
+                // STATS (TOTAL = AVAILABLE from Backend)
                 if(res.stats) {
                     $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
+                
                 let h=''; 
-                if(res.data.length===0) h='<div class="text-center py-5 text-muted">No data found.</div>';
+                if(res.data.length===0) h='<div class="text-center py-5 text-muted">No data found matching your criteria.</div>';
                 else {
                     res.data.forEach(s => { 
                         let badgeClass = s.status==='Active'?'sb-active':(s.status==='Terminated'?'sb-term':'sb-avail');
                         let dateInfo = s.activation_date ? `<small class="text-muted ms-2"><i class="bi bi-calendar-event"></i> ${s.activation_date}</small>` : '';
-                        // ADD data-status attribute for smart button logic
+                        
                         h += `<div class="sim-item" onclick="togRow(this)"><div><div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div><div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div></div><input type="checkbox" class="chk form-check-input" value="${s.id}" data-status="${s.status}" onclick="event.stopPropagation();upd()"></div>`; 
                     });
                 }
@@ -345,12 +342,10 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     function togRow(el) { let c=$(el).find('.chk'); c.prop('checked', !c.prop('checked')); upd(); }
     function toggleAll(el) { $('.chk').prop('checked', el.checked); upd(); }
 
-    // SMART DYNAMIC BUTTON LOGIC
     function upd() { 
         let chks = $('.chk:checked');
         let n = chks.length; 
         $('#selCount').text(n); 
-        
         $('.sim-item').removeClass('selected'); 
         chks.closest('.sim-item').addClass('selected');
 
@@ -360,11 +355,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             return;
         }
 
-        // Detect Status of Selected Items
-        let hasAvail = false;
-        let hasActive = false;
-        let hasTerm = false;
-
+        let hasAvail = false, hasActive = false, hasTerm = false;
         chks.each(function(){
             let st = $(this).data('status');
             if(st === 'Available') hasAvail = true;
@@ -372,24 +363,20 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             if(st === 'Terminated') hasTerm = true;
         });
 
-        // Determine Button State
         if (hasAvail && !hasActive && !hasTerm) {
-            // All selected are Available -> Activate
             btn.prop('disabled', false).removeClass('btn-danger btn-primary-pro btn-secondary').addClass('btn-success').text('Switch to Active');
             btn.data('action', 'activate'); 
         } else if (hasActive && !hasAvail && !hasTerm) {
-            // All selected are Active -> Terminate
             btn.prop('disabled', false).removeClass('btn-success btn-primary-pro btn-secondary').addClass('btn-danger').text('Switch to Terminated');
             btn.data('action', 'terminate');
         } else {
-            // Mixed or Invalid -> Disable
             btn.prop('disabled', true).removeClass('btn-success btn-danger').addClass('btn-secondary').text('Invalid Selection');
         }
     }
 
     function doProc() {
         let ids=[]; $('.chk:checked').each(function(){ids.push($(this).val())});
-        let action = $('#btnProc').data('action'); // Get determined action
+        let action = $('#btnProc').data('action');
         
         if(!action || ids.length === 0) return;
         if(!confirm(`Confirm ${action.toUpperCase()} for ${ids.length} items?`)) return;
@@ -398,7 +385,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $.post('process_sim_tracking.php', {
             action:'process_bulk_sim_action', 
             po_provider_id:cId, 
-            mode: action, // Use dynamic action
+            mode: action, 
             sim_ids:ids, 
             date_field:$('#actDate').val(), 
             batch_name:cBatch
@@ -411,13 +398,36 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         let st = d.stats || {total:0, active:0, term:0};
-        $('#logStatsContainer').html(`<div class="log-summary"><div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div></div>`);
+        
+        // FIXED LOGS SUMMARY
+        $('#logStatsContainer').html(`
+            <div class="log-summary">
+                <div class="log-stat-box"><div class="log-stat-label">Available</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div>
+            </div>
+        `);
+
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
         new bootstrap.Modal(document.getElementById('modalLog')).show();
+        
+        // FETCH LOGS EXECUTION
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
-                let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs found.</div>';
-                else r.data.forEach(l=>{ let c=l.type==='Activation'?'text-success':'text-danger'; h+=`<div class="list-group-item border-0 border-bottom py-3 px-0"><div class="d-flex justify-content-between align-items-center"><div><div class="fw-bold ${c}">${l.type}</div><div class="small text-muted">${l.batch} | ${l.date}</div></div><span class="fw-bold fs-5 text-dark">${parseInt(l.qty).toLocaleString()}</span></div></div>`; });
+                let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs recorded yet.</div>';
+                else r.data.forEach(l=>{ 
+                    let c=l.type==='Activation'?'text-success':'text-danger'; 
+                    // FIXED: Displaying Type & Batch Info Correctly
+                    h+=`<div class="list-group-item border-0 border-bottom py-3 px-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold ${c}">${l.type}</div>
+                                    <div class="small text-muted">${l.batch || 'Manual Action'} | ${l.date}</div>
+                                </div>
+                                <span class="fw-bold fs-5 text-dark">${parseInt(l.qty).toLocaleString()}</span>
+                            </div>
+                        </div>`; 
+                });
                 $('#logList').html(h);
             } else $('#logList').html('Error loading logs.');
         },'json');
