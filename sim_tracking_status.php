@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Fixed Stats Label & Logs Display)
+// DESC: Frontend Dashboard (Stats Label Fixed & Logs Display synced)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -14,7 +14,7 @@ require_once 'includes/sim_helper.php';
 $db = db_connect();
 function e($str) { return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8'); }
 
-// --- 1. FETCH DATA DASHBOARD ---
+// --- 1. FETCH DATA UTAMA DASHBOARD ---
 $list_providers_new = [];
 $dashboard_data = [];
 $activations_raw = [];
@@ -26,6 +26,7 @@ if($db) {
         $list_providers_new = $db->query("SELECT id, po_number, sim_qty FROM sim_tracking_po WHERE type='provider' ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC); 
     } catch(Exception $e){}
     
+    // Data Dashboard Utama
     $sql_main = "SELECT 
                     po.id as po_id, po.po_number as provider_po, po.batch_name as batch_name, po.sim_qty as total_pool,
                     client_po.po_number as client_po, c.company_name, p.project_name,
@@ -49,13 +50,14 @@ if($db) {
         }
     } catch(Exception $e){}
 
+    // Data Grafik
     try {
         $activations_raw = $db->query("SELECT * FROM sim_activations ORDER BY activation_date ASC")->fetchAll(PDO::FETCH_ASSOC);
         $terminations_raw = $db->query("SELECT * FROM sim_terminations ORDER BY termination_date ASC")->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {}
 }
 
-// Chart Data
+// Proses Data Grafik
 $cd_a=[]; $cd_t=[]; $lbls=[]; $s_a=[]; $s_t=[];
 foreach($activations_raw as $r){ $d=date('Y-m-d', strtotime($r['activation_date'])); if(!isset($cd_a[$d]))$cd_a[$d]=0; $cd_a[$d]+=$r['active_qty']; }
 foreach($terminations_raw as $r){ $d=date('Y-m-d', strtotime($r['termination_date'])); if(!isset($cd_t[$d]))$cd_t[$d]=0; $cd_t[$d]+=$r['terminated_qty']; }
@@ -67,43 +69,57 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; }
     
+    /* CARDS */
     .card-pro { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px; overflow: hidden; }
     .stat-card { padding: 24px; display: flex; align-items: center; gap: 20px; }
     .stat-icon { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
     
+    /* TABLE */
     .table-pro th { background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; font-weight: 700; }
     .table-pro td { padding: 18px 20px; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
     .progress-track { background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden; display: flex; width: 100%; margin-top: 8px; }
     .bar-seg { height: 100%; transition: width 0.6s ease; }
     .bg-a { background: #10b981; } .bg-t { background: #ef4444; } .bg-v { background: #cbd5e1; }
+    .text-act { color: #10b981; } .text-term { color: #ef4444; }
     
+    /* BUTTONS */
+    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
+    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
     .btn-act { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
     .btn-act:hover { background: #166534; color: #fff; }
     .btn-term { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
     .btn-term:hover { background: #991b1b; color: #fff; }
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
-    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
-    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
-    
-    /* MODAL LAYOUT */
+
+    /* LAYOUT MODAL */
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
+    
+    /* HEADER */
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* STATS */
+    /* STATS (CLICKABLE) */
     .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
-    .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s; position: relative; }
+    .mgr-stat-item { 
+        flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; 
+        cursor: pointer; transition: background 0.2s; position: relative;
+    }
     .mgr-stat-item:hover { background: #f8fafc; }
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-item.active { background: #eff6ff; }
     .mgr-stat-item.active::after { content:''; position:absolute; bottom:0; left:0; width:100%; height:3px; background:#4f46e5; }
+    
     .mgr-stat-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 5px; }
     .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* CONTENT */
+    /* CONTENT AREA */
     .mgr-layout { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+    
+    /* SEARCH BAR */
     .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+    
+    /* LIST */
     .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
     .sim-item { padding: 12px 25px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
     .sim-item:hover { background: #f8fafc; }
@@ -117,6 +133,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     /* FOOTER */
     .mgr-footer { padding: 15px 25px; border-top: 1px solid #e2e8f0; background: #fff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; flex-wrap: wrap; gap: 15px; }
 
+    /* UPLOAD & TOAST */
     .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; text-align: center; padding: 30px; cursor: pointer; position: relative; transition: 0.2s; }
     .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
     .prog-cont { display: none; margin-top: 20px; }
@@ -136,8 +153,13 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <div id="toastCont"></div>
 
 <div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div><h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
-    <button class="btn btn-primary-pro" onclick="openUploadModal()"><i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch</button>
+    <div>
+        <h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3>
+        <p class="text-muted small m-0">Inventory Management Dashboard</p>
+    </div>
+    <button class="btn btn-primary-pro" onclick="openUploadModal()">
+        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload Batch
+    </button>
 </div>
 
 <div class="row g-4 px-4 mb-4">
@@ -313,9 +335,9 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             action:'fetch_sims', po_id:cId, search_bulk:cSearch, page:cPage, target_action: cMode
         }, function(res){
             if(res.status==='success'){
-                // STATS (TOTAL = AVAILABLE from Backend)
+                // STATS (FROM BACKEND)
                 if(res.stats) {
-                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
+                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString()); // Displays Available Count
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
@@ -395,41 +417,46 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
+    // LOGS FETCH (MATCHED WITH NEW BACKEND)
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
-        let st = d.stats || {total:0, active:0, term:0};
         
-        // FIXED LOGS SUMMARY
+        // STATS FROM DATA ROW (Safe Int)
+        let st = {
+            total: parseInt(d.stats ? d.stats.total : 0),
+            active: parseInt(d.stats ? d.stats.active : 0),
+            term: parseInt(d.stats ? d.stats.terminated : 0)
+        };
+        
         $('#logStatsContainer').html(`
             <div class="log-summary">
-                <div class="log-stat-box"><div class="log-stat-label">Available</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div>
-                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div>
-                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label">Available</div><div class="log-stat-value">${st.total.toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${st.active.toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${st.term.toLocaleString()}</div></div>
             </div>
         `);
 
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
         new bootstrap.Modal(document.getElementById('modalLog')).show();
         
-        // FETCH LOGS EXECUTION
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
-                let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs recorded yet.</div>';
+                let h=''; if(!r.data || r.data.length===0) h='<div class="text-center p-4 text-muted">No logs recorded yet.</div>';
                 else r.data.forEach(l=>{ 
-                    let c=l.type==='Activation'?'text-success':'text-danger'; 
-                    // FIXED: Displaying Type & Batch Info Correctly
+                    let c = (l.type==='Activation') ? 'text-success' : 'text-danger'; 
+                    let batchInfo = l.batch ? l.batch : 'Manual Action';
                     h+=`<div class="list-group-item border-0 border-bottom py-3 px-0">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <div class="fw-bold ${c}">${l.type}</div>
-                                    <div class="small text-muted">${l.batch || 'Manual Action'} | ${l.date}</div>
+                                    <div class="small text-muted">${batchInfo} | ${l.date}</div>
                                 </div>
                                 <span class="fw-bold fs-5 text-dark">${parseInt(l.qty).toLocaleString()}</span>
                             </div>
                         </div>`; 
                 });
                 $('#logList').html(h);
-            } else $('#logList').html('Error loading logs.');
+            } else $('#logList').html('<div class="text-center p-4 text-danger">Error loading logs.</div>');
         },'json');
     }
 
