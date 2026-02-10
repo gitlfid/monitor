@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Clickable Stats & Dynamic Action Buttons)
+// DESC: Frontend Dashboard (Responsive Footer, Horizontal Search, Fixed Action Button)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -66,10 +66,12 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; }
     
+    /* CARDS */
     .card-pro { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px; overflow: hidden; }
     .stat-card { padding: 24px; display: flex; align-items: center; gap: 20px; }
     .stat-icon { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
     
+    /* TABLE */
     .table-pro th { background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; font-weight: 700; }
     .table-pro td { padding: 18px 20px; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
     .progress-track { background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden; display: flex; width: 100%; margin-top: 8px; }
@@ -87,12 +89,13 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
 
-    /* LAYOUT MODAL */
+    /* LAYOUT MODAL FIXED */
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     
+    /* 1. HEADER */
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* CLICKABLE STATS ROW */
+    /* 2. STATS ROW */
     .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
     .mgr-stat-item { 
         flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; 
@@ -109,20 +112,37 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
+    /* 3. LAYOUT CONTENT */
+    .mgr-layout { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+    
+    /* 4. SEARCH BAR */
     .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
+    /* 5. LIST */
     .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
     .sim-item { padding: 12px 25px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
     .sim-item:hover { background: #f8fafc; }
     .sim-item.selected { background: #eff6ff; border-left: 4px solid #4f46e5; padding-left: 21px; }
     
-    .mgr-footer { padding: 15px 25px; border-top: 1px solid #e2e8f0; background: #fff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; flex-wrap: wrap; gap: 15px; }
-
     .status-badge { font-size: 0.65rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; margin-left: 8px; letter-spacing: 0.3px; }
     .sb-avail { background: #f1f5f9; color: #64748b; }
     .sb-active { background: #dcfce7; color: #166534; }
     .sb-term { background: #fee2e2; color: #991b1b; }
 
+    /* 6. FOOTER FIXED (RESPONSIVE) */
+    .mgr-footer { 
+        padding: 15px 25px; 
+        border-top: 1px solid #e2e8f0; 
+        background: #fff; 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        flex-shrink: 0; 
+        flex-wrap: wrap; 
+        gap: 15px; 
+    }
+
+    /* UPLOAD & TOAST */
     .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; text-align: center; padding: 30px; cursor: pointer; position: relative; transition: 0.2s; }
     .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
     .prog-cont { display: none; margin-top: 20px; }
@@ -132,6 +152,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .toast-success { border-color: #10b981; } .toast-error { border-color: #ef4444; }
     @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
     
+    /* LOGS */
     .log-summary { display: flex; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
     .log-stat-box { flex: 1; text-align: center; border-right: 1px solid #e2e8f0; }
     .log-stat-box:last-child { border-right: none; }
@@ -205,32 +226,34 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             
             <div class="mgr-stats-row">
                 <div class="mgr-stat-item" id="btnFilterTotal" onclick="switchFilter('all')">
-                    <div class="mgr-stat-label">Total Inventory</div>
-                    <div class="mgr-stat-val" id="stTotal">-</div>
+                    <div class="mgr-stat-label">Total Inventory</div><div class="mgr-stat-val" id="stTotal">-</div>
                 </div>
-                <div class="mgr-stat-item" id="btnFilterActive" onclick="switchFilter('terminate')"> <div class="mgr-stat-label text-success">Active</div>
-                    <div class="mgr-stat-val val-act" id="stActive">-</div>
+                <div class="mgr-stat-item" id="btnFilterActive" onclick="switchFilter('terminate')"> <div class="mgr-stat-label text-success">Active</div><div class="mgr-stat-val val-act" id="stActive">-</div>
                 </div>
-                <div class="mgr-stat-item" id="btnFilterTerm" onclick="switchFilter('view_terminated')"> <div class="mgr-stat-label text-danger">Terminated</div>
-                    <div class="mgr-stat-val val-term" id="stTerm">-</div>
+                <div class="mgr-stat-item" id="btnFilterTerm" onclick="switchFilter('view_terminated')"> <div class="mgr-stat-label text-danger">Terminated</div><div class="mgr-stat-val val-term" id="stTerm">-</div>
                 </div>
             </div>
 
-            <div class="mgr-search-bar">
-                <div class="d-flex flex-column gap-2">
-                    <div class="d-flex gap-2 w-100">
-                        <textarea id="sKey" class="form-control" rows="1" placeholder="Paste MSISDNs / ICCIDs..." style="resize:none; height:40px;"></textarea>
-                        <button class="btn btn-dark fw-bold px-4" onclick="doSearch()"><i class="bi bi-search me-1"></i> Search</button>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted"><i class="bi bi-info-circle me-1"></i> <span id="hintText">Filtering data...</span></small>
-                        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="checkAll" onchange="toggleAll(this)"><label class="form-check-label small fw-bold" for="checkAll">Select All Loaded</label></div>
+            <div class="mgr-layout">
+                <div class="mgr-search-bar">
+                    <div class="d-flex flex-column gap-2">
+                        <div class="d-flex gap-2 w-100">
+                            <textarea id="sKey" class="form-control" rows="1" placeholder="Paste MSISDNs / ICCIDs..." style="resize:none; height:40px;"></textarea>
+                            <button class="btn btn-dark fw-bold px-4" onclick="doSearch()"><i class="bi bi-search me-1"></i> Search</button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted"><i class="bi bi-info-circle me-1"></i> <span id="hintText">Filtering data...</span></small>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="checkAll" onchange="toggleAll(this)">
+                                <label class="form-check-label small fw-bold" for="checkAll">Select All Loaded</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="mgr-list-box" id="sList">
-                <div class="text-center py-5 mt-5"><i class="bi bi-search display-4 text-light"></i><p class="mt-3">Loading data...</p></div>
+                <div class="mgr-list-box" id="sList">
+                    <div class="text-center py-5 mt-5"><i class="bi bi-search display-4 text-light"></i><p class="mt-3">Loading data...</p></div>
+                </div>
             </div>
             
             <div class="mgr-footer">
@@ -261,12 +284,11 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <script>
     function toast(t,m){ let c=t==='success'?'toast-success':'toast-error'; let i=t==='success'?'bi-check-circle-fill text-success':'bi-exclamation-triangle-fill text-danger'; let h=`<div class="toast-item ${c}"><i class="bi ${i} fs-4"></i><div><div class="fw-bold text-uppercase">${t}</div><div class="small text-muted">${m}</div></div></div>`; $('#toastCont').append(h); setTimeout(()=>$('#toastCont').children().first().remove(),4000); }
 
-    // UPLOAD
     function openUploadModal() { $('#formUploadMaster')[0].reset(); $('#pgCont').hide(); $('#btnUp').prop('disabled',false).text('Start Upload'); $('#batchInput').val(''); new bootstrap.Modal(document.getElementById('modalUpload')).show(); }
     function fetchBatchInfo(id) { if(!id){$('#batchInput').val('');return;} $.post('process_sim_tracking.php', {action:'get_po_details', id:id}, function(res){ if(res.status==='success'){$('#batchInput').val(res.batch_name||'BATCH 1');} else{toast('error',res.message);$('#batchInput').val('');} },'json'); }
     $('#formUploadMaster').on('submit', function(e){ e.preventDefault(); let fd=new FormData(this); if($('#batchInput').val()===''){toast('error','Batch Name Missing');return;} $('#btnUp').prop('disabled',true); $('#pgCont').slideDown(); $.ajax({xhr:function(){var x=new window.XMLHttpRequest();x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100);$('#pgBar').css('width',p+'%');$('#pgTxt').text(p+'%');}},false);return x;},type:'POST',url:'process_sim_tracking.php',data:fd,contentType:false,processData:false,dataType:'json',success:function(r){if(r.status==='success'){$('#pgBar').addClass('bg-success');toast('success',r.message);setTimeout(()=>location.reload(),1500);}else{$('#pgBar').addClass('bg-danger');toast('error',r.message);$('#btnUp').prop('disabled',false).text('Retry');}},error:function(x){toast('error',x.responseText);$('#btnUp').prop('disabled',false).text('Retry');}}); });
 
-    // MANAGER LOGIC (CLICKABLE STATS)
+    // --- MANAGER LOGIC ---
     let cId=0, cMode='', cBatch='', cPage=1, totalPages=1, cSearch='';
     
     function openMgr(d, m) { 
@@ -274,25 +296,18 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrTitle').text('Manage SIMs'); 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
-        
-        switchFilter(m); // Init Filter based on button clicked
-        
+        switchFilter(m);
         new bootstrap.Modal(document.getElementById('modalMgr')).show(); 
     }
 
-    // SWITCH FILTER & UPDATE UI
     function switchFilter(mode) {
         cMode = mode; cPage = 1;
-        
-        // 1. Reset Active State
         $('.mgr-stat-item').removeClass('active');
-        
-        // 2. Set Active State & Button Logic
         let btnText = '', btnClass = '', hint = '', isDisabled = false;
         
         if(mode === 'activate') {
-            $('#btnFilterTotal').addClass('active'); // Activate uses "Available" which is subset of total context
-            btnText = 'Switch to Active'; btnClass = 'btn-success';
+            $('#btnFilterTotal').addClass('active');
+            btnText = 'Switch to Active'; btnClass = 'btn-success'; // BUTTON "Switch to Active" IS HERE
             hint = 'Showing <b>Available</b> SIMs. Ready to Activate.';
         } else if(mode === 'terminate') {
             $('#btnFilterActive').addClass('active');
@@ -303,17 +318,16 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             btnText = 'Action Disabled'; btnClass = 'btn-secondary'; isDisabled = true;
             hint = 'Showing <b>Terminated</b> SIMs. Read-only.';
         } else {
-            $('#btnFilterTotal').addClass('active'); // Default All
+            $('#btnFilterTotal').addClass('active');
             btnText = 'Select Action'; btnClass = 'btn-secondary'; isDisabled = true;
             hint = 'Showing <b>All</b> SIMs.';
         }
 
         $('#hintText').html(hint);
         $('#btnProc').removeClass('btn-success btn-danger btn-secondary btn-primary-pro')
-                     .addClass(btnClass).text(btnText).prop('disabled', true); // Always disable first until selected
+                     .addClass(btnClass).text(btnText).prop('disabled', true);
                      
         if(isDisabled) $('#btnProc').hide(); else $('#btnProc').show();
-
         loadData();
     }
 
@@ -329,14 +343,11 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             action:'fetch_sims', po_id:cId, search_bulk:cSearch, page:cPage, target_action: cMode
         }, function(res){
             if(res.status==='success'){
-                // STATS
                 if(res.stats) {
                     $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
-
-                // LIST
                 let h=''; 
                 if(res.data.length===0) {
                     h = `<div class="text-center py-5 text-muted">No data found for this filter.</div>`;
@@ -344,51 +355,30 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     res.data.forEach(s => { 
                         let badgeClass = s.status==='Active'?'sb-active':(s.status==='Terminated'?'sb-term':'sb-avail');
                         let dateInfo = s.activation_date ? `<small class="text-muted ms-2"><i class="bi bi-calendar-event"></i> ${s.activation_date}</small>` : '';
-                        
-                        h += `<div class="sim-item" onclick="togRow(this)">
-                                <div>
-                                    <div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div>
-                                    <div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div>
-                                </div>
-                                <input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()">
-                              </div>`; 
+                        h += `<div class="sim-item" onclick="togRow(this)"><div><div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div><div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div></div><input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()"></div>`; 
                     });
                 }
                 $('#sList').html(h);
-                
-                // PAGINATION
                 totalPages = res.total_pages;
                 $('#pageInfo').text(`Page ${cPage} of ${totalPages} (${res.total_rows} items)`);
                 $('#btnPrev').prop('disabled', cPage <= 1);
                 $('#btnNext').prop('disabled', cPage >= totalPages);
-                
             } else toast('error', res.message);
         },'json');
     }
 
     function togRow(el) { let c=$(el).find('.chk'); c.prop('checked', !c.prop('checked')); upd(); }
-    
-    function toggleAll(el) {
-        $('.chk').prop('checked', el.checked);
-        upd();
-    }
-
+    function toggleAll(el) { $('.chk').prop('checked', el.checked); upd(); }
     function upd() { 
-        let n=$('.chk:checked').length; 
-        $('#selCount').text(n); 
-        
-        // Enable button ONLY if not in view-only mode
+        let n=$('.chk:checked').length; $('#selCount').text(n); 
         let isReadOnly = (cMode === 'view_terminated' || cMode === 'all');
         $('#btnProc').prop('disabled', n===0 || isReadOnly); 
-        
-        $('.sim-item').removeClass('selected');
-        $('.chk:checked').closest('.sim-item').addClass('selected');
+        $('.sim-item').removeClass('selected'); $('.chk:checked').closest('.sim-item').addClass('selected');
     }
 
     function doProc() {
         let ids=[]; $('.chk:checked').each(function(){ids.push($(this).val())});
         if(!confirm(`Proceed to process ${ids.length} selected items?`)) return;
-        
         $('#btnProc').prop('disabled',true).text('Processing...');
         $.post('process_sim_tracking.php', {action:'process_bulk_sim_action', po_provider_id:cId, mode:cMode, sim_ids:ids, date_field:$('#actDate').val(), batch_name:cBatch}, function(r){
             if(r.status==='success'){ toast('success', r.message); setTimeout(()=>location.reload(),1500); } 
@@ -396,7 +386,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // LOGS
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         let st = d.stats || {total:0, active:0, term:0};
@@ -406,9 +395,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
                 let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs found.</div>';
-                else r.data.forEach(l=>{ 
-                    let c=l.type==='Activation'?'text-success':'text-danger'; h+=`<div class="list-group-item border-0 border-bottom py-3 px-0"><div class="d-flex justify-content-between align-items-center"><div><div class="fw-bold ${c}">${l.type}</div><div class="small text-muted">${l.batch} | ${l.date}</div></div><span class="fw-bold fs-5 text-dark">${parseInt(l.qty).toLocaleString()}</span></div></div>`; 
-                });
+                else r.data.forEach(l=>{ let c=l.type==='Activation'?'text-success':'text-danger'; h+=`<div class="list-group-item border-0 border-bottom py-3 px-0"><div class="d-flex justify-content-between align-items-center"><div><div class="fw-bold ${c}">${l.type}</div><div class="small text-muted">${l.batch} | ${l.date}</div></div><span class="fw-bold fs-5 text-dark">${parseInt(l.qty).toLocaleString()}</span></div></div>`; });
                 $('#logList').html(h);
             } else $('#logList').html('Error loading logs.');
         },'json');
