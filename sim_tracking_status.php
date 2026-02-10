@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Fixed Responsive Modal Footer & Layout)
+// DESC: Frontend Dashboard (New Layout: Stats Top + Horizontal Search)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -93,77 +93,33 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
 
-    /* --- [FIXED] MODAL MANAGER LAYOUT (RESPONSIVE) --- */
-    .modal-content-full { 
-        height: 85vh; 
-        display: flex; 
-        flex-direction: column; 
-        overflow: hidden; 
-    }
+    /* --- NEW MODAL LAYOUT (VERTICAL STACK) --- */
+    .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     
-    .mgr-layout { 
-        display: flex; 
-        flex: 1; /* Mengisi sisa ruang */
-        overflow: hidden; 
-        min-height: 0; /* Penting untuk nested flex scrolling */
-    }
+    /* 1. Header (Fixed) */
+    .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    .mgr-left { 
-        width: 30%; 
-        background: #f8fafc; 
-        border-right: 1px solid #e2e8f0; 
-        padding: 20px; 
-        display: flex; 
-        flex-direction: column; 
-        overflow-y: auto; 
-    }
-    
-    .mgr-right { 
-        width: 70%; 
-        display: flex; 
-        flex-direction: column; 
-        background: #fff; 
-        min-width: 0; 
-    }
-    
-    /* SUMMARY VISUAL CARDS */
-    .mgr-stats-row { 
-        display: flex; 
-        border-bottom: 1px solid #e2e8f0; 
-        background: #fff; 
-        flex-shrink: 0; /* Jangan mengecil */
-    }
+    /* 2. Stats Row (Fixed) */
+    .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
     .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; }
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 5px; }
-    .mgr-stat-val { font-size: 1.25rem; font-weight: 800; color: #334155; }
+    .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* --- [FIXED] CONTENT LIST SCROLL AREA --- */
-    .mgr-list-box { 
-        flex-grow: 1; 
-        overflow-y: auto; 
-        position: relative; 
-        min-height: 0; 
-    } 
+    /* 3. Search Bar (Fixed Horizontal) */
+    .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+    .search-input-group { display: flex; gap: 10px; width: 100%; }
     
-    /* --- [FIXED] FOOTER RESPONSIVE WRAP --- */
-    .mgr-footer { 
-        padding: 15px 20px; 
-        border-top: 1px solid #e2e8f0; 
-        background: #fff; 
-        display: flex; 
-        align-items: center; 
-        justify-content: space-between; 
-        flex-shrink: 0; /* Footer tidak boleh mengecil/hilang */
-        flex-wrap: wrap; /* Izinkan elemen turun ke bawah jika layar sempit */
-        gap: 15px; /* Jarak antar elemen saat wrap */
-    }
-
-    .sim-item { padding: 10px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
+    /* 4. List Content (Scrollable) */
+    .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
+    .sim-item { padding: 12px 25px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
     .sim-item:hover { background: #f8fafc; }
-    .sim-item.selected { background: #eff6ff; border-left: 4px solid #4f46e5; }
+    .sim-item.selected { background: #eff6ff; border-left: 4px solid #4f46e5; padding-left: 21px; }
     
+    /* 5. Footer (Fixed) */
+    .mgr-footer { padding: 15px 25px; border-top: 1px solid #e2e8f0; background: #fff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; flex-wrap: wrap; gap: 15px; }
+
     .status-badge { font-size: 0.65rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; margin-left: 8px; letter-spacing: 0.3px; }
     .sb-avail { background: #f1f5f9; color: #64748b; }
     .sb-active { background: #dcfce7; color: #166534; }
@@ -248,66 +204,74 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <div class="modal fade" id="modalMgr" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow modal-content-full">
-            <div class="modal-header bg-white border-bottom">
-                <div><h6 class="modal-title fw-bold" id="mgrTitle">Manage SIMs</h6><div class="small text-muted" id="mgrSubtitle">-</div></div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            
+            <div class="mgr-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="modal-title fw-bold" id="mgrTitle">Manage SIMs</h6>
+                        <div class="small text-muted" id="mgrSubtitle">-</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
             </div>
             
-            <div class="mgr-layout">
-                <div class="mgr-left">
-                    <label class="small fw-bold text-muted mb-2">BULK SEARCH</label>
-                    <textarea id="sKey" class="form-control mb-3 flex-grow-1" style="resize:none" placeholder="Paste multiple MSISDNs here...&#10;0812xxx&#10;0813xxx"></textarea>
-                    
-                    <button class="btn btn-dark w-100 fw-bold mb-2" onclick="doSearch()">
-                        <i class="bi bi-search me-2"></i> Search & Filter
-                    </button>
-                    
-                    <div class="alert alert-info small mb-0 p-2 border-0 bg-info-subtle">
-                        <i class="bi bi-info-circle me-1"></i> <span id="hintText">Use this to find specific SIMs.</span>
-                    </div>
+            <div class="mgr-stats-row">
+                <div class="mgr-stat-item">
+                    <div class="mgr-stat-label">Total Inventory</div>
+                    <div class="mgr-stat-val" id="stTotal">-</div>
                 </div>
-                
-                <div class="mgr-right">
-                    <div class="mgr-stats-row">
-                        <div class="mgr-stat-item">
-                            <div class="mgr-stat-label">Total Inventory</div>
-                            <div class="mgr-stat-val" id="stTotal">-</div>
-                        </div>
-                        <div class="mgr-stat-item">
-                            <div class="mgr-stat-label text-success">Active</div>
-                            <div class="mgr-stat-val val-act" id="stActive">-</div>
-                        </div>
-                        <div class="mgr-stat-item">
-                            <div class="mgr-stat-label text-danger">Terminated</div>
-                            <div class="mgr-stat-val val-term" id="stTerm">-</div>
-                        </div>
-                    </div>
+                <div class="mgr-stat-item">
+                    <div class="mgr-stat-label text-success">Active</div>
+                    <div class="mgr-stat-val val-act" id="stActive">-</div>
+                </div>
+                <div class="mgr-stat-item">
+                    <div class="mgr-stat-label text-danger">Terminated</div>
+                    <div class="mgr-stat-val val-term" id="stTerm">-</div>
+                </div>
+            </div>
 
-                    <div class="mgr-list-box" id="sList">
-                        <div class="text-center py-5 mt-5">
-                            <i class="bi bi-search display-4 text-light"></i>
-                            <p class="mt-3">Loading data...</p>
-                        </div>
+            <div class="mgr-search-bar">
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex gap-2 w-100">
+                        <textarea id="sKey" class="form-control" rows="1" placeholder="Paste MSISDNs / ICCIDs (comma or newline separated)..." style="resize:none; height:40px;"></textarea>
+                        <button class="btn btn-dark fw-bold px-4" onclick="doSearch()">
+                            <i class="bi bi-search me-1"></i> Search
+                        </button>
                     </div>
-                    
-                    <div class="mgr-footer">
-                        <div class="d-flex align-items-center gap-2">
-                            <button class="btn btn-sm btn-outline-secondary" onclick="changePage(-1)" id="btnPrev">Previous</button>
-                            <span class="small fw-bold mx-2 text-nowrap" id="pageInfo">Page 1</span>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="changePage(1)" id="btnNext">Next</button>
-                        </div>
-                        
-                        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-                            <div class="text-end lh-1 me-2 d-none d-md-block">
-                                <div class="small text-muted">Selected</div>
-                                <div class="fw-bold text-primary h5 m-0" id="selCount">0</div>
-                            </div>
-                            <input type="date" id="actDate" class="form-control form-control-sm w-auto" value="<?=date('Y-m-d')?>">
-                            <button class="btn px-4 fw-bold text-nowrap" id="btnProc" disabled onclick="doProc()">Execute</button>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted"><i class="bi bi-info-circle me-1"></i> <span id="hintText">Filtering data...</span></small>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="checkAll" onchange="toggleAll(this)">
+                            <label class="form-check-label small fw-bold" for="checkAll">Select All Loaded</label>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <div class="mgr-list-box" id="sList">
+                <div class="text-center py-5 mt-5">
+                    <i class="bi bi-search display-4 text-light"></i>
+                    <p class="mt-3">Loading data...</p>
+                </div>
+            </div>
+            
+            <div class="mgr-footer">
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="changePage(-1)" id="btnPrev">Previous</button>
+                    <span class="small fw-bold mx-2 text-nowrap" id="pageInfo">Page 1</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="changePage(1)" id="btnNext">Next</button>
+                </div>
+                
+                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                    <div class="text-end lh-1 me-2 d-none d-md-block">
+                        <div class="small text-muted">Selected</div>
+                        <div class="fw-bold text-primary h5 m-0" id="selCount">0</div>
+                    </div>
+                    <input type="date" id="actDate" class="form-control form-control-sm w-auto" value="<?=date('Y-m-d')?>">
+                    <button class="btn px-4 fw-bold text-nowrap" id="btnProc" disabled onclick="doProc()">Execute</button>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -323,36 +287,10 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                 <form id="formUploadMaster">
                     <input type="hidden" name="action" value="upload_master_bulk">
                     <input type="hidden" name="is_ajax" value="1">
-                    
-                    <div class="mb-3">
-                        <label class="small fw-bold text-muted">Select Provider PO</label>
-                        <select name="po_provider_id" id="poSelect" class="form-select" required onchange="fetchBatchInfo(this.value)">
-                            <option value="">-- Choose PO --</option>
-                            <?php foreach($list_providers_new as $p): ?>
-                                <option value="<?=$p['id']?>"><?=$p['po_number']?> (Alloc: <?=number_format($p['sim_qty'])?>)</option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="upload-zone" id="dropZone">
-                            <input type="file" name="upload_file" id="fIn" style="position:absolute;width:100%;height:100%;top:0;left:0;opacity:0;cursor:pointer" onchange="$('#fTxt').text(this.files[0].name).addClass('text-primary')">
-                            <i class="bi bi-cloud-arrow-up display-4 text-secondary"></i>
-                            <div id="fTxt" class="mt-2 fw-bold">Click/Drag CSV or Excel Here</div>
-                            <div class="small text-muted">Header Required: <code>MSISDN</code></div>
-                        </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col"><label class="small fw-bold text-muted">Batch Name</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div>
-                        <div class="col"><label class="small fw-bold text-muted">Date</label><input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required></div>
-                    </div>
-
-                    <div class="mb-3" id="progCont" style="display:none;">
-                        <div class="d-flex justify-content-between small fw-bold mb-1"><span id="progText">Uploading...</span><span id="progPct">0%</span></div>
-                        <div class="progress" style="height:10px"><div class="progress-bar bg-primary" id="progBar" style="width:0%"></div></div>
-                    </div>
-
+                    <div class="mb-3"><label class="small fw-bold text-muted">Select Provider PO</label><select name="po_provider_id" id="poSelect" class="form-select" required onchange="fetchBatchInfo(this.value)"><option value="">-- Choose PO --</option><?php foreach($list_providers_new as $p): ?><option value="<?=$p['id']?>"><?=$p['po_number']?> (Alloc: <?=number_format($p['sim_qty'])?>)</option><?php endforeach; ?></select></div>
+                    <div class="mb-3"><div class="upload-zone" id="dropZone"><input type="file" name="upload_file" id="fIn" style="position:absolute;width:100%;height:100%;top:0;left:0;opacity:0;cursor:pointer" onchange="$('#fTxt').text(this.files[0].name).addClass('text-primary')"><i class="bi bi-cloud-arrow-up display-4 text-secondary"></i><div id="fTxt" class="mt-2 fw-bold">Click/Drag CSV or Excel Here</div><div class="small text-muted">Header Required: <code>MSISDN</code></div></div></div>
+                    <div class="row mb-3"><div class="col"><label class="small fw-bold text-muted">Batch Name</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div><div class="col"><label class="small fw-bold text-muted">Date</label><input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required></div></div>
+                    <div class="mb-3" id="progCont" style="display:none;"><div class="d-flex justify-content-between small fw-bold mb-1"><span id="progText">Uploading...</span><span id="progPct">0%</span></div><div class="progress" style="height:10px"><div class="progress-bar bg-primary" id="progBar" style="width:0%"></div></div></div>
                     <button type="submit" class="btn btn-primary w-100 fw-bold" id="btnUp">Start Upload</button>
                 </form>
             </div>
@@ -385,7 +323,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     function fetchBatchInfo(id) { if(!id){$('#batchInput').val('');return;} $.post('process_sim_tracking.php', {action:'get_po_details', id:id}, function(res){ if(res.status==='success'){$('#batchInput').val(res.batch_name||'BATCH 1');} else{toast('error',res.message);$('#batchInput').val('');} },'json'); }
     $('#formUploadMaster').on('submit', function(e){ e.preventDefault(); let fd=new FormData(this); if($('#batchInput').val()===''){toast('error','Batch Name Missing');return;} $('#btnUp').prop('disabled',true); $('#pgCont').slideDown(); $.ajax({xhr:function(){var x=new window.XMLHttpRequest();x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100);$('#pgBar').css('width',p+'%');$('#pgTxt').text(p+'%');}},false);return x;},type:'POST',url:'process_sim_tracking.php',data:fd,contentType:false,processData:false,dataType:'json',success:function(r){if(r.status==='success'){$('#pgBar').addClass('bg-success');toast('success',r.message);setTimeout(()=>location.reload(),1500);}else{$('#pgBar').addClass('bg-danger');toast('error',r.message);$('#btnUp').prop('disabled',false).text('Retry');}},error:function(x){toast('error',x.responseText);$('#btnUp').prop('disabled',false).text('Retry');}}); });
 
-    // MANAGER
+    // MANAGER LOGIC
     let cId=0, cMode='', cBatch='', cPage=1, totalPages=1, cSearch='';
     
     function openMgr(d,m) { 
@@ -396,58 +334,103 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         
         let btnClass = (m === 'activate') ? 'btn-success' : 'btn-danger';
         let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminate';
-        let hintMsg = (m === 'activate') ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
+        let hintMsg = (m === 'activate') 
+            ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' 
+            : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
             
-        $('#btnProc').removeClass('btn-primary-pro btn-success btn-danger').addClass(btnClass).text(btnText).prop('disabled',true);
+        $('#btnProc').removeClass('btn-success btn-danger').addClass(btnClass).text(btnText).prop('disabled',true);
         $('#hintText').html(hintMsg);
+        
+        // Stats Placeholder
         $('#stTotal').text('-'); $('#stActive').text('-'); $('#stTerm').text('-');
         
         new bootstrap.Modal(document.getElementById('modalMgr')).show(); 
         loadData();
     }
 
-    function doSearch() { cSearch = $('#sKey').val().trim(); cPage = 1; loadData(); }
-    function changePage(d) { let n = cPage + d; if(n > 0 && n <= totalPages) { cPage = n; loadData(); } }
+    function doSearch() {
+        cSearch = $('#sKey').val().trim();
+        cPage = 1;
+        loadData();
+    }
+
+    function changePage(d) {
+        let n = cPage + d;
+        if(n > 0 && n <= totalPages) { cPage = n; loadData(); }
+    }
 
     function loadData() {
         $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Loading data...</div></div>');
         $('#selCount').text(0);
+        $('#checkAll').prop('checked', false);
         
         $.post('process_sim_tracking.php', {
-            action:'fetch_sims', po_id:cId, search_bulk:cSearch, page:cPage, target_action: cMode
+            action:'fetch_sims', 
+            po_id:cId, 
+            search_bulk:cSearch, 
+            page:cPage,
+            target_action: cMode
         }, function(res){
             if(res.status==='success'){
+                // Stats
                 if(res.stats) {
                     $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
+
+                // List
                 let h=''; 
                 if(res.data.length===0) {
-                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs found.' : 'No active SIMs found.';
+                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs found to activate.' : 'No active SIMs found to terminate.';
                     h = `<div class="text-center py-5 text-muted">${emptyMsg}</div>`;
                 } else {
                     res.data.forEach(s => { 
                         let badgeClass = s.status==='Active'?'sb-active':(s.status==='Terminated'?'sb-term':'sb-avail');
                         let dateInfo = s.activation_date ? `<small class="text-muted ms-2"><i class="bi bi-calendar-event"></i> ${s.activation_date}</small>` : '';
-                        h += `<div class="sim-item" onclick="togRow(this)"><div><div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div><div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div></div><input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()"></div>`; 
+                        
+                        h += `<div class="sim-item" onclick="togRow(this)">
+                                <div>
+                                    <div class="fw-bold font-monospace">${s.msisdn} <span class="status-badge ${badgeClass}">${s.status}</span></div>
+                                    <div class="small text-muted">ICCID: ${s.iccid||'-'} ${dateInfo}</div>
+                                </div>
+                                <input type="checkbox" class="chk form-check-input" value="${s.id}" onclick="event.stopPropagation();upd()">
+                              </div>`; 
                     });
                 }
                 $('#sList').html(h);
+                
+                // Pagination
                 totalPages = res.total_pages;
                 $('#pageInfo').text(`Page ${cPage} of ${totalPages} (${res.total_rows} items)`);
                 $('#btnPrev').prop('disabled', cPage <= 1);
                 $('#btnNext').prop('disabled', cPage >= totalPages);
+                
             } else toast('error', res.message);
         },'json');
     }
 
     function togRow(el) { let c=$(el).find('.chk'); c.prop('checked', !c.prop('checked')); upd(); }
-    function upd() { let n=$('.chk:checked').length; $('#selCount').text(n); $('#btnProc').prop('disabled', n===0); }
+    
+    function toggleAll(el) {
+        $('.chk').prop('checked', el.checked);
+        upd();
+    }
+
+    function upd() { 
+        let n=$('.chk:checked').length; 
+        $('#selCount').text(n); 
+        $('#btnProc').prop('disabled', n===0); 
+        
+        // Visual Selection
+        $('.sim-item').removeClass('selected');
+        $('.chk:checked').closest('.sim-item').addClass('selected');
+    }
 
     function doProc() {
         let ids=[]; $('.chk:checked').each(function(){ids.push($(this).val())});
         if(!confirm(`Proceed to ${cMode.toUpperCase()} ${ids.length} selected items?`)) return;
+        
         $('#btnProc').prop('disabled',true).text('Processing...');
         $.post('process_sim_tracking.php', {action:'process_bulk_sim_action', po_provider_id:cId, mode:cMode, sim_ids:ids, date_field:$('#actDate').val(), batch_name:cBatch}, function(r){
             if(r.status==='success'){ toast('success', r.message); setTimeout(()=>location.reload(),1500); } 
@@ -458,10 +441,20 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     // LOGS
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
+        
         let st = d.stats || {total:0, active:0, term:0};
-        $('#logStatsContainer').html(`<div class="log-summary"><div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div></div>`);
+        
+        $('#logStatsContainer').html(`
+            <div class="log-summary">
+                <div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div>
+            </div>
+        `);
+
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
         new bootstrap.Modal(document.getElementById('modalLog')).show();
+        
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
                 let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs found.</div>';
@@ -473,9 +466,11 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
+    // CHART
     const lbl=<?php echo json_encode($lbls??[]); ?>; const sa=<?php echo json_encode($s_a??[]); ?>; const st=<?php echo json_encode($s_t??[]); ?>;
-    if(lbl.length > 0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:280,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
+    if(lbl.length>0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:280,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
     
+    // DRAG DROP
     const dz=document.getElementById('dropZone'), fi=document.getElementById('fIn');
     ['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.backgroundColor='#eef2ff';dz.style.borderColor='#4f46e5'},false));
     ['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.backgroundColor='#f8fafc';dz.style.borderColor='#cbd5e1'},false));

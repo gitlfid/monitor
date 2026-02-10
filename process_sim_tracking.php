@@ -1,7 +1,7 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Full Code - Strict Logic & Error Handling)
+// DESC: Backend Processor (Full Logic: Strict Filter, Real Logs, Legacy)
 // =======================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -155,7 +155,7 @@ if ($action == 'upload_master_bulk') {
     } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); jsonResponse('error', $e->getMessage()); }
 }
 
-// --- C. FETCH SIMS (LOGIC STRICT: FILTER AVAILABLE/ACTIVE ONLY) ---
+// --- C. FETCH SIMS (FIX: SQL SYNTAX & NAN ISSUE) ---
 if ($action == 'fetch_sims') {
     $po_id = $_POST['po_id']; 
     $search = trim($_POST['search_bulk'] ?? '');
@@ -202,9 +202,9 @@ if ($action == 'fetch_sims') {
     }
 
     try { 
-        // 1. STATISTIK GLOBAL (Hitung Total, Active, Terminated untuk PO ini secara keseluruhan)
-        // Statistik ini TIDAK terpengaruh filter status agar user tetap tau gambaran besar
-        // [FIXED] Tambahkan IFNULL agar tidak return NULL
+        // 1. STATISTIK GLOBAL
+        // [FIXED] Tambahkan Backtick (`) pada `active` dan `terminated` agar tidak error 1064
+        // [FIXED] Tambahkan IFNULL() agar nilai kembalian 0 jika null, mencegah NaN di frontend
         $stats = ['total'=>0, 'active'=>0, 'terminated'=>0];
         if ($db_type === 'pdo') {
             $stmtStats = $db->prepare("SELECT 
