@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Dashboard & Manager (Fixed Logs & Smart Filter Logic)
+// DESC: Frontend Dashboard (Smart Filter Logic: Activation vs Termination)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -94,7 +94,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log:hover { background: #f1f5f9; }
 
     /* MODAL MANAGER LAYOUT (SINGLE PAGE) */
-    .mgr-layout { display: flex; height: 80vh; max-height: 800px; }
+    .mgr-layout { display: flex; height: 85vh; max-height: 800px; }
     .mgr-left { width: 30%; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 20px; display: flex; flex-direction: column; }
     .mgr-right { width: 70%; padding: 0; display: flex; flex-direction: column; background: #fff; }
     
@@ -136,13 +136,8 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <div id="toastCont"></div>
 
 <div class="d-flex justify-content-between align-items-center px-4 py-4">
-    <div>
-        <h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3>
-        <p class="text-muted small m-0">Inventory Management Dashboard</p>
-    </div>
-    <button class="btn btn-primary-pro" onclick="openUploadModal()">
-        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Upload New Batch
-    </button>
+    <div><h3 class="fw-bold mb-0 text-dark">SIM Lifecycle</h3><p class="text-muted small m-0">Inventory Management Dashboard</p></div>
+    <button class="btn btn-primary-pro" onclick="openUploadModal()"><i class="bi bi-cloud-upload-fill me-2"></i> Upload Batch</button>
 </div>
 
 <div class="row g-4 px-4 mb-4">
@@ -293,7 +288,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col"><label class="small fw-bold text-muted">Batch Name (Auto)</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div>
+                        <div class="col"><label class="small fw-bold text-muted">Batch Name</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div>
                         <div class="col"><label class="small fw-bold text-muted">Date</label><input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required></div>
                     </div>
 
@@ -323,18 +318,20 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
 <script>
+    // HELPER: Toast Notification
     function toast(t,m){ 
-        let c=t==='success'?'toast-success':'toast-error'; let i=t==='success'?'bi-check-circle-fill text-success':'bi-exclamation-triangle-fill text-danger';
+        let c=t==='success'?'toast-success':'toast-error'; 
+        let i=t==='success'?'bi-check-circle-fill text-success':'bi-exclamation-triangle-fill text-danger'; 
         let h=`<div class="toast-item ${c}"><i class="bi ${i} fs-4"></i><div><div class="fw-bold text-uppercase">${t}</div><div class="small text-muted">${m}</div></div></div>`;
-        $('#toastCont').append(h); setTimeout(()=>$('#toastCont').children().first().remove(),4000); 
+        $('#toastCont').append(h); setTimeout(()=>$('#toastCont').children().first().remove(), 4000); 
     }
 
-    // --- UPLOAD LOGIC ---
+    // UPLOAD LOGIC
     function openUploadModal() { $('#formUploadMaster')[0].reset(); $('#pgCont').hide(); $('#btnUp').prop('disabled',false).text('Start Upload'); $('#batchInput').val(''); new bootstrap.Modal(document.getElementById('modalUpload')).show(); }
     function fetchBatchInfo(id) { if(!id){$('#batchInput').val('');return;} $.post('process_sim_tracking.php', {action:'get_po_details', id:id}, function(res){ if(res.status==='success'){$('#batchInput').val(res.batch_name||'BATCH 1');} else{toast('error',res.message);$('#batchInput').val('');} },'json'); }
     $('#formUploadMaster').on('submit', function(e){ e.preventDefault(); let fd=new FormData(this); if($('#batchInput').val()===''){toast('error','Batch Name Missing');return;} $('#btnUp').prop('disabled',true); $('#pgCont').slideDown(); $.ajax({xhr:function(){var x=new window.XMLHttpRequest();x.upload.addEventListener("progress",e=>{if(e.lengthComputable){var p=Math.round((e.loaded/e.total)*100);$('#pgBar').css('width',p+'%');$('#pgTxt').text(p+'%');}},false);return x;},type:'POST',url:'process_sim_tracking.php',data:fd,contentType:false,processData:false,dataType:'json',success:function(r){if(r.status==='success'){$('#pgBar').addClass('bg-success');toast('success',r.message);setTimeout(()=>location.reload(),1500);}else{$('#pgBar').addClass('bg-danger');toast('error',r.message);$('#btnUp').prop('disabled',false).text('Retry');}},error:function(x){toast('error',x.responseText);$('#btnUp').prop('disabled',false).text('Retry');}}); });
 
-    // --- MANAGER LOGIC (UNIFIED VIEW) ---
+    // --- SMART MANAGER LOGIC ---
     let cId=0, cMode='', cBatch='', cPage=1, totalPages=1, cSearch='';
     
     function openMgr(d,m) { 
@@ -343,9 +340,9 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         
-        // Setup Button Color
+        // Setup Smart Filter Buttons
         let btnClass = (m === 'activate') ? 'btn-success' : 'btn-danger';
-        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminate';
+        let btnText = (m === 'activate') ? 'Switch to Active' : 'Switch to Terminated';
         let hintMsg = (m === 'activate') 
             ? 'Only displaying <b>Available</b> SIMs. Select to Activate.' 
             : 'Only displaying <b>Active</b> SIMs. Select to Terminate.';
@@ -353,23 +350,15 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#btnProc').removeClass('btn-primary-pro btn-success btn-danger').addClass(btnClass).text(btnText).prop('disabled',true);
         $('#hintText').html(hintMsg);
         
-        // Reset Stats placeholders
+        // Reset Stats
         $('#stTotal').text('-'); $('#stActive').text('-'); $('#stTerm').text('-');
         
         new bootstrap.Modal(document.getElementById('modalMgr')).show(); 
         loadData();
     }
 
-    function doSearch() {
-        cSearch = $('#sKey').val().trim();
-        cPage = 1;
-        loadData();
-    }
-
-    function changePage(d) {
-        let n = cPage + d;
-        if(n > 0 && n <= totalPages) { cPage = n; loadData(); }
-    }
+    function doSearch() { cSearch = $('#sKey').val().trim(); cPage = 1; loadData(); }
+    function changePage(d) { let n = cPage + d; if(n > 0 && n <= totalPages) { cPage = n; loadData(); } }
 
     function loadData() {
         $('#sList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Loading data...</div></div>');
@@ -380,20 +369,20 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             po_id:cId, 
             search_bulk:cSearch, 
             page:cPage,
-            target_action: cMode // SEND MODE TO BACKEND
+            target_action: cMode // CRITICAL: Send mode to backend for strict filtering
         }, function(res){
             if(res.status==='success'){
-                // 1. UPDATE SUMMARY STATS
+                // STATS
                 if(res.stats) {
-                    $('#stTotal').text(parseInt(res.stats.total).toLocaleString());
-                    $('#stActive').text(parseInt(res.stats.active).toLocaleString());
-                    $('#stTerm').text(parseInt(res.stats.terminated).toLocaleString());
+                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
+                    $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
+                    $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
 
-                // 2. RENDER LIST
+                // LIST
                 let h=''; 
                 if(res.data.length===0) {
-                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs to activate.' : 'No active SIMs to terminate.';
+                    let emptyMsg = (cMode === 'activate') ? 'No available SIMs found to activate.' : 'No active SIMs found to terminate.';
                     h = `<div class="text-center py-5 text-muted">${emptyMsg}</div>`;
                 } else {
                     res.data.forEach(s => { 
@@ -411,7 +400,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                 }
                 $('#sList').html(h);
                 
-                // 3. PAGINATION
+                // PAGINATION
                 totalPages = res.total_pages;
                 $('#pageInfo').text(`Page ${cPage} of ${totalPages} (${res.total_rows} items)`);
                 $('#btnPrev').prop('disabled', cPage <= 1);
@@ -427,7 +416,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     function doProc() {
         let ids=[]; $('.chk:checked').each(function(){ids.push($(this).val())});
         if(!confirm(`Proceed to ${cMode.toUpperCase()} ${ids.length} selected items?`)) return;
-        
         $('#btnProc').prop('disabled',true).text('Processing...');
         $.post('process_sim_tracking.php', {action:'process_bulk_sim_action', po_provider_id:cId, mode:cMode, sim_ids:ids, date_field:$('#actDate').val(), batch_name:cBatch}, function(r){
             if(r.status==='success'){ toast('success', r.message); setTimeout(()=>location.reload(),1500); } 
@@ -435,14 +423,23 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // --- LOGS & CHART ---
+    // LOGS
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
-        if(d.stats) {
-            let s = d.stats;
-            $('#logStatsContainer').html(`<div class="log-summary"><div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(s.total).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(s.active).toLocaleString()}</div></div><div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(s.term).toLocaleString()}</div></div></div>`);
-        }
-        $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); new bootstrap.Modal(document.getElementById('modalLog')).show();
+        
+        // Populate Summary Stats
+        let st = d.stats || {total:0, active:0, term:0};
+        $('#logStatsContainer').html(`
+            <div class="log-summary">
+                <div class="log-stat-box"><div class="log-stat-label">Total</div><div class="log-stat-value">${parseInt(st.total||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${parseInt(st.active||0).toLocaleString()}</div></div>
+                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${parseInt(st.term||0).toLocaleString()}</div></div>
+            </div>
+        `);
+
+        $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
+        new bootstrap.Modal(document.getElementById('modalLog')).show();
+        
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
                 let h=''; if(r.data.length===0) h='<div class="text-center p-4 text-muted">No logs found.</div>';
@@ -455,7 +452,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     }
 
     const lbl=<?php echo json_encode($lbls??[]); ?>; const sa=<?php echo json_encode($s_a??[]); ?>; const st=<?php echo json_encode($s_t??[]); ?>;
-    if(lbl.length > 0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:280,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
+    if(lbl.length>0) new ApexCharts(document.querySelector("#lifecycleChart"), {series:[{name:'Activations',data:sa},{name:'Terminations',data:st}], chart:{type:'area',height:280,toolbar:{show:false}}, colors:['#10b981','#ef4444'], stroke:{curve:'smooth',width:2}, xaxis:{categories:lbl}, grid:{borderColor:'#f1f5f9'}, fill:{type:'gradient', gradient:{shadeIntensity:1, opacityFrom:0.7, opacityTo:0.2, stops:[0, 90, 100]}}}).render();
     
     const dz=document.getElementById('dropZone'), fi=document.getElementById('fIn');
     ['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.style.backgroundColor='#eef2ff';dz.style.borderColor='#4f46e5'},false));
