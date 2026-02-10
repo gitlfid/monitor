@@ -1,7 +1,7 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Full Logic: Strict Filter, Real Logs, Legacy)
+// DESC: Backend Processor (Full Code - Strict Logic & Error Handling)
 // =======================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -155,13 +155,13 @@ if ($action == 'upload_master_bulk') {
     } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); jsonResponse('error', $e->getMessage()); }
 }
 
-// --- C. FETCH SIMS (LOGIC FIX: FILTER & NULL STATS) ---
+// --- C. FETCH SIMS (LOGIC STRICT: FILTER AVAILABLE/ACTIVE ONLY) ---
 if ($action == 'fetch_sims') {
     $po_id = $_POST['po_id']; 
     $search = trim($_POST['search_bulk'] ?? '');
     
-    // Parameter baru untuk Logic Filter Context
-    $target_action = $_POST['target_action'] ?? 'all'; // 'activate', 'terminate', atau 'all'
+    // Parameter Filter Konteks (Activate/Terminate)
+    $target_action = $_POST['target_action'] ?? 'all'; // Values: 'activate', 'terminate', 'all'
 
     $page = isset($_POST['page']) ? (int)$_POST['page'] : 1;
     $limit = 500; 
@@ -171,16 +171,16 @@ if ($action == 'fetch_sims') {
     $where = " WHERE po_provider_id = ? ";
     $params = [$po_id];
 
-    // --- LOGIC FILTER STRICT (SESUAI REQUEST) ---
-    // 1. Jika mode 'activate', hanya tampilkan 'Available'
+    // --- LOGIC FILTER STRICT ---
+    // 1. Mode Activate: Hanya tampilkan status 'Available'
     if ($target_action === 'activate') {
         $where .= " AND status = 'Available' ";
     }
-    // 2. Jika mode 'terminate', hanya tampilkan 'Active'
+    // 2. Mode Terminate: Hanya tampilkan status 'Active'
     elseif ($target_action === 'terminate') {
         $where .= " AND status = 'Active' ";
     }
-    // Jika 'all', tampilkan semua (mode view biasa)
+    // Mode 'all': Tampilkan semua (default)
 
     // Filter Search (Global Search)
     if (!empty($search)) {
@@ -203,7 +203,8 @@ if ($action == 'fetch_sims') {
 
     try { 
         // 1. STATISTIK GLOBAL (Hitung Total, Active, Terminated untuk PO ini secara keseluruhan)
-        // [FIXED] Menggunakan IFNULL agar tidak return NULL dan menyebabkan error NaN di frontend
+        // Statistik ini TIDAK terpengaruh filter status agar user tetap tau gambaran besar
+        // [FIXED] Tambahkan IFNULL agar tidak return NULL
         $stats = ['total'=>0, 'active'=>0, 'terminated'=>0];
         if ($db_type === 'pdo') {
             $stmtStats = $db->prepare("SELECT 
@@ -285,7 +286,7 @@ if ($action == 'fetch_logs') {
     } catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
 }
 
-// --- E. PROCESS BULK ACTION (WITH LOGGING) ---
+// --- E. PROCESS BULK ACTION (INSERT LOGS) ---
 if ($action == 'process_bulk_sim_action') {
     try {
         $ids = $_POST['sim_ids'] ?? []; 

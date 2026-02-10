@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Fixed Responsive Layout & Footer)
+// DESC: Frontend Dashboard (Fixed Responsive Modal Footer & Layout)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -22,7 +22,7 @@ $terminations_raw = [];
 $total_sys_sims = 0; $total_sys_act = 0; $total_sys_term = 0;
 
 if($db) {
-    // Dropdown Upload
+    // Dropdown Upload (All Providers)
     try { 
         $list_providers_new = $db->query("SELECT id, po_number, sim_qty FROM sim_tracking_po WHERE type='provider' ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC); 
     } catch(Exception $e){}
@@ -93,25 +93,61 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
 
-    /* LAYOUT MODAL FIXED (FULL HEIGHT RESPONSIVE) */
-    .modal-content-full { height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
-    .mgr-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; } /* FIX: Flex Grow to fill space */
+    /* --- [FIXED] MODAL MANAGER LAYOUT (RESPONSIVE) --- */
+    .modal-content-full { 
+        height: 85vh; 
+        display: flex; 
+        flex-direction: column; 
+        overflow: hidden; 
+    }
     
-    .mgr-left { width: 30%; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
-    .mgr-right { width: 70%; display: flex; flex-direction: column; background: #fff; min-width: 0; }
+    .mgr-layout { 
+        display: flex; 
+        flex: 1; /* Mengisi sisa ruang */
+        overflow: hidden; 
+        min-height: 0; /* Penting untuk nested flex scrolling */
+    }
+    
+    .mgr-left { 
+        width: 30%; 
+        background: #f8fafc; 
+        border-right: 1px solid #e2e8f0; 
+        padding: 20px; 
+        display: flex; 
+        flex-direction: column; 
+        overflow-y: auto; 
+    }
+    
+    .mgr-right { 
+        width: 70%; 
+        display: flex; 
+        flex-direction: column; 
+        background: #fff; 
+        min-width: 0; 
+    }
     
     /* SUMMARY VISUAL CARDS */
-    .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
+    .mgr-stats-row { 
+        display: flex; 
+        border-bottom: 1px solid #e2e8f0; 
+        background: #fff; 
+        flex-shrink: 0; /* Jangan mengecil */
+    }
     .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; }
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 5px; }
     .mgr-stat-val { font-size: 1.25rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* CONTENT LIST (SCROLLABLE AREA) */
-    .mgr-list-box { flex-grow: 1; overflow-y: auto; position: relative; min-height: 0; } 
+    /* --- [FIXED] CONTENT LIST SCROLL AREA --- */
+    .mgr-list-box { 
+        flex-grow: 1; 
+        overflow-y: auto; 
+        position: relative; 
+        min-height: 0; 
+    } 
     
-    /* FOOTER FIXED (RESPONSIVE WRAP) */
+    /* --- [FIXED] FOOTER RESPONSIVE WRAP --- */
     .mgr-footer { 
         padding: 15px 20px; 
         border-top: 1px solid #e2e8f0; 
@@ -119,9 +155,9 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         display: flex; 
         align-items: center; 
         justify-content: space-between; 
-        flex-shrink: 0; /* Prevent shrinking */
-        flex-wrap: wrap; /* Allow wrapping on small screens */
-        gap: 10px;
+        flex-shrink: 0; /* Footer tidak boleh mengecil/hilang */
+        flex-wrap: wrap; /* Izinkan elemen turun ke bawah jika layar sempit */
+        gap: 15px; /* Jarak antar elemen saat wrap */
     }
 
     .sim-item { padding: 10px 20px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
