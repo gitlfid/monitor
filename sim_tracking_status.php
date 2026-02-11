@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Stats Label Fixed & Logs Display Synced)
+// DESC: Frontend Dashboard (Logs Display Fixed & Total=Available Label)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -96,19 +96,18 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* STATS ROW (CLICKABLE) */
+    /* STATS ROW */
     .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
     .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s; position: relative; }
     .mgr-stat-item:hover { background: #f8fafc; }
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-item.active { background: #eff6ff; }
     .mgr-stat-item.active::after { content:''; position:absolute; bottom:0; left:0; width:100%; height:3px; background:#4f46e5; }
-    
     .mgr-stat-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 5px; }
     .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* CONTENT AREA */
+    /* CONTENT */
     .mgr-layout { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
     .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
@@ -129,7 +128,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
     .prog-cont { display: none; margin-top: 20px; }
     .prog-bar { height: 10px; background: #4f46e5; width: 0%; transition: width 0.2s; border-radius: 5px; }
-    
     #toastCont { position: fixed; top: 20px; right: 20px; z-index: 9999; }
     .toast-item { min-width: 300px; padding: 15px; border-radius: 8px; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin-bottom: 10px; border-left: 4px solid; display: flex; gap: 12px; align-items: center; animation: slideIn 0.3s ease; }
     .toast-success { border-color: #10b981; } .toast-error { border-color: #ef4444; }
@@ -175,7 +173,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     <?php if(empty($dashboard_data)): ?><tr><td colspan="4" class="text-center py-5 text-muted">No data available.</td></tr><?php else: ?>
                     <?php foreach($dashboard_data as $row): 
                         $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
-                        // Persentase
                         $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
                         
                         $stats = ['total'=>$avail, 'active'=>$act, 'terminated'=>$term, 'available'=>$avail]; // Send Available as Total
