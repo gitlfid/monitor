@@ -1,26 +1,36 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Safe Logs Fetching & Auto-Repair)
+// DESC: Backend Processor (Fix Logs Blank with ob_clean & Robust Query)
 // =======================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
+
+// [CRITICAL FIX] Buffer output start
 ob_start(); 
 
 require_once 'includes/auth_check.php';
 if (file_exists('includes/config.php')) require_once 'includes/config.php';
 require_once 'includes/sim_helper.php'; 
 
-// Cek Koneksi DB
+// Custom Response Function untuk memastikan JSON bersih
+function sendJson($status, $message, $data = []) {
+    // Bersihkan buffer agar tidak ada warning PHP yang merusak JSON
+    ob_end_clean(); 
+    header('Content-Type: application/json');
+    echo json_encode(array_merge(['status' => $status, 'message' => $message], $data));
+    exit;
+}
+
 if (!$db) {
-    if(isset($_POST['is_ajax'])) jsonResponse('error', 'Database Connection Failed');
+    if(isset($_POST['is_ajax'])) sendJson('error', 'Database Connection Failed');
     die("System Error: DB Connection Failed");
 }
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // =======================================================================
-// 1. AUTO REPAIR DATABASE (CRITICAL FOR LOGS TO WORK)
+// 1. AUTO REPAIR DATABASE
 // =======================================================================
 try {
     // Inventory
@@ -38,7 +48,7 @@ try {
         INDEX (po_provider_id), INDEX (msisdn), INDEX (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
     
-    // Activations Log
+    // Log tables
     $sql_act = "CREATE TABLE IF NOT EXISTS sim_activations (
         id INT(11) AUTO_INCREMENT PRIMARY KEY,
         po_provider_id INT(11) NOT NULL,
@@ -51,7 +61,6 @@ try {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
-    // Terminations Log
     $sql_term = "CREATE TABLE IF NOT EXISTS sim_terminations (
         id INT(11) AUTO_INCREMENT PRIMARY KEY,
         po_provider_id INT(11) NOT NULL,
@@ -70,7 +79,7 @@ try {
         mysqli_query($db, $sql_inv); mysqli_query($db, $sql_act); mysqli_query($db, $sql_term);
     }
 
-    // --- FIX COLUMNS (Memastikan kolom batch ada agar tidak error) ---
+    // Fix Columns
     function ensureColumn($db, $table, $col, $def, $type) {
         try {
             $exists = false;
@@ -88,10 +97,10 @@ try {
         } catch (Exception $e) {}
     }
 
-    // Fix Missing Columns
     ensureColumn($db, 'sim_activations', 'po_provider_id', "INT(11) NOT NULL DEFAULT 0", $db_type);
     ensureColumn($db, 'sim_activations', 'activation_batch', "VARCHAR(100) NULL", $db_type);
     ensureColumn($db, 'sim_activations', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", $db_type);
+    
     ensureColumn($db, 'sim_terminations', 'po_provider_id', "INT(11) NOT NULL DEFAULT 0", $db_type);
     ensureColumn($db, 'sim_terminations', 'termination_batch', "VARCHAR(100) NULL", $db_type);
     ensureColumn($db, 'sim_terminations', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", $db_type);
@@ -119,21 +128,21 @@ if ($action == 'get_po_details') {
         
         if($data) {
             if(empty($data['batch_name'])) $data['batch_name'] = "BATCH-PO-".$id;
-            jsonResponse('success', 'Found', $data);
+            sendJson('success', 'Found', $data);
         } else {
-            jsonResponse('error', 'PO Data not found');
+            sendJson('error', 'PO Data not found');
         }
-    } catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
+    } catch (Exception $e) { sendJson('error', $e->getMessage()); }
 }
 
 // B. UPLOAD
 if ($action == 'upload_master_bulk') {
     try {
         $po_id = $_POST['po_provider_id'];
-        if (!isset($_FILES['upload_file']) || $_FILES['upload_file']['error'] != 0) jsonResponse('error', 'File error.');
+        if (!isset($_FILES['upload_file']) || $_FILES['upload_file']['error'] != 0) sendJson('error', 'File error.');
 
         $rows = readSpreadsheet($_FILES['upload_file']['tmp_name'], $_FILES['upload_file']['name']);
-        if (!$rows || count($rows) < 2) jsonResponse('error', 'File kosong.');
+        if (!$rows || count($rows) < 2) sendJson('error', 'File kosong.');
 
         $header = $rows[0];
         $idx_msisdn = findIdx($header, ['msisdn','nohp','number','phone','mobile']);
@@ -141,7 +150,7 @@ if ($action == 'upload_master_bulk') {
         $idx_imsi = findIdx($header, ['imsi']); 
         $idx_sn = findIdx($header, ['sn','serial']);
 
-        if ($idx_msisdn === false) jsonResponse('error', 'Header MSISDN tidak ditemukan.');
+        if ($idx_msisdn === false) sendJson('error', 'Header MSISDN tidak ditemukan.');
 
         if($db_type === 'pdo') $db->beginTransaction();
         
@@ -167,9 +176,9 @@ if ($action == 'upload_master_bulk') {
         }
         
         if($db_type === 'pdo') $db->commit();
-        jsonResponse('success', "Berhasil menyimpan $c data.", ['count'=>$c, 'preview'=>$previewData]);
+        sendJson('success', "Berhasil menyimpan $c data.", ['count'=>$c, 'preview'=>$previewData]);
 
-    } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); jsonResponse('error', $e->getMessage()); }
+    } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); sendJson('error', $e->getMessage()); }
 }
 
 // C. FETCH SIMS
@@ -228,53 +237,50 @@ if ($action == 'fetch_sims') {
             $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else $data = [];
 
-        jsonResponse('success', 'OK', ['data' => $data, 'stats' => $stats, 'total_rows' => $totalRows, 'page' => $page, 'total_pages' => ceil($totalRows / $limit)]); 
+        sendJson('success', 'OK', ['data' => $data, 'stats' => $stats, 'total_rows' => $totalRows, 'page' => $page, 'total_pages' => ceil($totalRows / $limit)]); 
     } 
-    catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
+    catch (Exception $e) { sendJson('error', $e->getMessage()); }
 }
 
-// --- D. FETCH LOGS (SAFE MODE - NO UNION ALL) ---
-// Kita pisah query agar jika satu tabel error, yang lain tetap jalan.
+// --- D. FETCH LOGS (CLEAN & ROBUST) ---
 if ($action == 'fetch_logs') {
     $po_id = $_POST['po_id'];
     $logs = [];
 
+    // Gunakan try-catch terpisah untuk setiap tabel agar jika satu tabel error (missing column), yang lain tetap jalan
     try {
-        // 1. Get Activations
         if ($db_type === 'pdo') {
-            $stmt = $db->prepare("SELECT 'Activation' as type, activation_date as date, active_qty as qty, activation_batch as batch, created_at FROM sim_activations WHERE po_provider_id = ?");
-            $stmt->execute([$po_id]);
-            $actData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Activation Logs
+            $s1 = $db->prepare("SELECT 'Activation' as type, activation_date as date, active_qty as qty, activation_batch as batch, created_at FROM sim_activations WHERE po_provider_id = ?");
+            $s1->execute([$po_id]);
+            $d1 = $s1->fetchAll(PDO::FETCH_ASSOC);
+            if($d1) $logs = array_merge($logs, $d1);
+
+            // Termination Logs
+            $s2 = $db->prepare("SELECT 'Termination' as type, termination_date as date, terminated_qty as qty, termination_batch as batch, created_at FROM sim_terminations WHERE po_provider_id = ?");
+            $s2->execute([$po_id]);
+            $d2 = $s2->fetchAll(PDO::FETCH_ASSOC);
+            if($d2) $logs = array_merge($logs, $d2);
         } else {
-            $actData = [];
-            $res = mysqli_query($db, "SELECT 'Activation' as type, activation_date as date, active_qty as qty, activation_batch as batch, created_at FROM sim_activations WHERE po_provider_id = '$po_id'");
-            if($res) while($r = mysqli_fetch_assoc($res)) $actData[] = $r;
+            // Mysqli Fallback
+            $q1 = mysqli_query($db, "SELECT 'Activation' as type, activation_date as date, active_qty as qty, activation_batch as batch, created_at FROM sim_activations WHERE po_provider_id = '$po_id'");
+            if($q1) while($r = mysqli_fetch_assoc($q1)) $logs[] = $r;
+
+            $q2 = mysqli_query($db, "SELECT 'Termination' as type, termination_date as date, terminated_qty as qty, termination_batch as batch, created_at FROM sim_terminations WHERE po_provider_id = '$po_id'");
+            if($q2) while($r = mysqli_fetch_assoc($q2)) $logs[] = $r;
         }
-        $logs = array_merge($logs, $actData);
-    } catch (Exception $e) { /* Ignore error on act table */ }
+    } catch (Exception $e) {
+        // Log error silently, but allow empty result return
+    }
 
-    try {
-        // 2. Get Terminations
-        if ($db_type === 'pdo') {
-            $stmt = $db->prepare("SELECT 'Termination' as type, termination_date as date, terminated_qty as qty, termination_batch as batch, created_at FROM sim_terminations WHERE po_provider_id = ?");
-            $stmt->execute([$po_id]);
-            $termData = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            $termData = [];
-            $res = mysqli_query($db, "SELECT 'Termination' as type, termination_date as date, terminated_qty as qty, termination_batch as batch, created_at FROM sim_terminations WHERE po_provider_id = '$po_id'");
-            if($res) while($r = mysqli_fetch_assoc($res)) $termData[] = $r;
-        }
-        $logs = array_merge($logs, $termData);
-    } catch (Exception $e) { /* Ignore error on term table */ }
+    // Sort by created_at DESC (Newest first)
+    if (!empty($logs)) {
+        usort($logs, function($a, $b) { 
+            return strtotime($b['created_at'] ?? $b['date']) - strtotime($a['created_at'] ?? $a['date']); 
+        });
+    }
 
-    // Sort manual by created_at DESC
-    usort($logs, function($a, $b) { 
-        $t1 = strtotime($a['created_at'] ?? $a['date']);
-        $t2 = strtotime($b['created_at'] ?? $b['date']);
-        return $t2 - $t1; 
-    });
-
-    jsonResponse('success', 'Logs fetched', ['data' => $logs]);
+    sendJson('success', 'Logs fetched', ['data' => $logs]);
 }
 
 // --- E. PROCESS BULK ACTION ---
@@ -286,7 +292,7 @@ if ($action == 'process_bulk_sim_action') {
         $batch = $_POST['batch_name']; 
         $po = $_POST['po_provider_id'];
         
-        if(empty($ids)) jsonResponse('error', 'No selection');
+        if(empty($ids)) sendJson('error', 'No selection');
 
         $st = ($mode === 'activate') ? 'Active' : 'Terminated';
         $dc = ($mode === 'activate') ? 'activation_date' : 'termination_date';
@@ -303,21 +309,24 @@ if ($action == 'process_bulk_sim_action') {
                 $db->prepare($sql)->execute($params);
             }
             
-            // Insert Log Summary
             $tbl = ($mode === 'activate') ? 'sim_activations' : 'sim_terminations';
-            $qty = ($mode === 'activate') ? 'active_qty' : 'terminated_qty';
-            $dbc = ($mode === 'activate') ? 'activation_date' : 'termination_date';
-            $bc = ($mode === 'activate') ? 'activation_batch' : 'termination_batch';
+            $qty_col = ($mode === 'activate') ? 'active_qty' : 'terminated_qty';
+            $date_col = ($mode === 'activate') ? 'activation_date' : 'termination_date';
+            $batch_col = ($mode === 'activate') ? 'activation_batch' : 'termination_batch';
             
             $cnt = count($ids);
+            
             $inf = $db->query("SELECT company_id, project_id FROM sim_tracking_po WHERE id=$po")->fetch();
-            $db->prepare("INSERT INTO $tbl (po_provider_id, company_id, project_id, $dbc, $bc, total_sim, $qty) VALUES (?,?,?,?,?,?,?)")
-               ->execute([$po, $inf['company_id']??0, $inf['project_id']??0, $date, $batch." (Action)", $cnt, $cnt]);
+            $c_id = $inf['company_id'] ?? 0;
+            $p_id = $inf['project_id'] ?? 0;
+
+            $logSql = "INSERT INTO $tbl (po_provider_id, company_id, project_id, $date_col, $batch_col, total_sim, $qty_col) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            $db->prepare($logSql)->execute([$po, $c_id, $p_id, $date, $batch." (Action)", $cnt, $cnt]);
             
             $db->commit();
-            jsonResponse('success', "Success processing $cnt items.");
+            sendJson('success', "Success processing $cnt items.");
         }
-    } catch (Exception $e) { if($db->inTransaction())$db->rollBack(); jsonResponse('error', $e->getMessage()); }
+    } catch (Exception $e) { if($db->inTransaction())$db->rollBack(); sendJson('error', $e->getMessage()); }
 }
 
 // 3. LEGACY HANDLERS (UNCHANGED)

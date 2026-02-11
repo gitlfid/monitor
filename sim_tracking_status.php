@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Logs Display Fixed & Total=Available Label)
+// DESC: Frontend Dashboard (Robust Logs Display & Correct Stats Label)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -103,6 +103,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-item.active { background: #eff6ff; }
     .mgr-stat-item.active::after { content:''; position:absolute; bottom:0; left:0; width:100%; height:3px; background:#4f46e5; }
+    
     .mgr-stat-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 5px; }
     .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
@@ -212,7 +213,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             
             <div class="mgr-stats-row">
                 <div class="mgr-stat-item" id="btnFilterTotal" onclick="switchFilter('all')">
-                    <div class="mgr-stat-label">Total Available</div> 
+                    <div class="mgr-stat-label">Total Available</div>
                     <div class="mgr-stat-val" id="stTotal">-</div>
                 </div>
                 <div class="mgr-stat-item" id="btnFilterActive" onclick="switchFilter('terminate')">
@@ -407,17 +408,18 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // LOGS FETCH (FIXED)
+    // LOGS FETCH (FIXED & ROBUST)
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         
+        // Initialize safe stats
         let st = {
-            total: parseInt(d.stats ? d.stats.total : 0),
-            active: parseInt(d.stats ? d.stats.active : 0),
-            term: parseInt(d.stats ? d.stats.terminated : 0)
+            total: (d.stats && d.stats.total) ? parseInt(d.stats.total) : 0,
+            active: (d.stats && d.stats.active) ? parseInt(d.stats.active) : 0,
+            term: (d.stats && d.stats.terminated) ? parseInt(d.stats.terminated) : 0
         };
         
-        // FIXED LOG SUMMARY
+        // Update Log Summary UI
         $('#logStatsContainer').html(`
             <div class="log-summary">
                 <div class="log-stat-box"><div class="log-stat-label">Available</div><div class="log-stat-value">${st.total.toLocaleString()}</div></div>
@@ -426,29 +428,40 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             </div>
         `);
 
-        $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
+        // Loading State
+        $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 small text-muted">Fetching history...</div></div>'); 
         new bootstrap.Modal(document.getElementById('modalLog')).show();
         
-        // FETCH REAL LOGS
+        // Fetch Real Logs
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
-                let h=''; if(!r.data || r.data.length===0) h='<div class="text-center p-4 text-muted">No logs recorded yet.</div>';
-                else r.data.forEach(l=>{ 
-                    let c = (l.type==='Activation') ? 'text-success' : 'text-danger'; 
-                    let batchInfo = l.batch ? l.batch : 'Manual Action';
-                    h+=`<div class="list-group-item border-0 border-bottom py-3 px-0">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-bold ${c}">${l.type}</div>
-                                    <div class="small text-muted">${batchInfo} | ${l.date}</div>
+                let h = '';
+                if(!r.data || r.data.length === 0) {
+                    h = '<div class="text-center p-4 text-muted">No logs recorded yet.</div>';
+                } else {
+                    r.data.forEach(l => { 
+                        let c = (l.type === 'Activation') ? 'text-success' : 'text-danger'; 
+                        let batchInfo = l.batch ? l.batch : 'Manual Action';
+                        let qty = l.qty ? parseInt(l.qty).toLocaleString() : '0';
+                        
+                        h += `<div class="list-group-item border-0 border-bottom py-3 px-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-bold ${c}">${l.type}</div>
+                                        <div class="small text-muted">${batchInfo} | ${l.date}</div>
+                                    </div>
+                                    <span class="fw-bold fs-5 text-dark">${qty}</span>
                                 </div>
-                                <span class="fw-bold fs-5 text-dark">${parseInt(l.qty).toLocaleString()}</span>
-                            </div>
-                        </div>`; 
-                });
+                              </div>`; 
+                    });
+                }
                 $('#logList').html(h);
-            } else $('#logList').html('<div class="text-center p-4 text-danger">Error loading logs.</div>');
-        },'json');
+            } else {
+                $('#logList').html('<div class="text-center p-4 text-danger">Error loading logs. Please try again.</div>');
+            }
+        },'json').fail(function() {
+            $('#logList').html('<div class="text-center p-4 text-danger">Connection Failed. Check network.</div>');
+        });
     }
 
     const lbl=<?php echo json_encode($lbls??[]); ?>; const sa=<?php echo json_encode($s_a??[]); ?>; const st=<?php echo json_encode($s_t??[]); ?>;
