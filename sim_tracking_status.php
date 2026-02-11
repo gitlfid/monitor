@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard (Stats Label Fixed & Logs Display synced)
+// DESC: Frontend Dashboard (Stats Label Fixed & Logs Display Synced)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -14,7 +14,7 @@ require_once 'includes/sim_helper.php';
 $db = db_connect();
 function e($str) { return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8'); }
 
-// --- 1. FETCH DATA UTAMA DASHBOARD ---
+// --- 1. FETCH DATA DASHBOARD ---
 $list_providers_new = [];
 $dashboard_data = [];
 $activations_raw = [];
@@ -44,7 +44,7 @@ if($db) {
     try { 
         $dashboard_data = $db->query($sql_main)->fetchAll(PDO::FETCH_ASSOC); 
         foreach($dashboard_data as $d) {
-            $total_sys_sims += $d['total_uploaded'];
+            $total_sys_sims += $d['cnt_avail']; // Total Dashboard = Available Only
             $total_sys_act += $d['cnt_active'];
             $total_sys_term += $d['cnt_term'];
         }
@@ -83,27 +83,22 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .text-act { color: #10b981; } .text-term { color: #ef4444; }
     
     /* BUTTONS */
-    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
-    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
     .btn-act { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
     .btn-act:hover { background: #166534; color: #fff; }
     .btn-term { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
     .btn-term:hover { background: #991b1b; color: #fff; }
     .btn-log { background: #fff; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; transition: 0.2s; }
     .btn-log:hover { background: #f1f5f9; }
-
-    /* LAYOUT MODAL */
-    .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
+    .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
+    .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
     
-    /* HEADER */
+    /* MODAL LAYOUT */
+    .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* STATS (CLICKABLE) */
+    /* STATS ROW (CLICKABLE) */
     .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
-    .mgr-stat-item { 
-        flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; 
-        cursor: pointer; transition: background 0.2s; position: relative;
-    }
+    .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s; position: relative; }
     .mgr-stat-item:hover { background: #f8fafc; }
     .mgr-stat-item:last-child { border-right: none; }
     .mgr-stat-item.active { background: #eff6ff; }
@@ -115,11 +110,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 
     /* CONTENT AREA */
     .mgr-layout { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
-    
-    /* SEARCH BAR */
     .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
-    
-    /* LIST */
     .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
     .sim-item { padding: 12px 25px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.1s; }
     .sim-item:hover { background: #f8fafc; }
@@ -144,7 +135,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .toast-success { border-color: #10b981; } .toast-error { border-color: #ef4444; }
     @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
     
-    /* LOGS */
+    /* LOGS STYLING */
     .log-summary { display: flex; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
     .log-stat-box { flex: 1; text-align: center; border-right: 1px solid #e2e8f0; }
     .log-stat-box:last-child { border-right: none; }
@@ -163,7 +154,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 </div>
 
 <div class="row g-4 px-4 mb-4">
-    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-light text-primary"><i class="bi bi-sim"></i></div><div><h6 class="text-muted small fw-bold mb-0">TOTAL INVENTORY</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_sims)?></h3></div></div></div>
+    <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-light text-primary"><i class="bi bi-sim"></i></div><div><h6 class="text-muted small fw-bold mb-0">TOTAL AVAILABLE</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_sims)?></h3></div></div></div>
     <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-success-subtle text-success"><i class="bi bi-check-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">ACTIVE SIMS</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_act)?></h3></div></div></div>
     <div class="col-md-4"><div class="card-pro stat-card"><div class="stat-icon bg-danger-subtle text-danger"><i class="bi bi-x-circle"></i></div><div><h6 class="text-muted small fw-bold mb-0">TERMINATED</h6><h3 class="fw-bold mb-0"><?=number_format($total_sys_term)?></h3></div></div></div>
 </div>
@@ -184,16 +175,17 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     <?php if(empty($dashboard_data)): ?><tr><td colspan="4" class="text-center py-5 text-muted">No data available.</td></tr><?php else: ?>
                     <?php foreach($dashboard_data as $row): 
                         $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
+                        // Persentase
                         $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
                         
-                        $stats = ['total'=>$tot, 'active'=>$act, 'terminated'=>$term, 'available'=>$avail];
+                        $stats = ['total'=>$avail, 'active'=>$act, 'terminated'=>$term, 'available'=>$avail]; // Send Available as Total
                         $json = htmlspecialchars(json_encode(['id'=>$row['po_id'], 'po'=>$row['provider_po'], 'batch'=>$row['batch_name'], 'comp'=>$row['company_name'], 'stats'=>$stats]), ENT_QUOTES);
                     ?>
                     <tr>
                         <td><div class="fw-bold text-dark"><?=e($row['company_name'])?></div><span class="badge bg-light text-primary border mt-1"><?=e($row['project_name'])?></span></td>
                         <td><div class="fw-bold text-dark"><?=e($row['provider_po'])?></div><div class="small text-muted"><?=e($row['batch_name'])?></div></td>
                         <td>
-                            <div class="d-flex justify-content-between small fw-bold mb-1"><span>Total: <?=number_format($tot)?></span><span class="text-success">Avail: <?=number_format($avail)?></span></div>
+                            <div class="d-flex justify-content-between small fw-bold mb-1"><span>Avail: <?=number_format($avail)?></span><span class="text-muted">Total Pool: <?=number_format($tot)?></span></div>
                             <div class="progress-track"><div class="bar-seg bg-a" style="width:<?=$pA?>%"></div><div class="bar-seg bg-t" style="width:<?=$pT?>%"></div><div class="bar-seg bg-v" style="width:<?=$pV?>%"></div></div>
                         </td>
                         <td>
@@ -223,7 +215,8 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             
             <div class="mgr-stats-row">
                 <div class="mgr-stat-item" id="btnFilterTotal" onclick="switchFilter('all')">
-                    <div class="mgr-stat-label">Total Available</div> <div class="mgr-stat-val" id="stTotal">-</div>
+                    <div class="mgr-stat-label">Total Available</div> 
+                    <div class="mgr-stat-val" id="stTotal">-</div>
                 </div>
                 <div class="mgr-stat-item" id="btnFilterActive" onclick="switchFilter('terminate')">
                     <div class="mgr-stat-label text-success">Active</div>
@@ -417,17 +410,17 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // LOGS FETCH (MATCHED WITH NEW BACKEND)
+    // LOGS FETCH (FIXED)
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         
-        // STATS FROM DATA ROW (Safe Int)
         let st = {
             total: parseInt(d.stats ? d.stats.total : 0),
             active: parseInt(d.stats ? d.stats.active : 0),
             term: parseInt(d.stats ? d.stats.terminated : 0)
         };
         
+        // FIXED LOG SUMMARY
         $('#logStatsContainer').html(`
             <div class="log-summary">
                 <div class="log-stat-box"><div class="log-stat-label">Available</div><div class="log-stat-value">${st.total.toLocaleString()}</div></div>
@@ -439,6 +432,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>'); 
         new bootstrap.Modal(document.getElementById('modalLog')).show();
         
+        // FETCH REAL LOGS
         $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
             if(r.status==='success'){
                 let h=''; if(!r.data || r.data.length===0) h='<div class="text-center p-4 text-muted">No logs recorded yet.</div>';

@@ -1,7 +1,7 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Processor (Logs Fixed & Total=Available Logic)
+// DESC: Backend Processor (Fix Logs History & Table Structure)
 // =======================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -71,6 +71,7 @@ try {
     }
 
     // --- FIX MISSING COLUMNS (AUTO ADD IF NOT EXISTS) ---
+    // Ini menjamin Logs tidak error meskipun database lama
     function ensureColumn($db, $table, $col, $def, $type) {
         try {
             $exists = false;
@@ -88,9 +89,13 @@ try {
         } catch (Exception $e) {}
     }
 
+    // Pastikan kolom penting ada
     ensureColumn($db, 'sim_activations', 'po_provider_id', "INT(11) NOT NULL DEFAULT 0", $db_type);
+    ensureColumn($db, 'sim_activations', 'activation_batch', "VARCHAR(100) NULL", $db_type);
     ensureColumn($db, 'sim_activations', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", $db_type);
+    
     ensureColumn($db, 'sim_terminations', 'po_provider_id', "INT(11) NOT NULL DEFAULT 0", $db_type);
+    ensureColumn($db, 'sim_terminations', 'termination_batch', "VARCHAR(100) NULL", $db_type);
     ensureColumn($db, 'sim_terminations', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP", $db_type);
 
 } catch (Exception $e) {}
@@ -214,8 +219,7 @@ if ($action == 'fetch_sims') {
     }
 
     try { 
-        // 1. STATISTIK GLOBAL (UPDATED: TOTAL = AVAILABLE)
-        // 'total' sekarang menghitung jumlah status 'Available' saja
+        // 1. STATISTIK GLOBAL (TOTAL = AVAILABLE)
         $stats = ['total'=>0, 'active'=>0, 'terminated'=>0];
         if ($db_type === 'pdo') {
             $stmtStats = $db->prepare("SELECT 
@@ -262,13 +266,12 @@ if ($action == 'fetch_sims') {
     catch (Exception $e) { jsonResponse('error', $e->getMessage()); }
 }
 
-// --- D. FETCH LOGS (FIX BLANK ISSUE) ---
+// --- D. FETCH LOGS (FIX BLANK ISSUE - UNION ALL) ---
 if ($action == 'fetch_logs') {
     $po_id = $_POST['po_id'];
     try {
         $logs = [];
-        // UNION ALL & Robust Query
-        // Memastikan kolom yang dipilih ada dan menggunakan alias yang konsisten
+        // UNION ALL & Query yang lebih aman
         $query = "
             SELECT 'Activation' as type, activation_date as date, active_qty as qty, activation_batch as batch, created_at
             FROM sim_activations WHERE po_provider_id = ?
@@ -283,10 +286,12 @@ if ($action == 'fetch_logs') {
             $stmt->execute([$po_id, $po_id]);
             $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
+            // Fallback mysqli
             $res1 = mysqli_query($db, "SELECT 'Activation' as type, activation_date as date, active_qty as qty, activation_batch as batch, created_at FROM sim_activations WHERE po_provider_id = '$po_id'");
             while($r = mysqli_fetch_assoc($res1)) $logs[] = $r;
             $res2 = mysqli_query($db, "SELECT 'Termination' as type, termination_date as date, terminated_qty as qty, termination_batch as batch, created_at FROM sim_terminations WHERE po_provider_id = '$po_id'");
             while($r = mysqli_fetch_assoc($res2)) $logs[] = $r;
+            
             usort($logs, function($a, $b) { return strtotime($b['created_at']) - strtotime($a['created_at']); });
         }
 
@@ -311,7 +316,7 @@ if ($action == 'process_bulk_sim_action') {
         if ($db_type === 'pdo') {
             $db->beginTransaction();
             
-            // 1. Update Status
+            // 1. Update Inventory
             $chunkSize = 1000; 
             $chunks = array_chunk($ids, $chunkSize);
             foreach ($chunks as $chunk) {
