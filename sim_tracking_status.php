@@ -319,7 +319,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         switchFilter(m);
-        // Use jQuery to open modal to avoid conflicts
         $('#modalMgr').modal('show');
     }
 
