@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard Full (Stable Logs, Fix Modal, Correct Stats)
+// DESC: Frontend Dashboard Full (Log History Viewer & Stable Modal)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -96,7 +96,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* STATS ROW (CLICKABLE) */
+    /* STATS ROW */
     .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
     .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s; position: relative; }
     .mgr-stat-item:hover { background: #f8fafc; }
@@ -108,7 +108,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* CONTENT AREA */
+    /* CONTENT */
     .mgr-layout { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
     .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
@@ -299,7 +299,8 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         switchFilter(m);
-        // Pakai jQuery agar stabil
+        
+        // Pake jQuery Modal agar stabil
         $('#modalMgr').modal('show');
     }
 
@@ -342,7 +343,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             if(res.status==='success'){
                 // STATS (FROM BACKEND)
                 if(res.stats) {
-                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString()); // Displays Available Count
+                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
@@ -422,14 +423,14 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // LOGS FETCH (FIXED & ROBUST)
+    // LOGS FETCH (FIXED & JQUERY MODAL)
     function fetchLogs(d) {
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         
         let st = {
-            total: parseInt(d.stats ? d.stats.total : 0),
-            active: parseInt(d.stats ? d.stats.active : 0),
-            term: parseInt(d.stats ? d.stats.terminated : 0)
+            total: (d.stats && d.stats.total) ? parseInt(d.stats.total) : 0,
+            active: (d.stats && d.stats.active) ? parseInt(d.stats.active) : 0,
+            term: (d.stats && d.stats.terminated) ? parseInt(d.stats.terminated) : 0
         };
         
         // FIXED LOG SUMMARY
@@ -443,7 +444,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 
         $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 small text-muted">Fetching history...</div></div>'); 
         
-        // FIX: Gunakan jQuery modal agar stabil
+        // Use jQuery to open modal to prevent grey overlay issues
         $('#modalLog').modal('show');
         
         // FETCH REAL LOGS
@@ -458,7 +459,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <div class="fw-bold ${c}">${l.type}</div>
-                                    <div class="small text-muted">${batchInfo} | ${l.date}</div>
+                                    <div class="small text-muted">${batchInfo} | ${l.log_date}</div>
                                 </div>
                                 <span class="fw-bold fs-5 text-dark">${qty}</span>
                             </div>
@@ -467,7 +468,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                 $('#logList').html(h);
             } else $('#logList').html('<div class="text-center p-4 text-danger">Error loading logs.</div>');
         },'json').fail(function() {
-            $('#logList').html('<div class="text-center p-4 text-danger">Connection Error.</div>');
+            $('#logList').html('<div class="text-center p-4 text-danger">Connection Error. Check network.</div>');
         });
     }
 
