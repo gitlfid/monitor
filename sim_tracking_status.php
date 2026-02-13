@@ -428,9 +428,9 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
         
         let st = {
-            total: (d.stats && d.stats.total) ? parseInt(d.stats.total) : 0,
-            active: (d.stats && d.stats.active) ? parseInt(d.stats.active) : 0,
-            term: (d.stats && d.stats.terminated) ? parseInt(d.stats.terminated) : 0
+            total: parseInt(d.stats ? d.stats.total : 0),
+            active: parseInt(d.stats ? d.stats.active : 0),
+            term: parseInt(d.stats ? d.stats.terminated : 0)
         };
         
         // FIXED LOG SUMMARY

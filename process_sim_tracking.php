@@ -221,6 +221,7 @@ if ($action == 'fetch_sims') {
     }
 
     try { 
+        // Statistik (Total yang dimaksud adalah Available)
         $stats = ['total'=>0, 'active'=>0, 'terminated'=>0];
         if ($db_type === 'pdo') {
             $stmtStats = $db->prepare("SELECT 
@@ -232,6 +233,7 @@ if ($action == 'fetch_sims') {
             $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
         }
 
+        // Hitung Total Baris untuk Pagination
         $countSql = "SELECT COUNT(*) as total FROM sim_inventory $where";
         if ($db_type === 'pdo') {
             $stmtCount = $db->prepare($countSql);
@@ -239,6 +241,7 @@ if ($action == 'fetch_sims') {
             $totalRows = $stmtCount->fetchColumn();
         } else $totalRows = 0; 
 
+        // Ambil Data Baris
         $sql = "SELECT id, msisdn, iccid, status, activation_date, termination_date FROM sim_inventory $where ORDER BY msisdn ASC LIMIT $limit OFFSET $offset";
         if ($db_type === 'pdo') {
             $stmt = $db->prepare($sql);
@@ -301,12 +304,12 @@ if ($action == 'upload_master_bulk') {
 }
 
 // =======================================================================
-// 3. LEGACY HANDLERS (FULL - Create PO, Logistic, Delete, dll)
+// 3. LEGACY HANDLERS (FULL - Create, Update, Logistic, Delete)
 // =======================================================================
 
 // Handler: CREATE / UPDATE PO
 if (isset($_POST['action']) && ($_POST['action'] == 'create' || $_POST['action'] == 'update')) {
-    if (ob_get_length()) ob_end_flush();
+    if (ob_get_length()) ob_end_flush(); // Biarkan output normal untuk redirect
     
     $id = $_POST['id'] ?? null; 
     $type = $_POST['type']; 
@@ -373,7 +376,7 @@ if (isset($_GET['action']) && strpos($_GET['action'], 'delete') !== false) {
     header("Location: $r?msg=deleted"); exit;
 }
 
-// Handler: CREATE COMPANY
+// Handler: CREATE COMPANY (Jika ada)
 if (isset($_POST['action']) && $_POST['action'] === 'create_company') {
     if (ob_get_length()) ob_end_flush();
     $name = $_POST['company_name']; 
