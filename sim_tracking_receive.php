@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_receive.php
-// UPDATE: Dynamic Origin/Dest from DB (PO Based) & Detailed Modal
+// UPDATE: Restore Live Tracking Fetch + Dynamic PO Info
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -19,7 +19,6 @@ $db = db_connect();
 // =========================================================================
 
 // --- A. DATA RECEIVE (INBOUND) ---
-// Fokus: Dari Provider mana barang ini datang?
 $data_receive = [];
 try {
     $sql_recv = "SELECT l.*, 
@@ -38,8 +37,7 @@ try {
 } catch (Exception $e) {}
 
 // --- B. DATA DELIVERY (OUTBOUND) ---
-// Fokus: Ke Client mana barang ini dikirim?
-$opt_projects = []; $opt_couriers = []; $opt_receivers = [];
+$opt_projects = []; $opt_couriers = []; 
 
 try {
     if ($db) {
@@ -94,7 +92,7 @@ try {
     }
 } catch (Exception $e) {}
 
-// --- C. DATA PO UNTUK MODAL (Select Options) ---
+// --- C. DATA PO UNTUK MODAL ---
 $provider_pos = []; $client_pos = [];
 try {
     $sql_po = "SELECT po.id, po.po_number, po.batch_name, po.type,
@@ -120,7 +118,6 @@ try {
     .card { border: 1px solid #eef2f6; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); margin-bottom: 24px; background: #fff; }
     .card-header { background: #fff; border-bottom: 1px solid #f1f5f9; padding: 20px 25px; border-radius: 12px 12px 0 0 !important; }
     
-    /* TABLE */
     .table-modern { width: 100%; border-collapse: separate; border-spacing: 0; }
     .table-modern thead th {
         font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;
@@ -133,7 +130,6 @@ try {
     }
     .table-modern tr:hover td { background-color: #f8fafc; }
     
-    /* BADGES & TEXT */
     .badge-soft-success { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     .badge-soft-info { background-color: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
     .badge-soft-warning { background-color: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
@@ -142,7 +138,6 @@ try {
     .text-po { font-family: 'Consolas', monospace; font-weight: 700; color: #435ebe; letter-spacing: -0.5px; }
     .text-company { font-weight: 700; color: #1e293b; }
     
-    /* TABS */
     .nav-tabs { border-bottom: 2px solid #f1f5f9; }
     .nav-link { border: none; color: #64748b; font-weight: 600; padding: 12px 24px; font-size: 0.9rem; transition: 0.2s; }
     .nav-link:hover { color: #435ebe; background: #f8fafc; }
@@ -184,7 +179,8 @@ try {
                             <thead>
                                 <tr>
                                     <th class="ps-4">Date Received</th>
-                                    <th>Provider Source</th> <th>Receiver (Internal)</th>
+                                    <th>Provider Source</th> 
+                                    <th>Receiver (Internal)</th>
                                     <th class="text-center">Qty</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
@@ -222,7 +218,8 @@ try {
                                 <tr>
                                     <th class="ps-4">Sent Date</th>
                                     <th>Status</th>
-                                    <th>Client Destination</th> <th>Tracking / Courier</th>
+                                    <th>Client Destination</th> 
+                                    <th>Tracking / Courier</th>
                                     <th>Recipient</th>
                                     <th class="text-center">Qty</th>
                                     <th class="text-center">Action</th>
@@ -375,17 +372,24 @@ try {
         modalDetail = new bootstrap.Modal(document.getElementById('detailModal'));
     });
 
+    // --- TRACKING FUNCTION (FIXED: RESTORED FETCH) ---
     function trackResi(resi, kurir, clientName) {
         if(!resi || !kurir) { alert('No tracking data available'); return; }
+        
         document.getElementById('trackDest').textContent = clientName || 'Unknown Client';
+        
         modalTracking.show();
         document.getElementById('trackingResult').innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Tracking...</p></div>';
         
-        // Ganti URL ini dengan API tracking Anda yang sebenarnya
-        // Untuk demo, kita tampilkan info statis
-        setTimeout(() => {
-            document.getElementById('trackingResult').innerHTML = `<div class="alert alert-info text-center">Tracking API for <b>${kurir}</b> : <b>${resi}</b> is not connected yet.</div>`;
-        }, 1000);
+        // --- LOGIKA LIVE TRACKING DIKEMBALIKAN DISINI ---
+        fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
+            .then(r => r.text())
+            .then(d => { 
+                document.getElementById('trackingResult').innerHTML = d; 
+            })
+            .catch(e => { 
+                document.getElementById('trackingResult').innerHTML = '<div class="alert alert-danger text-center">Error loading tracking data. Check connection.</div>'; 
+            });
     }
 
     function viewDetail(data) {
