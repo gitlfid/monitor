@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard Full (Log History Viewer & Stable Modal)
+// DESC: Frontend Dashboard Full - History Feature (Summary & Details)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -69,7 +69,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; }
     
-    /* CARDS & STATS */
+    /* CARDS */
     .card-pro { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px; overflow: hidden; }
     .stat-card { padding: 24px; display: flex; align-items: center; gap: 20px; }
     .stat-icon { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
@@ -96,7 +96,17 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* STATS ROW */
+    /* HISTORY STYLES (NEW) */
+    .history-item { cursor: pointer; transition: 0.2s; border-left: 4px solid transparent; }
+    .history-item:hover { background: #f8fafc; border-left-color: #cbd5e1; }
+    .history-item.active { background: #eff6ff; border-left-color: #4f46e5; }
+    .history-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; }
+    .history-val { font-size: 1.1rem; font-weight: 700; color: #334155; }
+    .detail-list { max-height: 400px; overflow-y: auto; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; }
+    .detail-item { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 0.9rem; display: flex; justify-content: space-between; }
+    .detail-item:last-child { border-bottom: none; }
+
+    /* MGR STATS ROW */
     .mgr-stats-row { display: flex; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
     .mgr-stat-item { flex: 1; padding: 15px; text-align: center; border-right: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s; position: relative; }
     .mgr-stat-item:hover { background: #f8fafc; }
@@ -129,7 +139,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
     .prog-cont { display: none; margin-top: 20px; }
     .prog-bar { height: 10px; background: #4f46e5; width: 0%; transition: width 0.2s; border-radius: 5px; }
-    
     #toastCont { position: fixed; top: 20px; right: 20px; z-index: 9999; }
     .toast-item { min-width: 300px; padding: 15px; border-radius: 8px; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin-bottom: 10px; border-left: 4px solid; display: flex; gap: 12px; align-items: center; animation: slideIn 0.3s ease; }
     .toast-success { border-color: #10b981; } .toast-error { border-color: #ef4444; }
@@ -175,7 +184,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                     <?php if(empty($dashboard_data)): ?><tr><td colspan="4" class="text-center py-5 text-muted">No data available.</td></tr><?php else: ?>
                     <?php foreach($dashboard_data as $row): 
                         $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
-                        // Persentase
                         $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
                         
                         $stats = ['total'=>$avail, 'active'=>$act, 'terminated'=>$term, 'available'=>$avail]; // Send Available as Total
@@ -191,13 +199,38 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                         <td>
                             <button class="btn-act" onclick='openMgr(<?=$json?>,"activate")'>Manage Activation</button>
                             <button class="btn-term" onclick='openMgr(<?=$json?>,"terminate")'>Manage Termination</button>
-                            <button class="btn-log" onclick='fetchLogs(<?=$json?>)'>Logs</button>
+                            <button class="btn-log" onclick='openHistory(<?=$json?>)'>History</button>
                         </td>
                     </tr>
                     <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalHistory" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-white border-bottom pb-3">
+                <div><h6 class="modal-title fw-bold" id="histTitle">Activity History</h6><div class="small text-muted" id="histSubtitle">-</div></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="min-height:400px; background:#fff">
+                <div class="row g-0 h-100">
+                    <div class="col-md-5 border-end" style="background:#f8fafc; height:500px; overflow-y:auto;">
+                        <div class="p-3 border-bottom bg-light small fw-bold text-muted sticky-top">HISTORY LOGS</div>
+                        <div id="histSummaryList"></div>
+                    </div>
+                    <div class="col-md-7" style="height:500px; overflow-y:auto;">
+                        <div class="p-3 border-bottom bg-white small fw-bold text-muted sticky-top">DETAILS</div>
+                        <div id="histDetailView" class="p-3">
+                            <div class="text-center text-muted mt-5"><i class="bi bi-arrow-left-circle fs-4"></i><br>Select a history item on the left to view details.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -266,19 +299,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
 
 <div class="modal fade" id="modalUpload" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-dialog-centered"><div class="modal-content border-0 shadow"><div class="modal-header bg-primary text-white"><h6 class="modal-title fw-bold">Upload Master Data</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body p-4"><form id="formUploadMaster"><input type="hidden" name="action" value="upload_master_bulk"><input type="hidden" name="is_ajax" value="1"><div class="mb-3"><label class="small fw-bold text-muted">Select Provider PO</label><select name="po_provider_id" id="poSelect" class="form-select" required onchange="fetchBatchInfo(this.value)"><option value="">-- Choose PO --</option><?php foreach($list_providers_new as $p): ?><option value="<?=$p['id']?>"><?=$p['po_number']?> (Alloc: <?=number_format($p['sim_qty'])?>)</option><?php endforeach; ?></select></div><div class="mb-3"><div class="upload-zone" id="dropZone"><input type="file" name="upload_file" id="fIn" style="position:absolute;width:100%;height:100%;top:0;left:0;opacity:0;cursor:pointer" onchange="$('#fTxt').text(this.files[0].name).addClass('text-primary')"><i class="bi bi-cloud-arrow-up display-4 text-secondary"></i><div id="fTxt" class="mt-2 fw-bold">Click/Drag CSV or Excel Here</div><div class="small text-muted">Header Required: <code>MSISDN</code></div></div></div><div class="row mb-3"><div class="col"><label class="small fw-bold text-muted">Batch Name</label><input type="text" name="activation_batch" id="batchInput" class="form-control bg-light text-secondary" placeholder="Select PO first..." readonly required></div><div class="col"><label class="small fw-bold text-muted">Date</label><input type="date" name="date_field" class="form-control" value="<?=date('Y-m-d')?>" required></div></div><div class="mb-3" id="progCont" style="display:none;"><div class="d-flex justify-content-between small fw-bold mb-1"><span id="progText">Uploading...</span><span id="progPct">0%</span></div><div class="progress" style="height:10px"><div class="progress-bar bg-primary" id="progBar" style="width:0%"></div></div></div><button type="submit" class="btn btn-primary w-100 fw-bold" id="btnUp">Start Upload</button></form></div></div></div>
 
-<div class="modal fade" id="modalLog" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content border-0">
-            <div class="modal-header bg-white border-bottom pb-3"><div><h6 class="modal-title fw-bold" id="logTitle">History Logs</h6><div class="small text-muted" id="logSubtitle">-</div></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body p-4" style="min-height:300px; background:#fff">
-                <div id="logStatsContainer"></div>
-                <h6 class="fw-bold text-secondary small mb-3 border-bottom pb-2">TRANSACTION HISTORY</h6>
-                <div id="logList" class="list-group list-group-flush"></div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
@@ -299,8 +319,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#mgrSubtitle').text(`${d.comp} - ${d.po}`); 
         $('#sKey').val(''); 
         switchFilter(m);
-        
-        // Pake jQuery Modal agar stabil
+        // Use jQuery to open modal to avoid conflicts
         $('#modalMgr').modal('show');
     }
 
@@ -343,7 +362,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             if(res.status==='success'){
                 // STATS (FROM BACKEND)
                 if(res.stats) {
-                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString());
+                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString()); // Displays Available Count
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
@@ -423,53 +442,83 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // LOGS FETCH (FIXED & JQUERY MODAL)
-    function fetchLogs(d) {
-        $('#logTitle').text("Logs: " + d.po); $('#logSubtitle').text(d.comp + " | " + d.batch);
-        
-        let st = {
-            total: parseInt(d.stats ? d.stats.total : 0),
-            active: parseInt(d.stats ? d.stats.active : 0),
-            term: parseInt(d.stats ? d.stats.terminated : 0)
-        };
-        
-        // FIXED LOG SUMMARY
-        $('#logStatsContainer').html(`
-            <div class="log-summary">
-                <div class="log-stat-box"><div class="log-stat-label">Available</div><div class="log-stat-value">${st.total.toLocaleString()}</div></div>
-                <div class="log-stat-box"><div class="log-stat-label text-success">Active</div><div class="log-stat-value val-act">${st.active.toLocaleString()}</div></div>
-                <div class="log-stat-box"><div class="log-stat-label text-danger">Terminated</div><div class="log-stat-value val-term">${st.term.toLocaleString()}</div></div>
-            </div>
-        `);
+    // --- NEW HISTORY FUNCTIONS (The new part) ---
+    let hPoId = 0;
 
-        $('#logList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 small text-muted">Fetching history...</div></div>'); 
+    function openHistory(d) {
+        hPoId = d.id;
+        $('#histTitle').text("History: " + d.po);
+        $('#histSubtitle').text(d.comp + " | " + d.batch);
+        $('#histSummaryList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
+        $('#histDetailView').html('<div class="text-center text-muted mt-5"><i class="bi bi-arrow-left-circle fs-4"></i><br>Select a history item on the left to view details.</div>');
         
-        // Use jQuery to open modal to prevent grey overlay issues
-        $('#modalLog').modal('show');
-        
-        // FETCH REAL LOGS
-        $.post('process_sim_tracking.php', {action:'fetch_logs', po_id:d.id}, function(r){
-            if(r.status==='success'){
-                let h=''; if(!r.data || r.data.length===0) h='<div class="text-center p-4 text-muted">No logs recorded yet.</div>';
-                else r.data.forEach(l=>{ 
-                    let c = (l.type==='Activation') ? 'text-success' : 'text-danger'; 
-                    let batchInfo = l.batch ? l.batch : 'Manual Action';
-                    let qty = l.qty ? parseInt(l.qty).toLocaleString() : '0';
-                    h+=`<div class="list-group-item border-0 border-bottom py-3 px-0">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-bold ${c}">${l.type}</div>
-                                    <div class="small text-muted">${batchInfo} | ${l.log_date}</div>
-                                </div>
-                                <span class="fw-bold fs-5 text-dark">${qty}</span>
+        // Show Modal (Use jQuery for stability)
+        $('#modalHistory').modal('show'); 
+
+        // Fetch Summary
+        $.post('process_sim_tracking.php', {action:'fetch_history_summary', po_id:hPoId}, function(res){
+            if(res.status === 'success') {
+                if(res.data.length === 0) {
+                    $('#histSummaryList').html('<div class="text-center py-5 text-muted">No history found.</div>');
+                } else {
+                    let html = '';
+                    res.data.forEach(function(item) {
+                        let badgeColor = (item.type === 'Activation') ? 'text-success' : 'text-danger';
+                        let icon = (item.type === 'Activation') ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
+                        
+                        html += `
+                        <div class="history-item p-3 border-bottom" onclick="loadHistoryDetails('${item.date}', '${item.type}', this)">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="history-label ${badgeColor}"><i class="bi ${icon} me-1"></i> ${item.type}</div>
+                                <div class="small text-muted">${item.date}</div>
                             </div>
-                        </div>`; 
-                });
-                $('#logList').html(h);
-            } else $('#logList').html('<div class="text-center p-4 text-danger">Error loading logs.</div>');
-        },'json').fail(function() {
-            $('#logList').html('<div class="text-center p-4 text-danger">Connection Error. Check network.</div>');
-        });
+                            <div class="d-flex justify-content-between align-items-end">
+                                <div class="small text-muted">${item.batch}</div>
+                                <div class="history-val">${parseInt(item.qty).toLocaleString()} <span class="small fw-normal text-muted">SIMs</span></div>
+                            </div>
+                        </div>`;
+                    });
+                    $('#histSummaryList').html(html);
+                }
+            } else {
+                $('#histSummaryList').html('<div class="text-center py-5 text-danger">Error loading history.</div>');
+            }
+        }, 'json');
+    }
+
+    function loadHistoryDetails(date, type, el) {
+        // Highlight selected item
+        $('.history-item').removeClass('active');
+        $(el).addClass('active');
+
+        $('#histDetailView').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Loading details...</div></div>');
+
+        $.post('process_sim_tracking.php', {action:'fetch_history_details', po_id:hPoId, date:date, type:type}, function(res){
+            if(res.status === 'success') {
+                if(res.data.length === 0) {
+                    $('#histDetailView').html('<div class="text-center py-5 text-muted">No details found for this record.</div>');
+                } else {
+                    let html = `<div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold m-0 text-primary">${type} Details (${res.data.length})</h6>
+                                    <span class="badge bg-light text-dark border">${date}</span>
+                                </div>
+                                <div class="detail-list">`;
+                    
+                    res.data.forEach(function(s) {
+                        let stClass = (s.status === 'Active') ? 'text-success' : 'text-danger';
+                        html += `<div class="detail-item">
+                                    <span class="fw-bold">${s.msisdn}</span>
+                                    <span class="${stClass} small fw-bold">${s.status}</span>
+                                 </div>`;
+                    });
+                    
+                    html += `</div>`;
+                    $('#histDetailView').html(html);
+                }
+            } else {
+                $('#histDetailView').html('<div class="text-center py-5 text-danger">Error loading details.</div>');
+            }
+        }, 'json');
     }
 
     const lbl=<?php echo json_encode($lbls??[]); ?>; const sa=<?php echo json_encode($s_a??[]); ?>; const st=<?php echo json_encode($s_t??[]); ?>;
