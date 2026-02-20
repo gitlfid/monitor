@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_receive.php
-// UPDATE: UI Replication of "Price/Helpdesk" (Timeline & Clean Tables)
+// UPDATE: Make Tracking Text Clickable & Retain UI/Logic
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -19,7 +19,6 @@ $db = db_connect();
 // =========================================================================
 
 // --- A. DATA RECEIVE (INBOUND) ---
-// Barang masuk DARI Provider KE Internal
 $data_receive = [];
 try {
     $sql_recv = "SELECT l.*, 
@@ -38,7 +37,6 @@ try {
 } catch (Exception $e) {}
 
 // --- B. DATA DELIVERY (OUTBOUND) ---
-// Barang keluar DARI Internal (LinksField) KE Client
 $data_delivery = [];
 try {
     $sql_del = "SELECT l.*, 
@@ -83,7 +81,7 @@ try {
     .card { border: none; border-radius: 8px; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); background: white; margin-bottom: 20px; }
     .page-title { font-size: 1.25rem; font-weight: 600; color: #111827; }
     
-    /* TABLE STYLES (Price Look) */
+    /* TABLE STYLES */
     .table-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     .table-custom thead th {
         background-color: #f9fafb; color: #6b7280; font-weight: 600; text-transform: uppercase;
@@ -100,8 +98,21 @@ try {
     .bg-blue { background-color: #dbeafe; color: #1e40af; }
     .bg-yellow { background-color: #fef3c7; color: #92400e; }
     
-    /* TRACKING INFO */
-    .tracking-code { font-family: 'Roboto Mono', monospace; font-weight: 600; color: #2563eb; font-size: 0.85rem; }
+    /* TRACKING INFO (CLICKABLE) */
+    .tracking-code { 
+        font-family: 'Roboto Mono', monospace; 
+        font-weight: 700; 
+        color: #2563eb; 
+        font-size: 0.85rem; 
+        cursor: pointer; 
+        text-decoration: none; 
+        transition: 0.2s;
+        display: inline-block;
+    }
+    .tracking-code:hover { 
+        color: #1d4ed8; 
+        text-decoration: underline !important; 
+    }
     .courier-tag { background: #1f2937; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase; font-weight: bold; margin-top: 4px; display: inline-block; }
 
     /* BUTTONS */
@@ -110,21 +121,17 @@ try {
     .btn-primary-custom { background-color: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 500; font-size: 0.875rem; transition: 0.2s; }
     .btn-primary-custom:hover { background-color: #1d4ed8; color: white; }
 
-    /* TIMELINE MODAL STYLES (REFERENSI IMAGE) */
+    /* TIMELINE MODAL STYLES */
     .modal-header-clean { border-bottom: 1px solid #e5e7eb; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
     .shipment-status-card { background: white; padding: 20px; border-bottom: 1px solid #e5e7eb; }
     .status-large { font-size: 1.5rem; font-weight: 700; color: #059669; margin-bottom: 5px; }
     .route-bar { display: flex; align-items: center; justify-content: space-between; background: #f3f4f6; padding: 10px 15px; border-radius: 6px; margin-top: 15px; font-size: 0.85rem; font-weight: 600; color: #4b5563; }
     
-    /* TIMELINE VERTICAL */
-    .timeline { position: relative; padding: 20px 20px 20px 40px; }
-    .timeline::before { content: ''; position: absolute; top: 0; bottom: 0; left: 24px; width: 2px; background: #e5e7eb; }
-    .timeline-item { position: relative; margin-bottom: 25px; }
-    .timeline-dot { position: absolute; left: -21px; top: 0; width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid #9ca3af; z-index: 2; }
-    .timeline-item:first-child .timeline-dot { background: #2563eb; border-color: #2563eb; box-shadow: 0 0 0 3px #dbeafe; }
-    .timeline-date { font-size: 0.75rem; color: #6b7280; margin-bottom: 2px; }
-    .timeline-status { font-weight: 700; color: #1f2937; font-size: 0.9rem; margin-bottom: 4px; }
-    .timeline-desc { background: #f3f4f6; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; color: #4b5563; display: inline-block; width: 100%; }
+    /* TABS */
+    .nav-tabs { border-bottom: 2px solid #f1f5f9; }
+    .nav-link { border: none; color: #64748b; font-weight: 600; padding: 12px 24px; font-size: 0.9rem; transition: 0.2s; }
+    .nav-link:hover { color: #435ebe; background: #f8fafc; }
+    .nav-link.active { color: #435ebe; border-bottom: 2px solid #435ebe; background: transparent; }
 </style>
 
 <div class="px-4 py-4">
@@ -162,8 +169,10 @@ try {
                                 <tr>
                                     <th>Sent Date</th>
                                     <th>Delivered</th>
-                                    <th>Project / Client</th> <th>Tracking Info</th>
-                                    <th>Sender</th> <th>Receiver</th>
+                                    <th>Project / Client</th>
+                                    <th>Tracking Info</th>
+                                    <th>Sender</th>
+                                    <th>Receiver</th>
                                     <th class="text-center">Qty</th>
                                     <th class="text-center">Action</th>
                                 </tr>
@@ -204,7 +213,9 @@ try {
                                         </div>
                                     </td>
                                     <td>
-                                        <div class="tracking-code"><?= htmlspecialchars($row['tracking_number']) ?></div>
+                                        <a href="javascript:void(0)" class="tracking-code" onclick='trackResi("<?= htmlspecialchars($row['tracking_number']) ?>", "<?= htmlspecialchars($row['courier_name']) ?>", "<?= htmlspecialchars($row['client_name']) ?>")'>
+                                            <?= htmlspecialchars($row['tracking_number'] ?: 'NO-RESI') ?>
+                                        </a><br>
                                         <div class="courier-tag"><?= htmlspecialchars($row['courier_name']) ?></div>
                                     </td>
                                     <td>
@@ -217,7 +228,7 @@ try {
                                     </td>
                                     <td class="text-center fw-bold"><?= number_format($row['qty']) ?></td>
                                     <td class="text-center">
-                                        <button class="btn-action" title="Track" onclick='trackResi("<?= $row['tracking_number'] ?>", "<?= $row['courier_name'] ?>", "<?= htmlspecialchars($row['client_name']) ?>")'><i class="bi bi-geo-alt"></i></button>
+                                        <button class="btn-action" title="Track" onclick='trackResi("<?= htmlspecialchars($row['tracking_number']) ?>", "<?= htmlspecialchars($row['courier_name']) ?>", "<?= htmlspecialchars($row['client_name']) ?>")'><i class="bi bi-geo-alt"></i></button>
                                         <button class="btn-action" title="Edit" onclick='editDelivery(<?= $rowJson ?>)'><i class="bi bi-pencil"></i></button>
                                     </td>
                                 </tr>
@@ -234,8 +245,10 @@ try {
                                 <tr>
                                     <th>Received Date</th>
                                     <th>Status</th>
-                                    <th>Provider / Sender</th> <th>Internal PO</th>
-                                    <th>Receiver (WH)</th> <th class="text-center">Qty</th>
+                                    <th>Provider / Sender</th>
+                                    <th>Internal PO</th>
+                                    <th>Receiver (WH)</th>
+                                    <th class="text-center">Qty</th>
                                     <th class="text-center">Action</th>
                                 </tr>
                             </thead>
@@ -247,7 +260,7 @@ try {
                                     <td>
                                         <div class="fw-bold"><?= date('d M Y', strtotime($row['logistic_date'])) ?></div>
                                     </td>
-                                    <td><span class="status-badge bg-green">Received</span></td>
+                                    <td><span class="status-badge bg-green"><i class="bi bi-check-circle-fill me-1"></i> Received</span></td>
                                     <td>
                                         <div class="fw-bold text-dark"><?= htmlspecialchars($row['provider_name']) ?></div>
                                         <div class="small text-muted">Batch: <?= htmlspecialchars($row['batch_name']) ?></div>
@@ -345,7 +358,7 @@ try {
                     </div>
                     <div class="col-md-6 ps-4">
                         <h6 class="text-primary border-bottom pb-2 mb-3">Shipping Info</h6>
-                        <div class="row"><div class="col-6 mb-3"><label class="small fw-bold">Courier</label><input type="text" name="courier" id="del_courier" class="form-control"></div><div class="col-6 mb-3"><label class="small fw-bold">AWB</label><input type="text" name="awb" id="del_awb" class="form-control"></div></div>
+                        <div class="row"><div class="col-6 mb-3"><label class="small fw-bold">Courier</label><input type="text" name="courier" id="del_courier" class="form-control"></div><div class="col-6 mb-3"><label class="small fw-bold">AWB / Resi</label><input type="text" name="awb" id="del_awb" class="form-control"></div></div>
                         <div class="mb-3"><label class="small fw-bold">Qty</label><input type="number" name="qty" id="del_qty" class="form-control" required></div>
                         <div class="mb-3"><label class="small fw-bold">Status</label><select name="status" id="del_status" class="form-select"><option value="Process">Process</option><option value="Shipped">Shipped</option><option value="Delivered">Delivered</option></select></div>
                         <div class="p-3 bg-light rounded"><label class="small fw-bold text-muted d-block mb-1">Proof of Delivery</label><div class="row g-1"><div class="col-6"><input type="date" name="received_date" id="del_recv_date" class="form-control form-control-sm"></div><div class="col-6"><input type="text" name="receiver_name" id="del_recv_name" class="form-control form-control-sm" placeholder="Accepted By"></div></div></div>
@@ -391,35 +404,26 @@ try {
         modalTracking = new bootstrap.Modal(document.getElementById('trackingModal'));
     });
 
-    // --- TRACKING FUNCTION (RESTORED FETCH) ---
+    // --- TRACKING FUNCTION ---
     function trackResi(resi, kurir, clientName) {
         if(!resi || !kurir) { alert('No tracking data'); return; }
         
-        // Update Static Modal Info
         $('#trackDest').text(clientName || 'Unknown Client');
         $('#trackResiVal').text(resi);
         $('#trackCourierVal').text(kurir);
         $('#trackStatusMain').text('Checking...');
-        $('#trackStatusMain').removeClass('text-success text-warning text-danger').addClass('text-muted');
+        $('#trackStatusMain').removeClass('text-success text-warning text-danger text-primary').addClass('text-muted');
         
         modalTracking.show();
         $('#trackingResult').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
         
-        // Call Live Tracking API
         fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
             .then(r => r.text())
             .then(html => { 
-                // Inject result. 
-                // NOTE: Agar tampilan Timeline sesuai referensi, 
-                // ajax_track_delivery.php idealnya mereturn struktur HTML dengan class:
-                // .timeline, .timeline-item, .timeline-dot, .timeline-date, .timeline-desc
-                // Jika return text biasa, kita wrap saja.
-                
                 $('#trackingResult').html(html);
                 
-                // Coba update status utama jika ditemukan kata kunci
                 let content = $(html).text().toLowerCase();
-                if(content.includes('delivered')) {
+                if(content.includes('delivered') || content.includes('berhasil')) {
                     $('#trackStatusMain').text('Delivered').removeClass('text-muted').addClass('text-success');
                 } else if(content.includes('transit') || content.includes('process')) {
                     $('#trackStatusMain').text('On Process').removeClass('text-muted').addClass('text-warning');
@@ -432,7 +436,6 @@ try {
             });
     }
 
-    // Modal Helpers
     function openReceiveModal() { $('#recv_action').val('create_logistic'); $('#recv_id').val(''); $('#recv_date').val(new Date().toISOString().split('T')[0]); $('#recv_pic').val(''); $('#recv_po_id').val(''); $('#recv_qty').val(''); modalReceive.show(); }
     function editReceive(d) { $('#recv_action').val('update_logistic'); $('#recv_id').val(d.id); $('#recv_date').val(d.logistic_date); $('#recv_pic').val(d.pic_name); $('#recv_po_id').val(d.po_id); $('#recv_qty').val(d.qty); modalReceive.show(); }
     function openDeliveryModal() { $('#del_action').val('create_logistic'); $('#del_id').val(''); $('#del_date').val(new Date().toISOString().split('T')[0]); $('#del_po_id').val(''); $('#del_pic').val(''); $('#del_phone').val(''); $('#del_address').val(''); $('#del_courier').val(''); $('#del_awb').val(''); $('#del_qty').val(''); $('#del_status').val('Process'); $('#del_recv_date').val(''); $('#del_recv_name').val(''); modalDelivery.show(); }
