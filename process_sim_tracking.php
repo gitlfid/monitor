@@ -1,7 +1,7 @@
 <?php
 // =======================================================================
 // FILE: process_sim_tracking.php
-// DESC: Backend Full - Logic Fix for History (Grouping by Date)
+// DESC: Backend Full - Strict History Logic (No Status Leakage)
 // =======================================================================
 
 // 1. CLEAN OUTPUT BUFFER (Wajib untuk JSON Stabil)
@@ -34,7 +34,6 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 // 1. AUTO REPAIR DATABASE
 // =======================================================================
 try {
-    // Tabel Log Aktivasi
     $sql_act = "CREATE TABLE IF NOT EXISTS sim_activations (
         id INT(11) AUTO_INCREMENT PRIMARY KEY,
         po_provider_id INT(11) NOT NULL DEFAULT 0,
@@ -48,7 +47,6 @@ try {
         INDEX (po_provider_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
-    // Tabel Log Terminasi
     $sql_term = "CREATE TABLE IF NOT EXISTS sim_terminations (
         id INT(11) AUTO_INCREMENT PRIMARY KEY,
         po_provider_id INT(11) NOT NULL DEFAULT 0,
@@ -76,46 +74,67 @@ try {
 // 2. AJAX HANDLERS BARU (HISTORY LOGIC FIXED)
 // =======================================================================
 
-// --- A. GET HISTORY SUMMARY (GROUP BY DATE - LOGIC FIX) ---
-// Kita gabungkan log berdasarkan tanggal agar cocok dengan detail yang ditampilkan
+// --- A. GET HISTORY SUMMARY (REAL-TIME INVENTORY CHECK) ---
 if ($action == 'fetch_history_summary') {
     $po_id = $_POST['po_id'] ?? 0;
     $history = [];
 
     try {
-        // Ambil Ringkasan Aktivasi (SUM QTY & GROUP BY DATE)
-        // Group_concat batch agar jika ada banyak batch dalam 1 hari tetap terlihat
-        $sqlAct = "SELECT 'Activation' as type, activation_date as date, SUM(active_qty) as qty, 
-                   GROUP_CONCAT(DISTINCT activation_batch SEPARATOR ', ') as batch 
-                   FROM sim_activations 
-                   WHERE po_provider_id = ? 
-                   GROUP BY activation_date";
-        
-        // Ambil Ringkasan Terminasi (SUM QTY & GROUP BY DATE)
-        $sqlTerm = "SELECT 'Termination' as type, termination_date as date, SUM(terminated_qty) as qty, 
-                    GROUP_CONCAT(DISTINCT termination_batch SEPARATOR ', ') as batch 
-                    FROM sim_terminations 
-                    WHERE po_provider_id = ? 
-                    GROUP BY termination_date";
-
         if ($db_type === 'pdo') {
-            // Execute Act
-            $stmt = $db->prepare($sqlAct); $stmt->execute([$po_id]);
-            $actData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // 1. Dapatkan Batch & Tanggal Aktivasi, lalu hitung jumlah yang MASIH ACTIVE saat ini
+            $stmtA = $db->prepare("SELECT 'Activation' as type, activation_date as date, GROUP_CONCAT(DISTINCT activation_batch SEPARATOR ', ') as batch FROM sim_activations WHERE po_provider_id = ? GROUP BY activation_date");
+            $stmtA->execute([$po_id]);
+            $actDataRaw = $stmtA->fetchAll(PDO::FETCH_ASSOC);
             
-            // Execute Term
-            $stmt = $db->prepare($sqlTerm); $stmt->execute([$po_id]);
-            $termData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $actData = [];
+            foreach($actDataRaw as $row) {
+                $s = $db->prepare("SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id=? AND activation_date=? AND status='Active'");
+                $s->execute([$po_id, $row['date']]);
+                $row['qty'] = $s->fetchColumn();
+                if($row['qty'] > 0) $actData[] = $row; // Hanya tampilkan jika masih ada yang aktif
+            }
+
+            // 2. Dapatkan Batch & Tanggal Terminasi, lalu hitung jumlah yang MASIH TERMINATED saat ini
+            $stmtT = $db->prepare("SELECT 'Termination' as type, termination_date as date, GROUP_CONCAT(DISTINCT termination_batch SEPARATOR ', ') as batch FROM sim_terminations WHERE po_provider_id = ? GROUP BY termination_date");
+            $stmtT->execute([$po_id]);
+            $termDataRaw = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+            
+            $termData = [];
+            foreach($termDataRaw as $row) {
+                $s = $db->prepare("SELECT COUNT(*) FROM sim_inventory WHERE po_provider_id=? AND termination_date=? AND status='Terminated'");
+                $s->execute([$po_id, $row['date']]);
+                $row['qty'] = $s->fetchColumn();
+                if($row['qty'] > 0) $termData[] = $row;
+            }
+
+            $history = array_merge($actData, $termData);
+
         } else {
-            $safe_id = mysqli_real_escape_string($db, $po_id);
-            $actRes = mysqli_query($db, "SELECT 'Activation' as type, activation_date as date, SUM(active_qty) as qty, GROUP_CONCAT(DISTINCT activation_batch SEPARATOR ', ') as batch FROM sim_activations WHERE po_provider_id = '$safe_id' GROUP BY activation_date");
-            $actData = []; if($actRes) while($r = mysqli_fetch_assoc($actRes)) $actData[] = $r;
+            // FALLBACK MYSQLI
+            $s_po = mysqli_real_escape_string($db, $po_id);
+            
+            // Act
+            $qA = mysqli_query($db, "SELECT 'Activation' as type, activation_date as date, GROUP_CONCAT(DISTINCT activation_batch SEPARATOR ', ') as batch FROM sim_activations WHERE po_provider_id = '$s_po' GROUP BY activation_date");
+            $actData = [];
+            if($qA) while($r = mysqli_fetch_assoc($qA)) {
+                $d = mysqli_real_escape_string($db, $r['date']);
+                $qC = mysqli_query($db, "SELECT COUNT(*) as c FROM sim_inventory WHERE po_provider_id='$s_po' AND activation_date='$d' AND status='Active'");
+                $r['qty'] = mysqli_fetch_assoc($qC)['c'];
+                if($r['qty'] > 0) $actData[] = $r;
+            }
 
-            $termRes = mysqli_query($db, "SELECT 'Termination' as type, termination_date as date, SUM(terminated_qty) as qty, GROUP_CONCAT(DISTINCT termination_batch SEPARATOR ', ') as batch FROM sim_terminations WHERE po_provider_id = '$safe_id' GROUP BY termination_date");
-            $termData = []; if($termRes) while($r = mysqli_fetch_assoc($termRes)) $termData[] = $r;
+            // Term
+            $qT = mysqli_query($db, "SELECT 'Termination' as type, termination_date as date, GROUP_CONCAT(DISTINCT termination_batch SEPARATOR ', ') as batch FROM sim_terminations WHERE po_provider_id = '$s_po' GROUP BY termination_date");
+            $termData = [];
+            if($qT) while($r = mysqli_fetch_assoc($qT)) {
+                $d = mysqli_real_escape_string($db, $r['date']);
+                $qC = mysqli_query($db, "SELECT COUNT(*) as c FROM sim_inventory WHERE po_provider_id='$s_po' AND termination_date='$d' AND status='Terminated'");
+                $r['qty'] = mysqli_fetch_assoc($qC)['c'];
+                if($r['qty'] > 0) $termData[] = $r;
+            }
+
+            $history = array_merge($actData, $termData);
         }
-
-        $history = array_merge($actData, $termData);
 
         // Sort by Date Descending
         usort($history, function($a, $b) {
@@ -127,8 +146,8 @@ if ($action == 'fetch_history_summary') {
     sendSafeJson('success', 'History loaded', ['data' => $history]);
 }
 
-// --- B. GET HISTORY DETAILS (LOGIC FIX) ---
-// Tampilkan semua SIM yang memiliki tanggal tersebut, APAPUN statusnya sekarang.
+// --- B. GET HISTORY DETAILS (STRICT STATUS FILTER) ---
+// Menghindari kebocoran data Terminated ke dalam detail Activation
 if ($action == 'fetch_history_details') {
     $po_id = $_POST['po_id'];
     $date  = $_POST['date'];
@@ -138,24 +157,24 @@ if ($action == 'fetch_history_details') {
     try {
         $dateCol = ($type === 'Activation') ? 'activation_date' : 'termination_date';
         
-        // LOGIC FIX: Hapus filter "status = Active". 
-        // Kenapa? Karena history activation harus menampilkan apa yang diaktivasi pada tanggal tersebut,
-        // meskipun sekarang statusnya sudah Terminated.
+        // BUG FIX: Gunakan strict status matching
+        $statusFilter = ($type === 'Activation') ? 'Active' : 'Terminated';
         
         $sql = "SELECT msisdn, iccid, status, activation_date, termination_date 
                 FROM sim_inventory 
-                WHERE po_provider_id = ? AND $dateCol = ? 
+                WHERE po_provider_id = ? AND $dateCol = ? AND status = ?
                 ORDER BY msisdn ASC";
         
         if ($db_type === 'pdo') {
             $stmt = $db->prepare($sql);
-            $stmt->execute([$po_id, $date]);
+            $stmt->execute([$po_id, $date, $statusFilter]);
             $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
             $s_po = mysqli_real_escape_string($db, $po_id);
             $s_date = mysqli_real_escape_string($db, $date);
+            $s_stat = mysqli_real_escape_string($db, $statusFilter);
             
-            $res = mysqli_query($db, "SELECT msisdn, iccid, status, activation_date, termination_date FROM sim_inventory WHERE po_provider_id = '$s_po' AND $dateCol = '$s_date' ORDER BY msisdn ASC");
+            $res = mysqli_query($db, "SELECT msisdn, iccid, status, activation_date, termination_date FROM sim_inventory WHERE po_provider_id = '$s_po' AND $dateCol = '$s_date' AND status = '$s_stat' ORDER BY msisdn ASC");
             if($res) while($r = mysqli_fetch_assoc($res)) $list[] = $r;
         }
     } catch (Exception $e) { sendSafeJson('error', $e->getMessage()); }
@@ -329,7 +348,9 @@ if ($action == 'upload_master_bulk') {
     } catch (Exception $e) { if($db_type==='pdo')$db->rollBack(); sendSafeJson('error', $e->getMessage()); }
 }
 
+// =======================================================================
 // 3. LEGACY HANDLERS (FULL)
+// =======================================================================
 if (isset($_POST['action']) && in_array($_POST['action'], ['create', 'update', 'create_provider_from_client', 'create_company', 'update_logistic'])) {
     if (ob_get_length()) ob_end_flush();
     // Create/Update PO
@@ -345,7 +366,7 @@ if (isset($_POST['action']) && in_array($_POST['action'], ['create', 'update', '
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_provider_from_client') {
         $cId = !empty($_POST['provider_company_id']) ? $_POST['provider_company_id'] : NULL; $file = uploadFileLegacy($_FILES['po_file'], 'provider');
         $p = ['provider', $cId, NULL, $_POST['manual_provider_name']??NULL, NULL, $_POST['batch_name'], $_POST['link_client_po_id'], $_POST['provider_po_number'], $_POST['po_date'], str_replace(',','',$_POST['sim_qty']), $file];
-        if ($db_type === 'pdo') $db->prepare("INSERT INTO sim_tracking_po (type, company_id, project_id, manual_company_name, manual_project_name, batch_name, link_client_po_id, po_number, po_date, sim_qty, po_file) VALUES (?,?,?,?,?,?,?,?,?,?,?)")->execute($p);
+        if ($db_type === 'pdo') { $db->prepare("INSERT INTO sim_tracking_po (type, company_id, project_id, manual_company_name, manual_project_name, batch_name, link_client_po_id, po_number, po_date, sim_qty, po_file) VALUES (?,?,?,?,?,?,?,?,?,?,?)")->execute($p); }
         header("Location: sim_tracking_provider_po.php?msg=created_from_client"); exit;
     }
     // Logistic

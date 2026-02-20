@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_status.php
-// DESC: Frontend Dashboard Full - History Feature (Summary & Details)
+// DESC: Frontend Dashboard Full - History Feature (Strict Real-Time Sync)
 // =========================================================================
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
@@ -44,7 +44,7 @@ if($db) {
     try { 
         $dashboard_data = $db->query($sql_main)->fetchAll(PDO::FETCH_ASSOC); 
         foreach($dashboard_data as $d) {
-            $total_sys_sims += $d['cnt_avail']; // Total Dashboard = Available Only
+            $total_sys_sims += $d['cnt_avail']; 
             $total_sys_act += $d['cnt_active'];
             $total_sys_term += $d['cnt_term'];
         }
@@ -80,7 +80,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .progress-track { background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden; display: flex; width: 100%; margin-top: 8px; }
     .bar-seg { height: 100%; transition: width 0.6s ease; }
     .bg-a { background: #10b981; } .bg-t { background: #ef4444; } .bg-v { background: #cbd5e1; }
-    .text-act { color: #10b981; } .text-term { color: #ef4444; }
     
     /* BUTTONS */
     .btn-act { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; font-size: 0.75rem; font-weight: 600; border-radius: 6px; padding: 6px 12px; width: 100%; display: block; margin-bottom: 4px; transition: 0.2s; }
@@ -92,11 +91,11 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .btn-primary-pro { background: #4f46e5; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; color: white; transition: 0.2s; text-decoration: none; display: inline-block; }
     .btn-primary-pro:hover { background: #4338ca; color: white; transform: translateY(-1px); }
     
-    /* MODAL LAYOUT */
+    /* MODAL MGR */
     .modal-content-full { height: 90vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
     .mgr-header { background: #fff; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     
-    /* HISTORY STYLES (NEW) */
+    /* HISTORY STYLES */
     .history-item { cursor: pointer; transition: 0.2s; border-left: 4px solid transparent; }
     .history-item:hover { background: #f8fafc; border-left-color: #cbd5e1; }
     .history-item.active { background: #eff6ff; border-left-color: #4f46e5; }
@@ -118,7 +117,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .mgr-stat-val { font-size: 1.35rem; font-weight: 800; color: #334155; }
     .val-act { color: #10b981; } .val-term { color: #ef4444; }
 
-    /* CONTENT */
+    /* CONTENT MGR */
     .mgr-layout { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
     .mgr-search-bar { background: #f8fafc; padding: 15px 25px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
     .mgr-list-box { flex-grow: 1; overflow-y: auto; background: #fff; position: relative; min-height: 0; } 
@@ -131,23 +130,16 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     .sb-active { background: #dcfce7; color: #166534; }
     .sb-term { background: #fee2e2; color: #991b1b; }
 
-    /* FOOTER */
+    /* FOOTER MGR */
     .mgr-footer { padding: 15px 25px; border-top: 1px solid #e2e8f0; background: #fff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; flex-wrap: wrap; gap: 15px; }
 
     /* UPLOAD & TOAST */
     .upload-zone { border: 2px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; text-align: center; padding: 30px; cursor: pointer; position: relative; transition: 0.2s; }
     .upload-zone:hover { border-color: #4f46e5; background: #eef2ff; }
-    .prog-cont { display: none; margin-top: 20px; }
-    .prog-bar { height: 10px; background: #4f46e5; width: 0%; transition: width 0.2s; border-radius: 5px; }
     #toastCont { position: fixed; top: 20px; right: 20px; z-index: 9999; }
     .toast-item { min-width: 300px; padding: 15px; border-radius: 8px; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin-bottom: 10px; border-left: 4px solid; display: flex; gap: 12px; align-items: center; animation: slideIn 0.3s ease; }
     .toast-success { border-color: #10b981; } .toast-error { border-color: #ef4444; }
     @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-    
-    /* LOGS STYLING */
-    .log-summary { display: flex; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
-    .log-stat-box { flex: 1; text-align: center; border-right: 1px solid #e2e8f0; }
-    .log-stat-box:last-child { border-right: none; }
 </style>
 
 <div id="toastCont"></div>
@@ -186,7 +178,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
                         $tot = (int)$row['total_uploaded']; $act = (int)$row['cnt_active']; $term = (int)$row['cnt_term']; $avail = (int)$row['cnt_avail'];
                         $pA = ($tot>0)?($act/$tot)*100:0; $pT = ($tot>0)?($term/$tot)*100:0; $pV = 100-$pA-$pT;
                         
-                        $stats = ['total'=>$avail, 'active'=>$act, 'terminated'=>$term, 'available'=>$avail]; // Send Available as Total
+                        $stats = ['total'=>$avail, 'active'=>$act, 'terminated'=>$term, 'available'=>$avail]; 
                         $json = htmlspecialchars(json_encode(['id'=>$row['po_id'], 'po'=>$row['provider_po'], 'batch'=>$row['batch_name'], 'comp'=>$row['company_name'], 'stats'=>$stats]), ENT_QUOTES);
                     ?>
                     <tr>
@@ -326,7 +318,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         cMode = mode; cPage = 1;
         $('.mgr-stat-item').removeClass('active');
         let hint = '';
-        
         if(mode === 'activate') {
             $('#btnFilterTotal').addClass('active');
             hint = 'Showing <b>Available</b> SIMs. Ready to Activate.';
@@ -340,7 +331,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             $('#btnFilterTotal').addClass('active');
             hint = 'Showing <b>All</b> SIMs. Select items to see available actions.';
         }
-
         $('#hintText').html(hint);
         $('#btnProc').prop('disabled', true).removeClass('btn-success btn-danger btn-secondary').addClass('btn-primary-pro').text('Select Items');
         loadData();
@@ -359,9 +349,8 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
             action:'fetch_sims', po_id:cId, search_bulk:cSearch, page:cPage, target_action: cMode
         }, function(res){
             if(res.status==='success'){
-                // STATS (FROM BACKEND)
                 if(res.stats) {
-                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString()); // Displays Available Count
+                    $('#stTotal').text(parseInt(res.stats.total||0).toLocaleString()); 
                     $('#stActive').text(parseInt(res.stats.active||0).toLocaleString());
                     $('#stTerm').text(parseInt(res.stats.terminated||0).toLocaleString());
                 }
@@ -441,7 +430,7 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         },'json');
     }
 
-    // --- NEW HISTORY FUNCTIONS (The new part) ---
+    // --- HISTORY FUNCTIONS ---
     let hPoId = 0;
 
     function openHistory(d) {
@@ -451,10 +440,8 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $('#histSummaryList').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
         $('#histDetailView').html('<div class="text-center text-muted mt-5"><i class="bi bi-arrow-left-circle fs-4"></i><br>Select a history item on the left to view details.</div>');
         
-        // Show Modal (Use jQuery for stability)
         $('#modalHistory').modal('show'); 
 
-        // Fetch Summary
         $.post('process_sim_tracking.php', {action:'fetch_history_summary', po_id:hPoId}, function(res){
             if(res.status === 'success') {
                 if(res.data.length === 0) {
@@ -486,7 +473,6 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
     }
 
     function loadHistoryDetails(date, type, el) {
-        // Highlight selected item
         $('.history-item').removeClass('active');
         $(el).addClass('active');
 
@@ -495,10 +481,11 @@ foreach($dates as $d){ $lbls[]=date('d M', strtotime($d)); $s_a[]=$cd_a[$d]??0; 
         $.post('process_sim_tracking.php', {action:'fetch_history_details', po_id:hPoId, date:date, type:type}, function(res){
             if(res.status === 'success') {
                 if(res.data.length === 0) {
-                    $('#histDetailView').html('<div class="text-center py-5 text-muted">No details found for this record.</div>');
+                    $('#histDetailView').html('<div class="text-center py-5 text-muted">No active details found for this record.</div>');
                 } else {
+                    let badgeColor = (type === 'Activation') ? 'text-success' : 'text-danger';
                     let html = `<div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="fw-bold m-0 text-primary">${type} Details (${res.data.length})</h6>
+                                    <h6 class="fw-bold m-0 ${badgeColor}">${type} Details (${res.data.length})</h6>
                                     <span class="badge bg-light text-dark border">${date}</span>
                                 </div>
                                 <div class="detail-list">`;
