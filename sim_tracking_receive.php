@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_receive.php
-// UPDATE: Make Tracking Text Clickable & Retain UI/Logic
+// UPDATE: Clean & Simple Tracking Modal (Remove Duplicate Info)
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -116,16 +116,10 @@ try {
     .courier-tag { background: #1f2937; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; text-transform: uppercase; font-weight: bold; margin-top: 4px; display: inline-block; }
 
     /* BUTTONS */
-    .btn-action { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid #d1d5db; background: white; color: #4b5563; margin-right: 4px; transition: 0.2s; }
+    .btn-action { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid #d1d5db; background: white; color: #4b5563; margin-right: 4px; transition: 0.2s; cursor: pointer; }
     .btn-action:hover { background: #f3f4f6; color: #111827; border-color: #9ca3af; }
     .btn-primary-custom { background-color: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 500; font-size: 0.875rem; transition: 0.2s; }
     .btn-primary-custom:hover { background-color: #1d4ed8; color: white; }
-
-    /* TIMELINE MODAL STYLES */
-    .modal-header-clean { border-bottom: 1px solid #e5e7eb; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
-    .shipment-status-card { background: white; padding: 20px; border-bottom: 1px solid #e5e7eb; }
-    .status-large { font-size: 1.5rem; font-weight: 700; color: #059669; margin-bottom: 5px; }
-    .route-bar { display: flex; align-items: center; justify-content: space-between; background: #f3f4f6; padding: 10px 15px; border-radius: 6px; margin-top: 15px; font-size: 0.85rem; font-weight: 600; color: #4b5563; }
     
     /* TABS */
     .nav-tabs { border-bottom: 2px solid #f1f5f9; }
@@ -289,53 +283,25 @@ try {
 </div>
 
 <div class="modal fade" id="trackingModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg">
             
-            <div class="modal-header-clean">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-truck fs-4 text-primary me-2"></i>
-                    <h5 class="mb-0 fw-bold">Shipment Status</h5>
+            <div class="modal-header border-bottom pb-3">
+                <div>
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
+                        <i class="bi bi-box-seam me-2 text-primary fs-4"></i> Tracking Details
+                    </h5>
+                    <div class="small text-muted mt-1">Destination: <span id="trackDestSubtitle" class="fw-bold text-dark"></span></div>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
-            <div class="modal-body p-0 bg-white">
-                <div class="shipment-status-card">
-                    <div class="text-center mb-4">
-                        <div class="small text-muted text-uppercase fw-bold mb-1">DESTINATION</div>
-                        <h4 class="fw-bold text-dark m-0" id="trackDest">-</h4>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center border p-3 rounded">
-                        <div>
-                            <div class="small text-muted">RESI NO.</div>
-                            <div class="fw-bold font-monospace text-dark" id="trackResiVal">-</div>
-                        </div>
-                        <div class="text-end">
-                            <div class="small text-muted">COURIER</div>
-                            <div class="badge bg-dark" id="trackCourierVal">-</div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <div class="small text-muted text-uppercase fw-bold">CURRENT STATUS</div>
-                        <div class="status-large" id="trackStatusMain">Checking...</div>
-                    </div>
-
-                    <div class="route-bar">
-                        <span><i class="bi bi-building me-1"></i> PT LINKSFIELD (Origin)</span>
-                        <i class="bi bi-arrow-right text-muted"></i>
-                        <span class="text-primary fw-bold">CLIENT (Destination)</span>
-                    </div>
-                </div>
-
-                <div class="p-3 bg-light">
-                    <h6 class="fw-bold text-muted small ms-3 mb-3">SHIPMENT HISTORY</h6>
-                    <div id="trackingResult">
-                        </div>
+            <div class="modal-body p-0 bg-light">
+                <div id="trackingResult" class="p-0">
+                    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
@@ -404,35 +370,25 @@ try {
         modalTracking = new bootstrap.Modal(document.getElementById('trackingModal'));
     });
 
-    // --- TRACKING FUNCTION ---
+    // --- TRACKING FUNCTION (CLEAN LOGIC) ---
     function trackResi(resi, kurir, clientName) {
         if(!resi || !kurir) { alert('No tracking data'); return; }
         
-        $('#trackDest').text(clientName || 'Unknown Client');
-        $('#trackResiVal').text(resi);
-        $('#trackCourierVal').text(kurir);
-        $('#trackStatusMain').text('Checking...');
-        $('#trackStatusMain').removeClass('text-success text-warning text-danger text-primary').addClass('text-muted');
+        // Hanya isi subtitle tujuan pengiriman di modal header
+        $('#trackDestSubtitle').text(clientName || 'Unknown Client');
         
         modalTracking.show();
-        $('#trackingResult').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
+        $('#trackingResult').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted small">Memuat data dari kurir...</div></div>');
         
+        // Panggil file AJAX tracking
         fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
             .then(r => r.text())
             .then(html => { 
+                // Hasil langsung dimasukkan (Tampilan & CSS bawaan dari file AJAX)
                 $('#trackingResult').html(html);
-                
-                let content = $(html).text().toLowerCase();
-                if(content.includes('delivered') || content.includes('berhasil')) {
-                    $('#trackStatusMain').text('Delivered').removeClass('text-muted').addClass('text-success');
-                } else if(content.includes('transit') || content.includes('process')) {
-                    $('#trackStatusMain').text('On Process').removeClass('text-muted').addClass('text-warning');
-                } else {
-                    $('#trackStatusMain').text('Shipped').removeClass('text-muted').addClass('text-primary');
-                }
             })
             .catch(e => { 
-                $('#trackingResult').html('<div class="alert alert-danger text-center">Connection Failed</div>'); 
+                $('#trackingResult').html('<div class="alert alert-danger text-center m-4">Gagal terhubung ke server kurir.</div>'); 
             });
     }
 
