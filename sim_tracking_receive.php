@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_receive.php
-// UPDATE: UI Polish (Symmetrical Tracking Modal & Professional Tables)
+// UPDATE: Fetch Real JSON API Data for Origin/Destination & Timeline UI
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -147,28 +147,15 @@ try {
     .nav-link:hover { color: #2563eb; background: #f8fafc; border-radius: 8px 8px 0 0; }
     .nav-link.active { color: #2563eb; border-bottom: 3px solid #2563eb; background: transparent; font-weight: 700; }
 
-    /* MODAL UI POLISH */
-    .modal-header-custom {
-        background-color: #ffffff;
-        border-bottom: 1px solid #f1f5f9;
-        padding: 20px 24px;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        border-radius: 12px 12px 0 0;
-    }
-    .modal-icon-box {
-        width: 42px;
-        height: 42px;
-        background-color: #eff6ff;
-        color: #2563eb;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-        flex-shrink: 0;
-    }
+    /* TIMELINE STYLES (NEW) */
+    .timeline-container { position: relative; padding-left: 1.25rem; }
+    .timeline-container::before { content: ''; position: absolute; left: 0.4rem; top: 0.5rem; bottom: 0; width: 2px; background-color: #e5e7eb; }
+    .timeline-item { position: relative; padding-left: 1.5rem; padding-bottom: 1.5rem; }
+    .timeline-dot { position: absolute; left: -1.05rem; top: 0.25rem; width: 12px; height: 12px; border-radius: 50%; background-color: #fff; border: 2px solid #cbd5e1; z-index: 2; }
+    .timeline-dot-active { position: absolute; left: -1.05rem; top: 0.25rem; width: 12px; height: 12px; border-radius: 50%; background-color: #2563eb; border: 2px solid #2563eb; box-shadow: 0 0 0 3px #dbeafe; z-index: 2; }
+    .timeline-date { font-size: 0.75rem; color: #64748b; margin-bottom: 2px; }
+    .timeline-status { font-size: 0.9rem; margin-bottom: 6px; color: #1e3a8a; }
+    .timeline-desc { background-color: #cbd5e12e; padding: 12px 16px; border-radius: 6px; font-size: 0.85rem; color: #475569; font-family: monospace; display: inline-block; width: 100%; border: 1px solid #e2e8f0; }
 </style>
 
 <div class="px-4 py-4">
@@ -183,7 +170,7 @@ try {
                 <i class="bi bi-box-arrow-in-down me-2"></i> Receive
             </button>
             <button class="btn btn-primary-custom" onclick="openDeliveryModal()">
-                <i class="bi bi-truck me-2"></i> Input Delivery
+                <i class="bi bi-plus me-2"></i> Input Delivery
             </button>
         </div>
     </div>
@@ -294,7 +281,7 @@ try {
                                             </div>
                                         </td>
                                         <td>
-                                            <a href="javascript:void(0)" class="tracking-code" onclick='trackResi("<?= htmlspecialchars($row['tracking_number']) ?>", "<?= htmlspecialchars($row['courier_name']) ?>", "<?= htmlspecialchars($row['client_name']) ?>")'>
+                                            <a href="javascript:void(0)" class="tracking-code" onclick='trackResi("<?= htmlspecialchars($row['tracking_number']) ?>", "<?= htmlspecialchars($row['courier_name']) ?>")'>
                                                 <?= htmlspecialchars($row['tracking_number'] ?: 'NO-RESI') ?>
                                             </a><br>
                                             <div class="courier-tag"><?= htmlspecialchars($row['courier_name']) ?></div>
@@ -374,27 +361,19 @@ try {
 
 <div class="modal fade" id="trackingModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow:hidden;">
             
-            <div class="modal-header-custom">
-                <div class="d-flex align-items-center">
-                    <div class="modal-icon-box shadow-sm">
-                        <i class="bi bi-box-seam"></i>
-                    </div>
-                    <div class="ms-3">
-                        <h5 class="modal-title fw-bold text-dark mb-1" style="font-size: 1.15rem;">Tracking Details</h5>
-                        <div class="small text-muted">Destination: <span id="trackDestSubtitle" class="fw-bold text-dark"></span></div>
-                    </div>
-                </div>
-                <button type="button" class="btn-close mt-2" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header bg-white pb-3 pt-4 px-4 d-flex justify-content-between align-items-center" style="border-bottom: 1px solid #f1f5f9;">
+                <h5 class="modal-title fw-bold text-dark d-flex align-items-center">
+                    <i class="bi bi-box-seam text-primary me-2 fs-4"></i> Shipment Status
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
-            <div class="modal-body p-0" style="background-color: #f8fafc;">
-                <div id="trackingResult" class="w-100 h-100">
-                    <div class="text-center py-5">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <div class="mt-3 text-muted small fw-bold">Memuat data dari kurir...</div>
-                    </div>
+            <div class="modal-body p-0" id="trackingResult" style="background-color: #f8fafc;">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-3 text-muted small fw-bold">Memuat data dari kurir...</div>
                 </div>
             </div>
 
@@ -479,37 +458,119 @@ try {
         modalDetail = new bootstrap.Modal(document.getElementById('detailModal'));
     });
 
-    // --- TRACKING FUNCTION (SMART DOM REPLACEMENT) ---
-    function trackResi(resi, kurir, clientName) {
+    // --- TRACKING FUNCTION (SMART JSON RENDERER) ---
+    function trackResi(resi, kurir) {
         if(!resi || !kurir) { alert('No tracking data'); return; }
         
-        $('#trackDestSubtitle').text(clientName || 'Unknown Client');
         modalTracking.show();
-        $('#trackingResult').html('<div class="text-center py-5 my-5"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div><div class="mt-3 text-muted fw-bold">Menghubungkan ke server kurir...</div></div>');
+        $('#trackingResult').html('<div class="text-center py-5 my-5"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div><div class="mt-3 text-muted fw-bold">Memuat data API kurir...</div></div>');
         
-        let fetchUrl = `ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`;
-        
-        fetch(fetchUrl)
+        fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
             .then(r => r.text())
-            .then(html => { 
-                let $dom = $('<div>').html(html);
-                
-                // Smart Replacement untuk Origin & Destination
-                let leafNodes = $dom.find('*:not(:has(*))');
-                
-                let origins = leafNodes.filter(function() { return $(this).text().trim().toUpperCase() === 'ORIGIN'; });
-                if(origins.length > 1) origins.last().text('PT LinksField').addClass('text-primary fw-bold');
-                else if(origins.length === 1) origins.first().text('PT LinksField').addClass('text-primary fw-bold');
-                
-                let dests = leafNodes.filter(function() { return $(this).text().trim().toUpperCase() === 'DESTINATION'; });
-                if(dests.length > 1) dests.last().text(clientName).addClass('text-primary fw-bold');
-                else if(dests.length === 1) dests.first().text(clientName).addClass('text-primary fw-bold');
-
-                $('#trackingResult').html($dom.html());
+            .then(text => { 
+                try {
+                    // Coba Parsing Text menjadi JSON
+                    let res = JSON.parse(text);
+                    if(res && res.data) {
+                        renderTrackingJSON(resi, kurir, res.data);
+                    } else {
+                        throw new Error("Invalid format");
+                    }
+                } catch(e) {
+                    // Jika API masih me-return HTML lama, gunakan fallback
+                    let $dom = $('<div>').html(text);
+                    $('#trackingResult').html($dom.html());
+                }
             })
             .catch(e => { 
                 $('#trackingResult').html('<div class="alert alert-danger text-center m-4 shadow-sm"><i class="bi bi-exclamation-triangle-fill fs-3 d-block mb-2"></i>Gagal terhubung ke server kurir.</div>'); 
             });
+    }
+
+    // --- RENDERER KHUSUS UNTUK FORMAT JSON API BARU ---
+    function renderTrackingJSON(resi, kurir, data) {
+        // Tentukan warna status utama
+        let mainStatus = data.status || 'Unknown';
+        let statusColorClass = 'text-primary';
+        let statusLower = mainStatus.toLowerCase();
+
+        if(statusLower.includes('delivered') || statusLower.includes('berhasil')) {
+            statusColorClass = 'text-success';
+        } else if(statusLower.includes('transit') || statusLower.includes('process')) {
+            statusColorClass = 'text-warning';
+        }
+
+        // Ambil Data Origin & Destination langsung dari JSON
+        let originName = data.origin?.contact_name || 'PT. LINKSFIELD NETWORKS IND';
+        let originAddress = data.origin?.address || '-';
+        let destName = data.destination?.contact_name || 'UNKNOWN DESTINATION';
+        let destAddress = data.destination?.address || '-';
+
+        // Loop History Timeline
+        let historiesHtml = '';
+        if(data.histories && data.histories.length > 0) {
+            historiesHtml = '<div class="timeline-container">';
+            data.histories.forEach((h, index) => {
+                let isFirst = index === 0;
+                let dotClass = isFirst ? 'timeline-dot-active' : 'timeline-dot';
+                
+                // Ubah format T ke spasi agar mudah dibaca
+                let dStr = h.date;
+                if(dStr && dStr.includes('T')) {
+                    let parts = dStr.split('T');
+                    let timeParts = parts[1].split(':');
+                    dStr = parts[0] + ' ' + timeParts[0] + ':' + timeParts[1];
+                }
+
+                historiesHtml += `
+                    <div class="timeline-item">
+                        <div class="${dotClass}"></div>
+                        <div class="timeline-date">${dStr}</div>
+                        <div class="timeline-status fw-bold text-primary">${h.status}</div>
+                        <div class="timeline-desc">${h.message}</div>
+                    </div>
+                `;
+            });
+            historiesHtml += '</div>';
+        } else {
+            historiesHtml = '<div class="text-muted small">No history available from courier.</div>';
+        }
+
+        // Susun Desain HTML (Mirip Image Referensi)
+        let finalHtml = `
+            <div class="p-4 border-bottom bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div class="small fw-bold text-muted text-uppercase">RESI: <span class="text-dark">${resi}</span> | COURIER: <span class="text-dark">${kurir}</span></div>
+                    <a href="#" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;"><i class="bi bi-box-arrow-up-right"></i> External</a>
+                </div>
+
+                <div class="mb-4">
+                    <div class="small text-muted text-uppercase fw-bold mb-1" style="font-size:0.65rem;">CURRENT STATUS</div>
+                    <h2 class="${statusColorClass} fw-bold m-0" style="font-size: 1.8rem;">${mainStatus}</h2>
+                </div>
+
+                <div class="d-flex align-items-center bg-light p-3 rounded-3 border">
+                    <div class="flex-grow-1" style="flex-basis: 40%;">
+                        <div class="small text-muted text-uppercase fw-bold mb-1" style="font-size:0.65rem;">ORIGIN</div>
+                        <div class="fw-bold text-primary" style="font-size:0.85rem; text-transform:uppercase;">${originName}</div>
+                        <div class="small text-muted mt-1" style="font-size:0.75rem; line-height:1.4;">${originAddress}</div>
+                    </div>
+                    <div class="px-2 text-muted text-center" style="flex-basis: 10%;"><i class="bi bi-arrow-right fs-5"></i></div>
+                    <div class="flex-grow-1 text-end" style="flex-basis: 40%;">
+                        <div class="small text-muted text-uppercase fw-bold mb-1" style="font-size:0.65rem;">DESTINATION</div>
+                        <div class="fw-bold text-primary" style="font-size:0.85rem; text-transform:uppercase;">${destName}</div>
+                        <div class="small text-muted mt-1" style="font-size:0.75rem; line-height:1.4;">${destAddress}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-4 bg-white">
+                <h6 class="fw-bold text-muted small mb-4 text-uppercase" style="letter-spacing: 0.5px;">Shipment History</h6>
+                ${historiesHtml}
+            </div>
+        `;
+
+        $('#trackingResult').html(finalHtml);
     }
 
     // --- DETAIL MODAL FUNCTION ---
