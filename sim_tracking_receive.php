@@ -355,7 +355,7 @@ try {
     </div>
 </div>
 
-<div class="modal fade" id="trackingModal" tabindex="-1">
+<div class="modal fade" id="trackingModal" tabindex="5">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content modal-content-clean">
             <div class="modal-header-clean">
