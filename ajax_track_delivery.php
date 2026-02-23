@@ -1,40 +1,36 @@
 <?php
-// ajax_track_delivery.php
+// =========================================================================
+// FILE: ajax_track_delivery.php
+// DESC: API Fetcher & UI Renderer for Shipment Tracking (Exact Replica)
+// =========================================================================
 
-// 1. Load Koneksi Database
-// Sesuaikan path ini jika struktur folder berbeda
-require_once 'includes/config.php';
-require_once 'includes/functions.php';
-
-// Gunakan koneksi PDO standar sistem Anda
-$db = db_connect();
+// Nonaktifkan error display agar tidak merusak format HTML/JSON
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 
 if (!isset($_GET['resi']) || !isset($_GET['kurir'])) {
-    echo "<div class='p-4 text-center text-danger'>Parameter tracking tidak lengkap.</div>";
+    echo "<div class='alert alert-danger m-3'>Parameter resi atau kurir tidak lengkap.</div>";
     exit;
 }
 
-// Sanitasi & Format Input
-$resi = trim($_GET['resi']);
-// API biasanya butuh huruf kecil (jne, jnt, sicepat)
-$kurir = strtolower(trim($_GET['kurir'])); 
-$apiKey = '485762cb-0ade-41d3-afad-6da124ff90cb'; // API Key dari file master Anda
+$resi = htmlspecialchars(trim($_GET['resi']));
+$kurir = htmlspecialchars(trim(strtolower($_GET['kurir'])));
+$apiKey = '485762cb-0ade-41d3-afad-6da124ff90cb'; // API Key Anda
 
-// 2. Panggil API KlikResi
+// 1. Eksekusi cURL ke API KlikResi
 $curl = curl_init();
-
 curl_setopt_array($curl, array(
-  CURLOPT_URL => "https://klikresi.com/api/trackings/$resi/couriers/$kurir",
-  CURLOPT_RETURNTRANSFER => true,
-  CURLOPT_ENCODING => '',
-  CURLOPT_MAXREDIRS => 10,
-  CURLOPT_TIMEOUT => 30,
-  CURLOPT_FOLLOWLOCATION => true,
-  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-  CURLOPT_CUSTOMREQUEST => 'GET',
-  CURLOPT_HTTPHEADER => array(
-    "x-api-key: $apiKey"
-  ),
+    CURLOPT_URL => "https://klikresi.com/api/trackings/$resi/couriers/$kurir",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_ENCODING => '',
+    CURLOPT_MAXREDIRS => 10,
+    CURLOPT_TIMEOUT => 30,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+    CURLOPT_CUSTOMREQUEST => 'GET',
+    CURLOPT_HTTPHEADER => array(
+        "x-api-key: $apiKey"
+    ),
 ));
 
 $response = curl_exec($curl);
@@ -42,126 +38,133 @@ $err = curl_error($curl);
 curl_close($curl);
 
 if ($err) {
-    echo "<div class='alert alert-danger m-3'>Koneksi API Gagal: $err</div>";
+    echo "<div class='alert alert-danger m-3'><i class='bi bi-wifi-off me-2'></i>Koneksi ke API Kurir gagal: $err</div>";
     exit;
 }
 
-// 3. Decode JSON
+// 2. Decode JSON
 $result = json_decode($response, true);
 
-// Cek apakah data valid atau Resi Not Found di API
-if (!isset($result['data'])) {
-    echo "<div class='alert alert-warning text-center m-4'>
-            <i class='bi bi-exclamation-triangle fs-1 text-warning mb-2 d-block'></i>
-            <strong>Data Tidak Ditemukan</strong><br>
-            <span class='small text-muted'>Resi: $resi | Kurir: ".strtoupper($kurir)."</span><br>
-            <small class='mt-2 d-block'>Response: " . htmlspecialchars($response) . "</small>
+if (!$result || !isset($result['data'])) {
+    echo "<div class='alert alert-warning m-4 text-center'>
+            <i class='bi bi-search fs-1 d-block mb-2'></i>
+            <h6 class='fw-bold mb-1'>Data tidak ditemukan</h6>
+            <p class='small text-muted mb-0'>Pastikan nomor resi <b>$resi</b> dan kurir <b>".strtoupper($kurir)."</b> valid.</p>
           </div>";
     exit;
 }
 
 $data = $result['data'];
-$statusColor = ($data['status'] == 'Delivered') ? 'text-success' : 'text-primary';
 
-// =================================================================================
-// 4. LOGIC AUTO-UPDATE DATABASE
-// =================================================================================
-if ($data['status'] == 'Delivered') {
-    $deliveredDate = date('Y-m-d'); // Default hari ini
-    
-    // Coba cari tanggal persis dari history
-    if (isset($data['histories']) && is_array($data['histories'])) {
-        foreach ($data['histories'] as $history) {
-            if (stripos($history['status'], 'delivered') !== false) {
-                $deliveredDate = date('Y-m-d', strtotime($history['date']));
-                break;
-            }
-        }
-    }
+// 3. Persiapkan Variabel Data
+$status = $data['status'] ?? 'Unknown';
+$origin_name = $data['origin']['contact_name'] ?? 'PT. LINKSFIELD NETWORKS IND';
+$origin_address = $data['origin']['address'] ?? '-';
+$dest_name = $data['destination']['contact_name'] ?? '-';
+$dest_address = $data['destination']['address'] ?? '-';
 
-    try {
-        // Update tabel lokal jika status berubah jadi Delivered
-        $sqlUpd = "UPDATE sim_tracking_logistics SET 
-                   status = 'Delivered', 
-                   received_date = ? 
-                   WHERE awb = ? AND type = 'delivery' AND status != 'Delivered'";
-        
-        $stmt = $db->prepare($sqlUpd);
-        $stmt->execute([$deliveredDate, $resi]);
-    } catch (Exception $e) {
-        // Silent fail agar user tetap melihat data tracking walau update db gagal
-    }
+// Warna Status
+$statusColor = '#1d4ed8'; // Default Blue (InTransit)
+if (strtolower($status) === 'delivered' || strtolower($status) === 'berhasil') {
+    $statusColor = '#059669'; // Green
+} elseif (strtolower($status) === 'problem' || strtolower($status) === 'returned') {
+    $statusColor = '#dc2626'; // Red
 }
-// =================================================================================
+
+$externalUrl = "https://klikresi.com/tracking?resi=$resi&kurir=$kurir"; // Fallback URL if needed
 ?>
 
 <style>
-    .track-card { background: #fff; border-radius: 0; padding: 20px; } /* Reset border radius for modal fit */
-    .timeline { position: relative; padding-left: 30px; border-left: 2px solid #e9ecef; margin-top: 15px; }
-    .timeline-item { position: relative; margin-bottom: 25px; }
-    .timeline-dot { 
-        position: absolute; left: -36px; top: 0; width: 14px; height: 14px; 
-        border-radius: 50%; background: #fff; border: 3px solid #ced4da; 
-    }
-    .timeline-item:first-child .timeline-dot { border-color: #435ebe; background: #435ebe; }
-    .timeline-date { font-size: 0.75rem; color: #6c757d; margin-bottom: 2px; }
-    .timeline-status { font-weight: 700; color: #435ebe; font-size: 0.9rem; }
-    .route-arrow { font-size: 1.2rem; color: #ced4da; margin: 0 10px; }
+    .track-wrapper { font-family: 'Inter', sans-serif; }
+    .track-header { padding: 1.5rem; border-bottom: 1px solid #e5e7eb; background: #fff; }
+    
+    .resi-text { font-size: 0.85rem; color: #6b7280; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .resi-val { color: #111827; font-weight: 700; font-family: 'SFMono-Regular', Consolas, monospace; }
+    .btn-external { font-size: 0.75rem; color: #2563eb; border: 1px solid #bfdbfe; background: #eff6ff; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-weight: 600; transition: 0.2s; }
+    .btn-external:hover { background: #dbeafe; color: #1e40af; }
+    
+    .status-label { font-size: 0.7rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .status-main { font-size: 1.75rem; font-weight: 700; margin-bottom: 1.5rem; }
+    
+    .route-box { display: flex; align-items: stretch; background-color: #f3f4f6; border-radius: 8px; overflow: hidden; margin-bottom: 0.5rem; }
+    .route-part { flex: 1; padding: 1rem 1.25rem; }
+    .route-arrow { width: 40px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 1.25rem; }
+    .r-label { font-size: 0.65rem; font-weight: 800; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .r-name { font-size: 0.9rem; font-weight: 700; color: #111827; margin-bottom: 2px; text-transform: uppercase; }
+    .r-dest { color: #1d4ed8; }
+    .r-addr { font-size: 0.75rem; color: #6b7280; line-height: 1.4; }
+
+    /* Timeline Section */
+    .timeline-section { background-color: #f9fafb; padding: 1.5rem; border-top: 1px solid #e5e7eb; }
+    .timeline-title { font-size: 0.8rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1.5rem; }
+    
+    .tl-wrap { position: relative; padding-left: 14px; }
+    .tl-wrap::before { content: ''; position: absolute; left: 6px; top: 8px; bottom: 0; width: 2px; background-color: #e5e7eb; }
+    
+    .tl-item { position: relative; padding-bottom: 1.5rem; }
+    .tl-item:last-child { padding-bottom: 0; }
+    
+    .tl-dot { position: absolute; left: -14px; top: 4px; width: 14px; height: 14px; border-radius: 50%; background-color: #fff; border: 2px solid #d1d5db; z-index: 2; }
+    .tl-item.first .tl-dot { background-color: #2563eb; border-color: #2563eb; }
+    
+    .tl-date { font-size: 0.75rem; color: #6b7280; margin-bottom: 4px; }
+    .tl-status { font-size: 0.85rem; font-weight: 700; color: #1d4ed8; margin-bottom: 6px; }
+    .tl-item.first .tl-status { color: #111827; }
+    
+    .tl-msg { background-color: #e5e7eb; padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; color: #4b5563; line-height: 1.4; display: inline-block; width: 100%; border: 1px solid #d1d5db; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
 </style>
 
-<div class="track-card">
-    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-3">
-        <div>
-            <div class="text-muted small text-uppercase fw-bold">
-                RESI: <span class="font-monospace text-dark"><?= $resi ?></span> | COURIER: <?= strtoupper($kurir) ?>
+<div class="track-wrapper">
+    <div class="track-header">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="resi-text">
+                RESI: <span class="resi-val"><?= $resi ?></span> &nbsp;|&nbsp; COURIER: <span class="resi-val"><?= strtoupper($kurir) ?></span>
             </div>
+            <a href="<?= $externalUrl ?>" target="_blank" class="btn-external">External <i class="bi bi-box-arrow-up-right ms-1"></i></a>
         </div>
-        <div>
-            <a href="https://berdu.id/cek-resi?courier=<?= $kurir ?>&resi=<?= $resi ?>" target="_blank" class="btn btn-outline-primary btn-sm pt-0 pb-0" style="font-size: 0.7rem;">
-                External <i class="bi bi-box-arrow-up-right ms-1"></i>
-            </a>
-        </div>
-    </div>
-    
-    <div class="row align-items-center mb-4">
-        <div class="col-12 mb-2">
-            <small class="text-muted text-uppercase fw-bold" style="font-size:0.7rem">CURRENT STATUS</small>
-            <h3 class="<?= $statusColor ?> fw-bold mb-0"><?= $data['status'] ?></h3>
-        </div>
-        
-        <div class="col-12 bg-light p-3 rounded d-flex align-items-center justify-content-between">
-            <div class="text-truncate" style="max-width: 40%">
-                <small class="text-muted text-uppercase d-block" style="font-size:0.65rem">ORIGIN</small>
-                <span class="fw-bold text-dark small"><?= $data['origin']['city'] ?? 'ORIGIN' ?></span>
+
+        <div class="status-label">CURRENT STATUS</div>
+        <div class="status-main" style="color: <?= $statusColor ?>;"><?= $status ?></div>
+
+        <div class="route-box">
+            <div class="route-part">
+                <div class="r-label">ORIGIN</div>
+                <div class="r-name text-dark"><?= htmlspecialchars($origin_name) ?></div>
+                <div class="r-addr"><?= htmlspecialchars($origin_address) ?></div>
             </div>
-            <i class="bi bi-arrow-right route-arrow"></i>
-            <div class="text-end text-truncate" style="max-width: 40%">
-                <small class="text-muted text-uppercase d-block" style="font-size:0.65rem">DESTINATION</small>
-                <span class="fw-bold text-dark small"><?= $data['destination']['city'] ?? 'DESTINATION' ?></span>
+            <div class="route-arrow">
+                <i class="bi bi-arrow-right"></i>
+            </div>
+            <div class="route-part text-end">
+                <div class="r-label">DESTINATION</div>
+                <div class="r-name r-dest"><?= htmlspecialchars($dest_name) ?></div>
+                <div class="r-addr"><?= htmlspecialchars($dest_address) ?></div>
             </div>
         </div>
     </div>
 
-    <h6 class="text-uppercase text-muted fw-bold small mb-3">Shipment History</h6>
-    
-    <div class="timeline">
-        <?php if(isset($data['histories']) && is_array($data['histories'])): ?>
-            <?php foreach($data['histories'] as $hist): ?>
-                <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-date">
-                        <?= date('d M Y H:i', strtotime($hist['date'])) ?>
+    <div class="timeline-section">
+        <div class="timeline-title">SHIPMENT HISTORY</div>
+        
+        <?php if (!empty($data['histories']) && is_array($data['histories'])): ?>
+            <div class="tl-wrap">
+                <?php foreach ($data['histories'] as $index => $hist): 
+                    $isFirst = ($index === 0) ? 'first' : '';
+                    
+                    // Format Date dari 2025-11-28T14:07:00+07:00 -> 28 Nov 2025 14:07
+                    $dateObj = new DateTime($hist['date']);
+                    $formattedDate = $dateObj->format('d M Y H:i');
+                ?>
+                    <div class="tl-item <?= $isFirst ?>">
+                        <div class="tl-dot"></div>
+                        <div class="tl-date"><?= $formattedDate ?></div>
+                        <div class="tl-status"><?= htmlspecialchars($hist['status']) ?></div>
+                        <div class="tl-msg"><?= htmlspecialchars($hist['message']) ?></div>
                     </div>
-                    <div class="timeline-status mb-1">
-                        <?= $hist['status'] ?>
-                    </div>
-                    <div class="bg-light p-2 rounded border text-muted small">
-                        <?= $hist['message'] ?>
-                    </div>
-                </div>
-            <?php endforeach; ?>
+                <?php endforeach; ?>
+            </div>
         <?php else: ?>
-            <p class="text-muted text-center small">Riwayat perjalanan belum tersedia.</p>
+            <div class="text-muted small border p-3 rounded bg-white">Tidak ada riwayat perjalanan logistik untuk saat ini.</div>
         <?php endif; ?>
     </div>
 </div>
