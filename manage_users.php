@@ -1,7 +1,7 @@
 <?php
 // =========================================================================
 // FILE: manage_users.php
-// DESC: User Management (PHPMailer Composer + Tailwind CSS + DB Config)
+// DESC: User Management (PHPMailer Composer + Tailwind CSS + Premium Email)
 // =========================================================================
 
 ini_set('display_errors', 0); error_reporting(E_ALL);
@@ -38,11 +38,12 @@ function tailwindAlert($type, $msg) {
 
 // --- PASSWORD GENERATOR (Text & Numbers) ---
 function generate_password($length = 8) {
+    // Menghilangkan karakter ambigu (seperti 0, O, l, 1, I) agar user mudah membaca
     $chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     return substr(str_shuffle($chars), 0, $length);
 }
 
-// --- FUNGSI KIRIM EMAIL VIA PHPMAILER & DB CONFIG ---
+// --- FUNGSI KIRIM EMAIL VIA PHPMAILER (PREMIUM HTML TEMPLATE) ---
 function send_credentials_via_phpmailer($db, $target_email, $username, $plain_password, $is_reset = false) {
     // Ambil Config SMTP dari DB
     try {
@@ -71,26 +72,97 @@ function send_credentials_via_phpmailer($db, $target_email, $username, $plain_pa
             )
         );
 
-        $fromName = $smtp_conf['smtp_from_name'] ?? 'System Admin';
+        $fromName = $smtp_conf['smtp_from_name'] ?? 'LinksField System';
         $mail->setFrom($smtp_conf['smtp_user'], $fromName);
         $mail->addAddress($target_email);
 
         $mail->isHTML(true);
-        $action_text = $is_reset ? "Password Reset" : "Account Creation";
+        $action_text = $is_reset ? "Password Reset Successfully" : "Your Account has been Created";
         $mail->Subject = "LinksField Access: $action_text";
         
-        $body = "
-        <div style='font-family:sans-serif; max-width:600px; padding:20px; border:1px solid #e2e8f0; border-radius:12px;'>
-            <h2 style='color:#4f46e5; margin-top:0;'>Hello, $username</h2>
-            <p style='color:#334155; font-size:14px;'>Here are your credentials for the LinksField Monitoring System.</p>
-            <div style='background-color:#f8fafc; padding:15px; border-radius:8px; margin:20px 0; border:1px solid #e2e8f0;'>
-                <p style='margin:0 0 10px 0; color:#475569;'><strong>Username:</strong> $username</p>
-                <p style='margin:0; color:#475569;'><strong>Password:</strong> <span style='font-family:monospace; font-size:16px; color:#ef4444; font-weight:bold;'>$plain_password</span></p>
-            </div>
-            <p style='color:#64748b; font-size:12px;'><em>* Note: You will be required to change this password upon your first login for security reasons.</em></p>
-        </div>";
+        $action_message = $is_reset 
+            ? "Your password has been successfully reset by the Administrator. Please find your new secure credentials below to regain access to the LinksField Monitoring System." 
+            : "Welcome to the LinksField Monitoring System! Your administrative account has been successfully generated. Please find your secure login credentials below.";
+
+        $year = date('Y');
+
+        // Premium HTML Email Template
+        $body = <<<HTML
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>System Access</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f7f6; padding: 40px 10px;">
+                <tr>
+                    <td align="center">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                            <tr>
+                                <td align="center" style="background-color: #4f46e5; padding: 40px 20px;">
+                                    <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: 1px;">LinksField</h1>
+                                    <p style="color: #c7d2fe; margin: 8px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 3px; font-weight: bold;">Monitoring System</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px 30px;">
+                                    <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 22px;">Hello, <span style="color: #4f46e5;">{$username}</span></h2>
+                                    <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 35px 0;">
+                                        {$action_message}
+                                    </p>
+                                    
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+                                        <tr>
+                                            <td style="padding: 24px;">
+                                                <p style="margin: 0 0 16px 0; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;">Authentication Details</p>
+                                                
+                                                <div style="margin-bottom: 12px;">
+                                                    <span style="font-size: 14px; color: #64748b; display: inline-block; width: 80px;">Username:</span>
+                                                    <strong style="font-size: 16px; color: #0f172a;">{$username}</strong>
+                                                </div>
+                                                
+                                                <div>
+                                                    <span style="font-size: 14px; color: #64748b; display: inline-block; width: 80px;">Password:</span>
+                                                    <span style="font-family: 'Courier New', Courier, monospace; background-color: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 17px; font-weight: bold; letter-spacing: 1.5px;">{$plain_password}</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 30px;">
+                                        <tr>
+                                            <td style="padding: 16px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px;">
+                                                <p style="margin: 0; font-size: 13.5px; color: #92400e; line-height: 1.5;">
+                                                    <strong><span style="font-size:16px;">⚠</span> Security Requirement:</strong> For your protection, you will be prompted to change this temporary password immediately upon your first login.
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td align="center" style="background-color: #f8fafc; padding: 25px 20px; border-top: 1px solid #e2e8f0;">
+                                    <p style="margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.6;">
+                                        This is an automated message generated by the LinksField Security Protocol.<br>
+                                        Please do not reply to this email address.
+                                    </p>
+                                    <p style="margin: 15px 0 0 0; color: #cbd5e1; font-size: 11px; font-weight: bold;">
+                                        &copy; {$year} LinksField. All rights reserved.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        HTML;
 
         $mail->Body = $body;
+        $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>', '</div>', '</p>'], "\n", $body));
         $mail->send();
         return true;
     } catch (Exception $e) {
@@ -132,14 +204,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_user'])) {
                 
                 if ($stmt->execute([$new_username, $hashed_password, $new_email, $new_role, $new_company_id, $_SESSION['user_id']])) {
                     
-                    // Eksekusi Kirim Email dengan PHPMailer
+                    // Eksekusi Kirim Email Premium dengan PHPMailer
                     $mail_sent = send_credentials_via_phpmailer($db, $new_email, $new_username, $generated_password, false);
                     
                     if ($mail_sent) {
-                        $message = tailwindAlert('success', 'User <b>'.$new_username.'</b> created successfully! Password has been sent to their email.');
+                        $message = tailwindAlert('success', 'User <strong>'.$new_username.'</strong> created successfully! <br><span class="text-xs font-medium">A welcome email with login credentials has been dispatched.</span>');
                     } else {
                         // Fallback UI jika email gagal terkirim (agar admin tau passwordnya)
-                        $message = tailwindAlert('warning', 'User <b>'.$new_username.'</b> created, but <b>Email failed to send</b>. <br>Please copy this Temporary Password manually: <code class="bg-amber-100 text-amber-900 px-2 py-0.5 rounded ml-1 text-lg">'.$generated_password.'</code>');
+                        $message = tailwindAlert('warning', 'User <strong>'.$new_username.'</strong> created, but <strong>Email failed to send</strong>. <br>Please copy this Temporary Password manually: <code class="bg-amber-100 text-amber-900 px-2 py-0.5 rounded ml-1 text-base font-mono shadow-sm">'.$generated_password.'</code>');
                     }
                 }
             }
@@ -178,9 +250,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
                 if ($user_data) {
                     $mail_sent = send_credentials_via_phpmailer($db, $edit_email, $user_data['username'], $new_auto_pass, true);
                     if ($mail_sent) {
-                        $pw_msg = "<br><span class='text-emerald-700 block mt-1'><i class='ph-fill ph-envelope-simple mr-1'></i> New password has been sent to user's email.</span>";
+                        $pw_msg = "<br><span class='text-emerald-700 block mt-1.5 text-xs bg-emerald-100/50 w-max px-2 py-1 rounded-md'><i class='ph-bold ph-envelope-simple mr-1'></i> Reset credentials successfully emailed.</span>";
                     } else {
-                        $pw_msg = "<br><span class='text-red-600 block mt-1'><i class='ph-fill ph-warning mr-1'></i> Email dispatch failed! Copy this Temporary Password manually: <code class='bg-red-100 px-2 py-0.5 rounded text-red-900'>$new_auto_pass</code></span>";
+                        $pw_msg = "<br><span class='text-red-700 block mt-1.5 text-xs bg-red-100/50 p-2 rounded-md border border-red-200'><i class='ph-bold ph-warning mr-1'></i> Email dispatch failed! Temporary Password: <code class='bg-red-100 px-1.5 py-0.5 rounded text-red-900 font-mono text-sm ml-1'>$new_auto_pass</code></span>";
                     }
                 }
             }
