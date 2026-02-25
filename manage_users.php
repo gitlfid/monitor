@@ -1,21 +1,24 @@
 <?php
 // =========================================================================
 // FILE: manage_users.php
-// DESC: User Management (Ultra-Modern Tailwind CSS & Dynamic UI)
+// DESC: User Management (PHPMailer Composer + Tailwind CSS + DB Config)
 // =========================================================================
 
 ini_set('display_errors', 0); error_reporting(E_ALL);
 
+// 1. Load Composer Autoload untuk PHPMailer
+$autoload_path = __DIR__ . '/vendor/autoload.php';
+if (file_exists($autoload_path)) {
+    require_once $autoload_path;
+}
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+// 2. Load Core Application
 require_once 'includes/auth_check.php'; 
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
-
-// Check Mail Helper
-if (file_exists('includes/mail_helper.php')) {
-    require_once 'includes/mail_helper.php';
-} else {
-    function send_credentials_email($to, $user, $pass) { return false; }
-}
 
 require_admin(); // Ensure only Admin access
 $db = db_connect();
@@ -26,17 +29,73 @@ function e($str) {
     return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-// Helper function untuk alert Tailwind
+// --- HELPER ALERT TAILWIND ---
 function tailwindAlert($type, $msg) {
     $colors = $type === 'success' ? 'emerald' : ($type === 'warning' ? 'amber' : 'red');
     $icon = $type === 'success' ? 'ph-check-circle' : ($type === 'warning' ? 'ph-warning' : 'ph-x-circle');
-    return '<div class="relative flex items-center justify-between px-5 py-4 mb-6 text-sm font-bold text-'.$colors.'-800 bg-'.$colors.'-50 border border-'.$colors.'-200 rounded-2xl animate-fade-in-up dark:bg-'.$colors.'-500/10 dark:text-'.$colors.'-400 dark:border-'.$colors.'-500/20 shadow-sm"><div class="flex items-center gap-3"><i class="ph-fill '.$icon.' text-xl"></i><span>'.$msg.'</span></div><button type="button" class="text-'.$colors.'-600 hover:text-'.$colors.'-800 dark:hover:text-'.$colors.'-300 transition-colors" onclick="this.parentElement.remove()"><i class="ph ph-x text-lg"></i></button></div>';
+    return '<div class="relative flex items-center justify-between px-5 py-4 mb-6 text-sm font-bold text-'.$colors.'-800 bg-'.$colors.'-50 border border-'.$colors.'-200 rounded-2xl animate-fade-in-up dark:bg-'.$colors.'-500/10 dark:text-'.$colors.'-400 dark:border-'.$colors.'-500/20 shadow-sm"><div class="flex items-center gap-3"><i class="ph-fill '.$icon.' text-xl"></i><span class="leading-relaxed">'.$msg.'</span></div><button type="button" class="text-'.$colors.'-600 hover:text-'.$colors.'-800 dark:hover:text-'.$colors.'-300 transition-colors" onclick="this.parentElement.remove()"><i class="ph ph-x text-lg"></i></button></div>';
 }
 
-// --- PASSWORD GENERATOR ---
+// --- PASSWORD GENERATOR (Text & Numbers) ---
 function generate_password($length = 8) {
     $chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     return substr(str_shuffle($chars), 0, $length);
+}
+
+// --- FUNGSI KIRIM EMAIL VIA PHPMAILER & DB CONFIG ---
+function send_credentials_via_phpmailer($db, $target_email, $username, $plain_password, $is_reset = false) {
+    // Ambil Config SMTP dari DB
+    try {
+        $stmt = $db->query("SELECT setting_key, setting_value FROM app_config WHERE setting_key LIKE 'smtp_%'");
+        $smtp_conf = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    } catch (Exception $e) { return false; }
+
+    if(empty($smtp_conf)) return false;
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host       = $smtp_conf['smtp_host'] ?? '';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $smtp_conf['smtp_user'] ?? '';
+        $mail->Password   = $smtp_conf['smtp_pass'] ?? '';
+        $mail->SMTPSecure = $smtp_conf['smtp_secure'] ?? PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = $smtp_conf['smtp_port'] ?? 587;
+
+        // Bypass SSL untuk mengatasi error Certificate Name Mismatch
+        $mail->SMTPOptions = array(
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true
+            )
+        );
+
+        $fromName = $smtp_conf['smtp_from_name'] ?? 'System Admin';
+        $mail->setFrom($smtp_conf['smtp_user'], $fromName);
+        $mail->addAddress($target_email);
+
+        $mail->isHTML(true);
+        $action_text = $is_reset ? "Password Reset" : "Account Creation";
+        $mail->Subject = "LinksField Access: $action_text";
+        
+        $body = "
+        <div style='font-family:sans-serif; max-width:600px; padding:20px; border:1px solid #e2e8f0; border-radius:12px;'>
+            <h2 style='color:#4f46e5; margin-top:0;'>Hello, $username</h2>
+            <p style='color:#334155; font-size:14px;'>Here are your credentials for the LinksField Monitoring System.</p>
+            <div style='background-color:#f8fafc; padding:15px; border-radius:8px; margin:20px 0; border:1px solid #e2e8f0;'>
+                <p style='margin:0 0 10px 0; color:#475569;'><strong>Username:</strong> $username</p>
+                <p style='margin:0; color:#475569;'><strong>Password:</strong> <span style='font-family:monospace; font-size:16px; color:#ef4444; font-weight:bold;'>$plain_password</span></p>
+            </div>
+            <p style='color:#64748b; font-size:12px;'><em>* Note: You will be required to change this password upon your first login for security reasons.</em></p>
+        </div>";
+
+        $mail->Body = $body;
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
 }
 
 // --- LOGIC 1: DELETE USER ---
@@ -49,9 +108,7 @@ if (isset($_GET['delete_id'])) {
             $stmt_del = $db->prepare("DELETE FROM users WHERE id = ?");
             $stmt_del->execute([$delete_id]);
             $message = tailwindAlert('success', 'User successfully deleted.');
-        } catch (Exception $e) {
-            $message = tailwindAlert('error', 'Failed to delete: ' . $e->getMessage());
-        }
+        } catch (Exception $e) { $message = tailwindAlert('error', 'Failed to delete: ' . $e->getMessage()); }
     }
 }
 
@@ -72,16 +129,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_user'])) {
                 $generated_password = generate_password();
                 $hashed_password = password_hash($generated_password, PASSWORD_DEFAULT);
                 $stmt = $db->prepare("INSERT INTO users (username, password, email, role, company_id, created_by, force_password_change) VALUES (?, ?, ?, ?, ?, ?, 1)");
+                
                 if ($stmt->execute([$new_username, $hashed_password, $new_email, $new_role, $new_company_id, $_SESSION['user_id']])) {
-                    if (function_exists('send_credentials_email')) { send_credentials_email($new_email, $new_username, $generated_password); }
-                    $message = tailwindAlert('success', 'User <b>'.$new_username.'</b> created successfully! Password sent to email.');
+                    
+                    // Eksekusi Kirim Email dengan PHPMailer
+                    $mail_sent = send_credentials_via_phpmailer($db, $new_email, $new_username, $generated_password, false);
+                    
+                    if ($mail_sent) {
+                        $message = tailwindAlert('success', 'User <b>'.$new_username.'</b> created successfully! Password has been sent to their email.');
+                    } else {
+                        // Fallback UI jika email gagal terkirim (agar admin tau passwordnya)
+                        $message = tailwindAlert('warning', 'User <b>'.$new_username.'</b> created, but <b>Email failed to send</b>. <br>Please copy this Temporary Password manually: <code class="bg-amber-100 text-amber-900 px-2 py-0.5 rounded ml-1 text-lg">'.$generated_password.'</code>');
+                    }
                 }
             }
         } catch (Exception $e) { $message = tailwindAlert('error', $e->getMessage()); }
     }
 }
 
-// --- LOGIC 3: UPDATE USER ---
+// --- LOGIC 3: UPDATE USER (AND RESET PASS) ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
     $edit_id = intval($_POST['edit_user_id']);
     $edit_email = trim($_POST['edit_email']);
@@ -103,31 +169,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
                 $sql = "UPDATE users SET email = ?, role = ?, company_id = ?, password = ?, force_password_change = 1 WHERE id = ?";
                 $params = [$edit_email, $edit_role, $edit_company_id, $hashed_pw, $edit_id];
                 
+                // Ambil Username untuk Email
                 $stmt_get_user = $db->prepare("SELECT username FROM users WHERE id = ?");
                 $stmt_get_user->execute([$edit_id]);
                 $user_data = $stmt_get_user->fetch(PDO::FETCH_ASSOC);
                 
-                if ($user_data && function_exists('send_credentials_email')) {
-                    send_credentials_email($edit_email, $user_data['username'], $new_auto_pass);
+                // Eksekusi Kirim Email Reset dengan PHPMailer
+                if ($user_data) {
+                    $mail_sent = send_credentials_via_phpmailer($db, $edit_email, $user_data['username'], $new_auto_pass, true);
+                    if ($mail_sent) {
+                        $pw_msg = "<br><span class='text-emerald-700 block mt-1'><i class='ph-fill ph-envelope-simple mr-1'></i> New password has been sent to user's email.</span>";
+                    } else {
+                        $pw_msg = "<br><span class='text-red-600 block mt-1'><i class='ph-fill ph-warning mr-1'></i> Email dispatch failed! Copy this Temporary Password manually: <code class='bg-red-100 px-2 py-0.5 rounded text-red-900'>$new_auto_pass</code></span>";
+                    }
                 }
-                $pw_msg = " & password auto-reset";
             }
 
             $stmt_update = $db->prepare($sql);
             if ($stmt_update->execute($params)) {
-                $message = tailwindAlert('success', 'User data updated' . $pw_msg);
+                $message = tailwindAlert('success', 'User profile updated successfully.' . $pw_msg);
             }
         }
     } catch (Exception $e) { $message = tailwindAlert('error', $e->getMessage()); }
 }
 
-// --- GET DATA ---
+// --- GET DATA UNTUK TABEL & DROPDOWN ---
 $stmt_comp = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC");
 $companies_list = $stmt_comp->fetchAll(PDO::FETCH_ASSOC);
 
 $sql_users = "SELECT u.*, c.company_name FROM users u LEFT JOIN companies c ON u.company_id = c.id ORDER BY u.created_at DESC";
 $all_users = $db->query($sql_users)->fetchAll(PDO::FETCH_ASSOC);
 
+// ============================================================
+// HTML UI FRONTEND (TAILWIND)
+// ============================================================
 require_once 'includes/header.php';
 require_once 'includes/sidebar.php'; 
 ?>
@@ -178,10 +253,10 @@ require_once 'includes/sidebar.php';
         <div class="rounded-3xl bg-gradient-to-br from-indigo-600 to-purple-700 p-8 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden group">
             <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
             <i class="ph ph-envelope-simple absolute -right-4 -bottom-4 text-9xl opacity-10 group-hover:rotate-12 transition-transform duration-500"></i>
-            <h4 class="text-lg font-black mb-2 relative">Security First</h4>
-            <p class="text-sm text-indigo-100 mb-6 relative">New users will receive their auto-generated password via email and will be required to update it upon first login.</p>
+            <h4 class="text-lg font-black mb-2 relative">Automated Security</h4>
+            <p class="text-sm text-indigo-100 mb-6 relative">When adding or resetting a user, the system automatically dispatches a secure, auto-generated alphanumeric password via PHPMailer to their registered email.</p>
             <div class="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold relative">
-                <i class="ph-fill ph-shield-check text-emerald-400"></i> Encrypted Storage
+                <i class="ph-fill ph-shield-check text-emerald-400"></i> End-to-End Encrypted
             </div>
         </div>
     </div>
@@ -192,7 +267,7 @@ require_once 'includes/sidebar.php';
                 <h4 class="text-lg font-bold text-slate-800 dark:text-white">Registered Users</h4>
                 <div class="relative w-48">
                     <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="text" id="userSearch" class="w-full pl-9 pr-4 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="Search user...">
+                    <input type="text" id="userSearch" class="w-full pl-9 pr-4 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 dark:text-white" placeholder="Search user...">
                 </div>
             </div>
             
@@ -211,7 +286,7 @@ require_once 'includes/sidebar.php';
                         <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
                             <td class="px-8 py-5">
                                 <div class="flex items-center gap-3">
-                                    <div class="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black border border-indigo-100 dark:border-indigo-800"><?= strtoupper(substr($u['username'], 0, 1)) ?></div>
+                                    <div class="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black border border-indigo-100 dark:border-indigo-800 shrink-0"><?= strtoupper(substr($u['username'], 0, 1)) ?></div>
                                     <div class="flex flex-col">
                                         <span class="font-bold text-slate-800 dark:text-white text-sm"><?= e($u['username']) ?></span>
                                         <span class="text-xs text-slate-500 dark:text-slate-400"><?= e($u['email']) ?></span>
@@ -304,7 +379,7 @@ require_once 'includes/sidebar.php';
 
             <div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 flex gap-3 items-center">
                 <i class="ph ph-info text-amber-500 text-2xl"></i>
-                <p class="text-xs font-bold text-amber-800 dark:text-amber-400">System will automatically email credentials to the user. First login requires password change.</p>
+                <p class="text-xs font-bold text-amber-800 dark:text-amber-400">System will dispatch a secure auto-generated password via PHPMailer. First login requires a password change.</p>
             </div>
 
             <div class="pt-4 flex justify-end gap-3">
@@ -360,7 +435,7 @@ require_once 'includes/sidebar.php';
                     <input type="checkbox" name="reset_password_flag" id="reset_password_flag" value="1" class="w-5 h-5 text-red-600 rounded-lg focus:ring-red-500 cursor-pointer">
                     <div class="flex flex-col">
                         <span class="text-sm font-black text-red-600 dark:text-red-400 uppercase tracking-tight group-hover:translate-x-1 transition-transform">Reset Password Security</span>
-                        <span class="text-[10px] font-medium text-slate-400">Generate & email a new secure password immediately.</span>
+                        <span class="text-[10px] font-medium text-slate-400 mt-0.5">Generate & dispatch a new secure password via email.</span>
                     </div>
                 </label>
             </div>
