@@ -86,6 +86,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mail->SMTPSecure = $smtp_conf['smtp_secure'] ?? PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port       = $smtp_conf['smtp_port'] ?? 587;
 
+            // [FIX BYPASS SSL] 
+            // Bypass verifikasi sertifikat SSL untuk mengatasi error "Peer certificate CN mismatch"
+            $mail->SMTPOptions = array(
+                'ssl' => array(
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                )
+            );
+
             // Recipients
             $fromName = $smtp_conf['smtp_from_name'] ?? 'System Admin';
             $mail->setFrom($smtp_conf['smtp_user'], $fromName);
