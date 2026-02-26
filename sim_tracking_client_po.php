@@ -3,7 +3,7 @@
 // FILE: sim_tracking_client_po.php
 // DESC: Client Purchase Order Management (Ultra-Modern Tailwind CSS Theme)
 // =========================================================================
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // Set ke 0 untuk production
 error_reporting(E_ALL);
 $current_page = 'sim_tracking_client_po.php';
 
@@ -122,8 +122,8 @@ try {
     .modal-animate-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     
     /* Table Core Formatting */
-    .table-modern thead th { background: #f8fafc; color: #64748b; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.25rem 1rem; border-bottom: 1px solid #e2e8f0; }
-    .table-modern tbody td { padding: 1.5rem 1rem; vertical-align: top; }
+    .table-modern thead th { background: #f8fafc; color: #64748b; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
+    .table-modern tbody td { padding: 1.5rem; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
     .table-row-hover:hover { background-color: rgba(248, 250, 252, 0.8); }
     .dark .table-modern thead th { background: #1e293b; border-color: #334155; color: #94a3b8; }
     .dark .table-modern tbody td { border-bottom: 1px solid #334155; }
@@ -202,7 +202,9 @@ try {
                     <i class="ph ph-buildings absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
                     <select id="filterClient" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-12 pr-10 text-sm font-medium outline-none focus:border-indigo-500 shadow-sm cursor-pointer transition-all dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200">
                         <option value="">All Clients</option>
-                        <?php foreach($clients as $c): ?><option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option><?php endendforeach; ?>
+                        <?php foreach($clients as $c): ?>
+                            <option value="<?= htmlspecialchars($c['company_name']) ?>"><?= htmlspecialchars($c['company_name']) ?></option>
+                        <?php endforeach; ?>
                     </select>
                     <i class="ph ph-caret-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
                 </div>
@@ -366,16 +368,23 @@ try {
 </div>
 
 <datalist id="product_list">
-    <?php foreach($existing_products as $prod): ?><option value="<?= htmlspecialchars($prod) ?>"><?php endforeach; ?>
+    <?php foreach($existing_products as $prod): ?>
+        <option value="<?= htmlspecialchars($prod) ?>">
+    <?php endforeach; ?>
 </datalist>
 
 <div id="modalAdd" class="modal-container fixed inset-0 z-[100] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
     <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="w-full max-w-4xl rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden border border-slate-200 dark:border-slate-700 modal-animate-in">
-        <input type="hidden" name="action" value="create"><input type="hidden" name="type" value="client">
+        <input type="hidden" name="action" value="create">
+        <input type="hidden" name="type" value="client">
         
         <div class="flex items-center justify-between border-b border-indigo-500 px-8 py-5 bg-gradient-to-r from-indigo-600 to-indigo-800 text-white">
-            <h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-plus-circle text-2xl"></i> Create New Client PO</h5>
-            <button type="button" class="btn-close-modal h-8 w-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"><i class="ph ph-x text-lg"></i></button>
+            <h5 class="text-lg font-bold flex items-center gap-2">
+                <i class="ph-bold ph-plus-circle text-2xl"></i> Create New Client PO
+            </h5>
+            <button type="button" class="btn-close-modal h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
+                <i class="ph ph-x text-lg"></i>
+            </button>
         </div>
         
         <div class="overflow-y-auto p-8 flex-1 custom-scrollbar bg-slate-50 dark:bg-slate-900/50">
@@ -485,12 +494,18 @@ try {
 
 <div id="modalEdit" class="modal-container fixed inset-0 z-[100] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
     <form action="process_sim_tracking.php" method="POST" enctype="multipart/form-data" class="w-full max-w-4xl rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden border border-slate-200 dark:border-slate-700 modal-animate-in">
-        <input type="hidden" name="action" value="update"><input type="hidden" name="type" value="client">
-        <input type="hidden" name="id" id="edit_id"><input type="hidden" name="existing_file" id="edit_existing_file">
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="type" value="client">
+        <input type="hidden" name="id" id="edit_id">
+        <input type="hidden" name="existing_file" id="edit_existing_file">
         
         <div class="flex items-center justify-between border-b border-amber-500 px-8 py-5 bg-gradient-to-r from-amber-500 to-orange-500 text-white">
-            <h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-pencil-simple text-2xl"></i> Edit Client PO</h5>
-            <button type="button" class="btn-close-modal h-8 w-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"><i class="ph ph-x text-lg"></i></button>
+            <h5 class="text-lg font-bold flex items-center gap-2">
+                <i class="ph-bold ph-pencil-simple text-2xl"></i> Edit Client PO
+            </h5>
+            <button type="button" class="btn-close-modal h-8 w-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors">
+                <i class="ph ph-x text-lg"></i>
+            </button>
         </div>
         
         <div class="overflow-y-auto p-8 flex-1 custom-scrollbar bg-slate-50 dark:bg-slate-900/50">
