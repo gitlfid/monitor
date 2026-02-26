@@ -119,18 +119,18 @@ try {
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
 
-    /* Datatables Pagination Symmetry */
+    /* Datatables Pagination Symmetry (Emerald Theme) */
     .dataTables_wrapper .dataTables_paginate { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.35rem; padding-top: 0 !important; }
     .dataTables_wrapper .dataTables_paginate span { display: flex; gap: 0.35rem; }
     .dataTables_wrapper .dataTables_paginate .paginate_button { display: inline-flex; align-items: center; justify-content: center; padding: 0.375rem 0.85rem; border-radius: 0.5rem; border: 1px solid #e2e8f0; background: #fff; color: #475569 !important; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-left: 0 !important; }
     .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
     .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { opacity: 0.5; cursor: not-allowed; background: #f8fafc !important; border-color: #e2e8f0 !important; color: #94a3b8 !important; }
-    /* Emerald Active Theme */
     .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: #10b981 !important; border-color: #10b981 !important; color: #fff !important; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3); }
     
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button { background: #1e293b; border-color: #334155; color: #cbd5e1 !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background: #334155 !important; border-color: #475569 !important; color: #fff !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: #10b981 !important; border-color: #10b981 !important; }
+    .dataTables_empty { padding: 3rem !important; text-align: center; color: #64748b; }
 </style>
 
 <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -214,11 +214,11 @@ try {
             <thead>
                 <tr>
                     <th class="ps-8 w-[20%]">PO Reference</th>
-                    <th class="w-[20%]">Supplier Entity</th>
-                    <th class="w-[15%]">Batch Group</th>
-                    <th class="w-[18%]">Client Link</th>
+                    <th class="w-[22%]">Supplier Entity</th>
+                    <th class="w-[20%]">Client Link (Integration)</th>
                     <th class="text-right w-[12%]">Volume</th>
-                    <th class="text-center pe-8 w-[15%]">Actions</th>
+                    <th class="text-center w-[12%]">Documents</th>
+                    <th class="text-center pe-8 w-[14%]">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -226,6 +226,7 @@ try {
                     $q_fmt = number_format((int)preg_replace('/[^0-9]/', '', $row['sim_qty']));
                     $d_val = (!empty($row['po_date']) && $row['po_date'] != '0000-00-00') ? $row['po_date'] : $row['created_at'];
                     $p_date = date('d M Y', strtotime($d_val));
+                    $batch = htmlspecialchars($row['batch_name'] ?? 'N/A');
                     $jsonRow = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                     $animDelay = min($index * 0.05, 0.5) + 0.3; 
                 ?>
@@ -236,37 +237,41 @@ try {
                             <span class="inline-flex items-center w-max rounded-md bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 text-[11px] font-black text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-500/20 font-mono tracking-tight shadow-sm uppercase">
                                 <i class="ph-bold ph-receipt text-emerald-500 mr-1.5"></i> <?= e($row['po_number']) ?>
                             </span>
-                            <div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-1">
+                            <div class="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">
+                                <i class="ph-fill ph-stack text-slate-300 dark:text-slate-600"></i> BATCH: <?= $batch ?>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
                                 <i class="ph-fill ph-calendar-blank text-slate-300 dark:text-slate-600"></i> <?= $p_date ?>
                             </div>
                         </div>
                     </td>
 
                     <td class="align-top">
-                        <div class="flex items-center gap-3">
-                            <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
+                        <div class="flex items-start gap-2.5">
+                            <div class="mt-0.5 h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0 border border-emerald-200 dark:border-emerald-800">
                                 <?= strtoupper(substr($row['display_provider'], 0, 1)) ?>
                             </div>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col justify-center min-h-[40px]">
                                 <span class="font-bold text-slate-800 dark:text-white text-sm line-clamp-2" title="<?= e($row['display_provider']) ?>">
                                     <?= e($row['display_provider'] ?? '-') ?>
                                 </span>
-                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Supplier</span>
+                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-1">
+                                    <i class="ph-fill ph-truck text-emerald-500"></i> Official Supplier
+                                </span>
                             </div>
                         </div>
                     </td>
 
                     <td class="align-top">
-                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm mt-1">
-                            <i class="ph-fill ph-stack text-slate-400"></i> <?= e($row['batch_name'] ?? '-') ?>
-                        </span>
-                    </td>
-
-                    <td class="align-top">
                         <?php if(!empty($row['linked_po_number'])): ?>
-                            <button onclick='viewClientPO(<?= $jsonRow ?>)' class="inline-flex items-center w-max gap-2 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-500/20 hover:bg-blue-100 dark:hover:bg-blue-500/30 transition-all text-[10px] font-black uppercase tracking-wider shadow-sm group/link mt-1">
-                                <i class="ph-bold ph-link-simple-horizontal text-blue-500 group-hover/link:rotate-45 transition-transform"></i> <?= e($row['linked_po_number']) ?>
-                            </button>
+                            <div class="flex flex-col gap-1.5 mt-1">
+                                <button onclick='viewClientPO(<?= $jsonRow ?>)' class="inline-flex items-center w-max gap-2 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-500/20 hover:bg-blue-100 dark:hover:bg-blue-500/30 transition-all text-[10px] font-black uppercase tracking-wider shadow-sm group/link">
+                                    <i class="ph-bold ph-link-simple-horizontal text-blue-500 group-hover/link:rotate-45 transition-transform"></i> <?= e($row['linked_po_number']) ?>
+                                </button>
+                                <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 line-clamp-1 flex items-center gap-1">
+                                    <i class="ph-fill ph-buildings text-slate-400"></i> <?= e($row['linked_client_name']) ?>
+                                </span>
+                            </div>
                         <?php else: ?>
                             <span class="inline-flex items-center w-max gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 border-dashed mt-1">
                                 <i class="ph-bold ph-link-break"></i> Unlinked
@@ -277,32 +282,45 @@ try {
                     <td class="text-right align-top">
                         <div class="flex flex-col items-end gap-1 mt-1">
                             <span class="font-black text-slate-800 dark:text-white font-mono text-xl tracking-tight"><?= $q_fmt ?></span>
-                            <span class="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">PCS</span>
+                            <span class="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">PCS / SIMs</span>
+                        </div>
+                    </td>
+
+                    <td class="text-center align-top">
+                        <div class="flex justify-center mt-1">
+                            <?php if(!empty($row['po_file'])): ?>
+                                <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="flex flex-col items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors group/doc">
+                                    <div class="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center border border-emerald-100 dark:border-emerald-500/20 group-hover/doc:bg-emerald-100 dark:group-hover/doc:bg-emerald-500/30 transition-all shadow-sm">
+                                        <i class="ph-fill ph-file-pdf text-2xl"></i>
+                                    </div>
+                                    <span class="text-[9px] font-black uppercase tracking-widest">View PDF</span>
+                                </a>
+                            <?php else: ?>
+                                <div class="flex flex-col items-center justify-center gap-1.5 text-slate-300 dark:text-slate-600 cursor-not-allowed" title="No file attached">
+                                    <div class="h-10 w-10 rounded-xl bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center border border-slate-100 dark:border-slate-700">
+                                        <i class="ph-bold ph-minus text-xl"></i>
+                                    </div>
+                                    <span class="text-[9px] font-black uppercase tracking-widest opacity-50">Empty</span>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </td>
 
                     <td class="pe-8 text-center align-top">
                         <div class="flex items-center justify-center gap-1.5 mt-1">
-                            <?php if(!empty($row['po_file'])): ?>
-                                <a href="uploads/po/<?= $row['po_file'] ?>" target="_blank" class="group/btn relative h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm">
-                                    <i class="ph-fill ph-file-pdf text-lg"></i>
-                                    <span class="absolute -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">Document</span>
-                                </a>
-                            <?php endif; ?>
-                            
-                            <button onclick='printPO(<?= $jsonRow ?>)' class="group/btn relative h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-all shadow-sm">
-                                <i class="ph-fill ph-printer text-lg"></i>
-                                <span class="absolute -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">Print</span>
-                            </button>
-                            
-                            <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
-                            
                             <button onclick='openEditModal(<?= $jsonRow ?>)' class="group/btn relative h-9 w-9 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 hover:scale-105 active:scale-95 flex items-center justify-center transition-all shadow-sm">
                                 <i class="ph-fill ph-pencil-simple text-lg"></i>
-                                <span class="absolute -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">Edit</span>
+                                <span class="absolute -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">Edit Details</span>
                             </button>
                             
-                            <a href="process_sim_tracking.php?action=delete&id=<?= $row['id'] ?>&type=provider" onclick="return confirm('Are you sure you want to permanently delete this Provider PO?')" class="group/btn relative h-9 w-9 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 hover:scale-105 active:scale-95 flex items-center justify-center transition-all shadow-sm">
+                            <button onclick='printPO(<?= $jsonRow ?>)' class="group/btn relative h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:scale-105 active:scale-95 flex items-center justify-center transition-all shadow-sm">
+                                <i class="ph-fill ph-printer text-lg"></i>
+                                <span class="absolute -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">Print Record</span>
+                            </button>
+
+                            <div class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+                            
+                            <a href="process_sim_tracking.php?action=delete&id=<?= $row['id'] ?>&type=provider" onclick="return confirm('Are you sure you want to permanently delete this Provider PO? This action cannot be undone.')" class="group/btn relative h-9 w-9 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 hover:scale-105 active:scale-95 flex items-center justify-center transition-all shadow-sm">
                                 <i class="ph-fill ph-trash text-lg"></i>
                                 <span class="absolute -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">Delete</span>
                             </a>
@@ -618,13 +636,15 @@ try {
     function openEditModal(d) {
         $('#form_action').val('update'); $('#modal_title').text('Edit Provider PO');
         $('#edit_id').val(d.id); $('#add_po_number').val(d.po_number);
-        $('#add_po_date').val(d.po_date !== '0000-00-00' ? d.po_date : '');
-        $('#add_sim_qty').val(String(d.sim_qty).replace(/\D/g,''));
-        $('#add_batch_name').val(d.batch_name);
+        let pd = (d.po_date && d.po_date !== '0000-00-00') ? d.po_date : new Date().toISOString().split('T')[0];
+        $('#edit_po_date').val(pd);
+        let qtyClean = String(d.sim_qty).replace(/[^0-9]/g, '');
+        $('#edit_sim_qty').val(qtyClean);
+        $('#edit_batch_name').val(d.batch_name);
         
         if(d.po_file) {
             $('#edit_existing_file').val(d.po_file);
-            $('#current_file_info').text(d.po_file);
+            $('#current_file_info').text("Current file: " + d.po_file);
             $('#current_file_info_container').removeClass('hidden');
         } else {
             $('#edit_existing_file').val('');
@@ -647,26 +667,77 @@ try {
 
     // 5. Print Function
     function printPO(d) {
-        let poDate = d.po_date ? new Date(d.po_date).toLocaleDateString('en-US', {day: 'numeric', month: 'long', year: 'numeric'}) : '-';
+        let poDate = d.po_date ? new Date(d.po_date).toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'}) : '-';
         let qty = new Intl.NumberFormat('en-US').format(String(d.sim_qty).replace(/[^0-9]/g, ''));
         let company = d.display_provider || '-';
         let batch = d.batch_name || '-';
         let poNum = d.po_number || '-';
 
-        let win = window.open('', '', 'width=800,height=600');
+        let win = window.open('', '', 'width=900,height=700');
         win.document.write(`
         <html><head><title>Print PO</title>
-        <style>body{font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;padding:50px;color:#1e293b}.h{text-align:center;border-bottom:2px solid #e2e8f0;margin-bottom:30px;padding-bottom:20px}.h h1{margin:0 0 10px 0;font-size:24px;text-transform:uppercase}.h p{margin:0;font-family:monospace;color:#64748b;font-weight:bold;font-size:16px}table{width:100%;border-collapse:collapse;margin-top:20px}th{background:#f8fafc;padding:12px;text-align:left;border-bottom:2px solid #e2e8f0;font-size:12px;text-transform:uppercase;color:#64748b}td{border-bottom:1px solid #e2e8f0;padding:15px;font-size:14px}.footer{margin-top:80px;display:flex;justify-content:space-between}.sig-line{border-top:1px solid #94a3b8;width:200px;padding-top:10px;text-align:center;font-weight:bold;color:#475569}</style>
+        <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+            .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 40px; }
+            .header h1 { font-size: 28px; margin: 0 0 10px 0; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
+            .header p { font-family: monospace; font-size: 16px; margin: 0; color: #64748b; font-weight: bold; }
+            .info-grid { display: flex; justify-content: space-between; margin-bottom: 40px; }
+            .info-col { width: 45%; }
+            .info-row { margin-bottom: 10px; display: flex; }
+            .info-label { width: 100px; font-weight: bold; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;}
+            .info-val { font-weight: bold; color: #0f172a; font-size: 14px; }
+            .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            .table th { background-color: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; text-align: left; padding: 12px 15px; border-bottom: 2px solid #e2e8f0; letter-spacing: 1px;}
+            .table td { padding: 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; vertical-align: top;}
+            .text-right { text-align: right !important; }
+            .footer { margin-top: 80px; display: flex; justify-content: space-between; }
+            .sig-box { width: 200px; text-align: center; }
+            .sig-line { border-top: 1px solid #94a3b8; padding-top: 10px; font-size: 14px; font-weight: bold; color: #475569; }
+            .print-badge { display: inline-block; padding: 4px 8px; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 12px; font-family: monospace;}
+        </style>
         </head><body>
-        <div class="h"><h1>Provider Stock Inbound</h1><p>REF: ${poNum}</p></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:30px;">
-            <div><strong style="color:#64748b;font-size:12px;display:block;">PROVIDER:</strong><span style="font-size:16px;font-weight:bold;">${company}</span></div>
-            <div style="text-align:right"><strong style="color:#64748b;font-size:12px;display:block;">DATE:</strong><span style="font-size:16px;font-weight:bold;">${poDate}</span></div>
+        <div class="header">
+            <h1>Provider Stock Inbound</h1>
+            <p>REF: ${poNum}</p>
         </div>
-        <table><tr><th width="70%">Description</th><th width="30%" style="text-align:right">Quantity</th></tr>
-        <tr><td><strong>Stock Inbound Processing</strong><br><span style="color:#64748b;font-size:13px;display:block;margin-top:5px;">Batch ID: ${batch}</span></td>
-        <td style="text-align:right;font-size:18px;"><strong>${qty} Pcs</strong></td></tr></table>
-        <div class="footer"><div class="sig-line">Prepared By</div><div class="sig-line">Received By</div></div>
+        <div class="info-grid">
+            <div class="info-col">
+                <div class="info-row"><div class="info-label">PROVIDER</div><div class="info-val">${company}</div></div>
+            </div>
+            <div class="info-col text-right">
+                <div class="info-row" style="justify-content: flex-end;"><div class="info-label">DATE</div><div class="info-val">${poDate}</div></div>
+                <div class="info-row" style="justify-content: flex-end;"><div class="info-label">BATCH</div><div class="info-val"><span class="print-badge">${batch}</span></div></div>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th width="5%">NO</th>
+                    <th width="75%">ITEM DESCRIPTION & SPECIFICATION</th>
+                    <th width="20%" class="text-right">QUANTITY</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>
+                        <strong>Stock Inbound Processing</strong><br>
+                        <span style="color: #64748b; font-size: 13px; font-style: italic; display: block; margin-top: 5px;">Batch Group: ${batch}</span>
+                    </td>
+                    <td class="text-right"><strong style="font-size: 16px;">${qty}</strong> <span style="font-size:12px; color:#64748b;">PCS</span></td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="footer">
+            <div class="sig-box">
+                <br><br><br>
+                <div class="sig-line">Prepared By</div>
+            </div>
+            <div class="sig-box">
+                <br><br><br>
+                <div class="sig-line">Received By</div>
+            </div>
+        </div>
         </body></html>`);
         win.document.close(); win.focus(); setTimeout(() => { win.print(); win.close(); }, 500);
     }
@@ -676,6 +747,7 @@ try {
         var table = $('#table-provider').DataTable({
             language: { 
                 search: '', 
+                searchPlaceholder: '',
                 emptyTable: `<div class="flex flex-col items-center justify-center py-10"><i class="ph-fill ph-inbox text-5xl text-slate-300 dark:text-slate-600 mb-3"></i><span class="text-slate-500 font-bold">No inbound records found.</span></div>` 
             },
             searching: true, ordering: false, autoWidth: false, pageLength: 10,
