@@ -301,15 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
 
-                <div class="absolute -left-8 -bottom-6 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 shadow-xl z-30 animate-fade-in-up" style="animation-delay: 0.8s;">
-                    <div class="flex items-center gap-3">
-                        <i class="ph-fill ph-lightning text-amber-400 text-3xl"></i>
-                        <div>
-                            <p class="text-xs font-bold text-amber-100 uppercase tracking-widest">API Engine</p>
-                            <p class="text-sm font-black text-white">Zero Latency</p>
-                        </div>
-                    </div>
-                </div>
+
                 
             </div>
             
