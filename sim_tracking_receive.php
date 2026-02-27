@@ -1,7 +1,8 @@
 <?php
 // =========================================================================
 // FILE: sim_tracking_receive.php
-// UPDATE: Exact Replica of "Helpdesk Delivery" UI (Tables, Filters, Tabs)
+// DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
+// FIX: Pure API Tracking Render & Symmetrical UI Error Handling
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -14,6 +15,11 @@ require_once 'includes/sidebar.php';
 
 $db = db_connect();
 
+// Helper untuk mencegah error "Passing null to parameter"
+if (!function_exists('e')) {
+    function e($str) { return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8'); }
+}
+
 // =========================================================================
 // 1. DATA LOGIC (QUERY)
 // =========================================================================
@@ -24,11 +30,14 @@ try {
     $sql_recv = "SELECT l.*, 
             po.po_number as provider_po, 
             po.batch_name,
-            COALESCE(c.company_name, po.manual_company_name) as provider_name
+            COALESCE(c.company_name, po.manual_company_name) as provider_name,
+            GROUP_CONCAT(DISTINCT linked_client.po_number SEPARATOR ', ') as linked_client_po
             FROM sim_tracking_logistics l
             LEFT JOIN sim_tracking_po po ON l.po_id = po.id
             LEFT JOIN companies c ON po.company_id = c.id
+            LEFT JOIN sim_tracking_po linked_client ON po.link_client_po_id = linked_client.id
             WHERE l.type = 'receive'
+            GROUP BY l.id
             ORDER BY l.logistic_date DESC, l.id DESC";
     if ($db) {
         $stmt = $db->query($sql_recv);
@@ -37,7 +46,7 @@ try {
 } catch (Exception $e) {}
 
 // --- B. DATA DELIVERY (OUTBOUND) ---
-$opt_projects = []; $opt_couriers = []; $opt_receivers = [];
+$opt_projects = []; $opt_couriers = [];
 
 try {
     if ($db) {
@@ -52,29 +61,24 @@ try {
         $q_cour = "SELECT DISTINCT courier FROM sim_tracking_logistics WHERE type='delivery' AND courier != '' ORDER BY courier ASC";
         $stmt = $db->query($q_cour);
         if($stmt) $opt_couriers = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
-        $q_recv = "SELECT DISTINCT pic_name FROM sim_tracking_logistics WHERE type='delivery' AND pic_name != '' ORDER BY pic_name ASC";
-        $stmt = $db->query($q_recv);
-        if($stmt) $opt_receivers = $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 } catch (Exception $e) {}
 
-// Filter Logic
+// Filter Logic Outbound
 $search_track = $_GET['search_track'] ?? '';
 $filter_project = $_GET['filter_project'] ?? '';
 $filter_courier = $_GET['filter_courier'] ?? '';
-$filter_receiver = $_GET['filter_receiver'] ?? '';
 
 $where_clause = "WHERE l.type = 'delivery'"; 
-if (!empty($search_track)) $where_clause .= " AND (l.awb LIKE '%$search_track%' OR l.pic_name LIKE '%$search_track%')";
-if (!empty($filter_project)) $where_clause .= " AND c.company_name = '$filter_project'";
-if (!empty($filter_courier)) $where_clause .= " AND l.courier = '$filter_courier'";
-if (!empty($filter_receiver)) $where_clause .= " AND l.pic_name = '$filter_receiver'";
+if (!empty($search_track)) $where_clause .= " AND (l.awb LIKE :search OR l.pic_name LIKE :search)";
+if (!empty($filter_project)) $where_clause .= " AND c.company_name = :project";
+if (!empty($filter_courier)) $where_clause .= " AND l.courier = :courier";
 
-// Main Query Delivery
+// Main Query Delivery (Outbound)
 $data_delivery = [];
 try {
-    $sql_del = "SELECT l.*, 
+    if ($db) {
+        $stmt = $db->prepare("SELECT l.*, 
                 po.po_number as client_po, 
                 po.batch_name,
                 COALESCE(c.company_name, po.manual_company_name) as client_name,
@@ -84,15 +88,22 @@ try {
                 l.pic_name as receiver_name,
                 l.pic_phone as receiver_phone,
                 l.delivery_address as receiver_address,
-                l.received_date as delivered_date
+                l.received_date as delivered_date,
+                GROUP_CONCAT(DISTINCT provider_po.po_number SEPARATOR ', ') as ref_provider_po
                 FROM sim_tracking_logistics l
                 LEFT JOIN sim_tracking_po po ON l.po_id = po.id
                 LEFT JOIN companies c ON po.company_id = c.id
+                LEFT JOIN sim_tracking_po provider_po ON provider_po.link_client_po_id = po.id
                 $where_clause
-                ORDER BY l.logistic_date DESC, l.id DESC";
-    if ($db) {
-        $stmt = $db->query($sql_del);
-        if($stmt) $data_delivery = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                GROUP BY l.id
+                ORDER BY l.logistic_date DESC, l.id DESC");
+        
+        if (!empty($search_track)) $stmt->bindValue(':search', "%$search_track%");
+        if (!empty($filter_project)) $stmt->bindValue(':project', $filter_project);
+        if (!empty($filter_courier)) $stmt->bindValue(':courier', $filter_courier);
+        
+        $stmt->execute();
+        $data_delivery = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Exception $e) {}
 
@@ -110,401 +121,577 @@ try {
 ?>
 
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    body { background-color: #f3f4f6; font-family: 'Inter', sans-serif; color: #1f2937; }
+    /* Table Animations */
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .modal-animate-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     
-    .page-title { font-size: 1.25rem; font-weight: 700; color: #1e3a8a; margin-bottom: 4px; }
-    .page-desc { color: #6b7280; font-size: 0.85rem; margin-bottom: 0; }
-    
-    /* BUTTONS */
-    .btn-primary-custom { background-color: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s; }
-    .btn-primary-custom:hover { background-color: #2563eb; color: white; box-shadow: 0 4px 6px -1px rgba(37,99,235,0.2); }
-    .btn-outline-custom { background-color: #fff; color: #3b82f6; border: 1px solid #3b82f6; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 0.85rem; transition: 0.2s; }
-    .btn-outline-custom:hover { background-color: #eff6ff; color: #1d4ed8; }
+    /* Table Styling */
+    .table-modern thead th { background: #f8fafc; color: #64748b; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.25rem 1.25rem; border-bottom: 1px solid #e2e8f0; }
+    .table-modern tbody td { padding: 1.5rem 1.25rem; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
+    .table-row-hover:hover { background-color: rgba(248, 250, 252, 0.8); }
+    .dark .table-modern thead th { background: #1e293b; border-color: #334155; color: #94a3b8; }
+    .dark .table-modern tbody td { border-color: #334155; }
+    .dark .table-row-hover:hover { background-color: rgba(30, 41, 59, 0.6); }
 
-    /* CARD & TABS */
-    .main-card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: none; overflow: hidden; margin-bottom: 2rem; }
-    .nav-tabs { border-bottom: 1px solid #e5e7eb; padding: 0 1rem; background: #fff; }
-    .nav-link { border: none; color: #6b7280; font-weight: 600; padding: 16px 20px; font-size: 0.9rem; background: transparent; position: relative; }
-    .nav-link:hover { color: #3b82f6; border: none; background: transparent; }
-    .nav-link.active { color: #3b82f6; border: none; background: transparent; }
-    .nav-link.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #3b82f6; border-radius: 3px 3px 0 0; }
+    /* Custom Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* FILTERS */
-    .filter-section { padding: 1.25rem 1.5rem; background-color: #fff; border-bottom: 1px solid #f3f4f6; }
-    .filter-label { font-size: 0.65rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; display: block; }
-    .form-control-sm, .form-select-sm { border-color: #d1d5db; border-radius: 6px; font-size: 0.85rem; padding: 0.4rem 0.75rem; color: #374151; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
-
-    /* TABLE MODERN */
-    .table-modern { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 0; }
-    .table-modern thead th {
-        background-color: #f9fafb; color: #6b7280; font-weight: 700; text-transform: uppercase;
-        font-size: 0.7rem; padding: 14px 16px; border-bottom: 1px solid #e5e7eb; letter-spacing: 0.05em; white-space: nowrap;
+    /* DATATABLES PAGINATION (RIGHT ALIGNED) */
+    .dataTables_wrapper .dataTables_paginate {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+        padding-right: 2rem !important;
     }
-    .table-modern tbody td { padding: 16px; border-bottom: 1px solid #f3f4f6; color: #374151; vertical-align: middle; }
-    .table-modern tr:hover td { background-color: #f9fafb; }
-    .table-footer { padding: 1rem 1.5rem; border-top: 1px solid #e5e7eb; background: #fff; font-size: 0.85rem; color: #6b7280; display: flex; justify-content: space-between; align-items: center; }
-
-    /* TABLE ELEMENTS */
-    .badge-status { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; }
-    .badge-success-soft { background-color: #d1fae5; color: #065f46; }
-    .badge-warning-soft { background-color: #fef3c7; color: #92400e; }
-    .badge-info-soft { background-color: #dbeafe; color: #1e40af; }
-    
-    .proj-badge { display: inline-flex; align-items: center; background-color: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; border: 1px solid #bae6fd; }
-    .proj-icon { background-color: #bae6fd; color: #0284c7; width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; margin-right: 6px; font-size: 0.65rem; }
-    
-    .track-link { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 700; color: #2563eb; font-size: 0.9rem; text-decoration: none; transition: 0.2s; }
-    .track-link:hover { color: #1d4ed8; text-decoration: underline; }
-    .courier-pill { background: #374151; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; margin-top: 4px; display: inline-block; }
-
-    .action-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #d1d5db; background: white; color: #4b5563; margin-right: 4px; transition: 0.2s; cursor: pointer; text-decoration: none; }
-    .action-btn:hover { background: #f3f4f6; color: #111827; border-color: #9ca3af; }
-
-    /* MODAL SHELL */
-    .modal-content-clean { border: none; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); overflow: hidden; }
-    .modal-header-clean { background-color: #fff; padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
-    .modal-title-clean { font-weight: 700; font-size: 1rem; color: #111827; display: flex; align-items: center; gap: 8px; }
+    .dataTables_wrapper .dataTables_paginate span {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 0.3rem !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0.5rem 1rem !important;
+        min-width: 2.5rem !important;
+        border-radius: 0.5rem !important;
+        border: 1px solid #e2e8f0 !important;
+        background-color: #ffffff !important;
+        color: #475569 !important;
+        font-size: 0.875rem !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        text-decoration: none !important;
+        transition: all 0.2s ease !important;
+        margin: 0 !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+        background-color: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+        background-color: #3b82f6 !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+        background-color: #f8fafc !important;
+    }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button { background-color: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background-color: #334155 !important; border-color: #475569 !important; color: #ffffff !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { background-color: #0f172a !important; border-color: #1e293b !important; }
 </style>
 
-<div class="px-4 py-4">
-    
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 class="page-title">Delivery Management</h1>
-            <p class="page-desc">Monitor status pengiriman dan riwayat logistik.</p>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn-outline-custom" onclick="openReceiveModal()"><i class="bi bi-box-arrow-in-down me-1"></i> Receive</button>
-            <button class="btn-primary-custom" onclick="openDeliveryModal()"><i class="bi bi-plus me-1"></i> Input Delivery</button>
-        </div>
+<div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <div class="animate-fade-in-up">
+        <h2 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 tracking-tight">
+            Logistics & Delivery
+        </h2>
+        <p class="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1.5">
+            <i class="ph ph-package text-lg text-blue-500"></i> Monitor inbound supplies and outbound shipments.
+        </p>
     </div>
-
-    <div class="main-card">
-        <ul class="nav nav-tabs" id="logisticsTab" role="tablist">
-            <li class="nav-item">
-                <button class="nav-link active" id="delivery-tab" data-bs-toggle="tab" data-bs-target="#delivery" type="button">Outbound (Delivery)</button>
-            </li>
-            <li class="nav-item">
-                <button class="nav-link" id="receive-tab" data-bs-toggle="tab" data-bs-target="#receive" type="button">Inbound (Receive)</button>
-            </li>
-        </ul>
-
-        <div class="tab-content p-0">
-            <div class="tab-pane fade show active" id="delivery">
-                
-                <div class="filter-section">
-                    <form method="GET" action="sim_tracking_receive.php">
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-3">
-                                <label class="filter-label">Search Tracking</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                    <input type="text" name="search_track" class="form-control form-control-sm border-start-0 ps-0" placeholder="Nomor Resi..." value="<?= htmlspecialchars($search_track ?? '') ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="filter-label">Project</label>
-                                <select name="filter_project" class="form-select form-select-sm">
-                                    <option value="">- All Projects -</option>
-                                    <?php foreach ($opt_projects as $p) echo "<option value='$p' ".($filter_project==$p?'selected':'').">$p</option>"; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="filter-label">Courier</label>
-                                <select name="filter_courier" class="form-select form-select-sm">
-                                    <option value="">- All Couriers -</option>
-                                    <?php foreach ($opt_couriers as $c) echo "<option value='$c' ".($filter_courier==$c?'selected':'').">$c</option>"; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="filter-label">Receiver</label>
-                                <select name="filter_receiver" class="form-select form-select-sm">
-                                    <option value="">- All Receivers -</option>
-                                    <?php foreach ($opt_receivers as $r) echo "<option value='$r' ".($filter_receiver==$r?'selected':'').">$r</option>"; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-3 d-flex gap-2">
-                                <button type="submit" class="btn btn-primary-custom w-100 py-1">Filter</button>
-                                <?php if(!empty($search_track) || !empty($filter_project) || !empty($filter_courier) || !empty($filter_receiver)): ?>
-                                    <a href="sim_tracking_receive.php" class="btn btn-outline-secondary w-100 py-1" style="font-size:0.85rem; font-weight:600;">Reset</a>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="table-modern" id="table-delivery">
-                        <thead>
-                            <tr>
-                                <th class="ps-4">Sent Date</th>
-                                <th>Delivered</th>
-                                <th>Project / Client</th>
-                                <th>Tracking Info</th>
-                                <th>Sender</th>
-                                <th>Receiver</th>
-                                <th class="text-center">Qty</th>
-                                <th class="text-center pe-4">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if(empty($data_delivery)): ?>
-                                <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2 text-gray-300"></i>Data tidak ditemukan.</td></tr>
-                            <?php else: ?>
-                                <?php foreach($data_delivery as $row): 
-                                    $st = strtolower($row['status'] ?? '');
-                                    $statusClass = 'badge-warning-soft'; $icon = 'bi-clock';
-                                    if(strpos($st, 'shipped')!==false) { $statusClass = 'badge-info-soft'; $icon = 'bi-truck'; }
-                                    if(strpos($st, 'delivered')!==false) { $statusClass = 'badge-success-soft'; $icon = 'bi-check-circle-fill'; }
-                                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
-                                ?>
-                                <tr>
-                                    <td class="ps-4">
-                                        <div class="fw-bold text-dark"><?= date('d M Y', strtotime($row['delivery_date'])) ?></div>
-                                        <div class="small text-muted mt-1" style="font-size:0.75rem;"><?= date('H:i', strtotime($row['delivery_date'])) ?> WIB</div>
-                                    </td>
-                                    <td>
-                                        <div class="badge-status <?= $statusClass ?>"><i class="bi <?= $icon ?> me-1"></i> <?= ucfirst($row['status']) ?></div>
-                                        <?php if(!empty($row['delivered_date'])): ?>
-                                            <div class="small text-success fw-bold mt-1" style="font-size:0.7rem;"><i class="bi bi-check-all"></i> <?= date('d M Y', strtotime($row['delivered_date'])) ?></div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div class="proj-badge">
-                                            <div class="proj-icon"><i class="bi bi-hdd-network-fill"></i></div>
-                                            <?= htmlspecialchars($row['client_name']) ?>
-                                        </div>
-                                        <div class="small text-muted mt-1 font-monospace" style="font-size:0.7rem;">PO: <?= htmlspecialchars($row['client_po']) ?></div>
-                                    </td>
-                                    <td>
-                                        <a href="javascript:void(0)" class="track-link" onclick='trackResi("<?= htmlspecialchars($row['tracking_number']) ?>", "<?= htmlspecialchars($row['courier_name']) ?>")'>
-                                            <?= htmlspecialchars($row['tracking_number'] ?: 'NO-RESI') ?>
-                                        </a><br>
-                                        <div class="courier-pill"><?= htmlspecialchars($row['courier_name']) ?></div>
-                                    </td>
-                                    <td>
-                                        <div class="fw-bold text-dark small mb-1">PT LinksField</div>
-                                        <div class="small text-muted" style="font-size:0.75rem;">Warehouse Jakarta</div>
-                                    </td>
-                                    <td>
-                                        <div class="fw-bold text-dark small mb-1"><?= htmlspecialchars($row['receiver_name']) ?></div>
-                                        <div class="small text-muted" style="font-size:0.75rem;"><?= htmlspecialchars($row['receiver_phone']) ?></div>
-                                    </td>
-                                    <td class="text-center fw-bold text-dark"><?= number_format($row['qty']) ?></td>
-                                    <td class="text-center pe-4">
-                                        <div class="d-flex justify-content-center">
-                                            <button class="action-btn" title="Track" onclick='trackResi("<?= htmlspecialchars($row['tracking_number']) ?>", "<?= htmlspecialchars($row['courier_name']) ?>")'><i class="bi bi-geo-alt"></i></button>
-                                            <button class="action-btn" title="Detail" onclick='viewDetail(<?= $rowJson ?>)'><i class="bi bi-eye"></i></button>
-                                            <button class="action-btn" title="Edit" onclick='editDelivery(<?= $rowJson ?>)'><i class="bi bi-pencil"></i></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="table-footer">
-                    <div>Menampilkan hasil data pengiriman terbaru.</div>
-                    <div>2026 &copy; LinksField Helpdesk</div>
-                </div>
-            </div>
-
-            <div class="tab-pane fade" id="receive">
-                <div class="table-responsive">
-                    <table class="table-modern" id="table-receive">
-                        <thead>
-                            <tr>
-                                <th class="ps-4">Received Date</th>
-                                <th>Status</th>
-                                <th>Origin / Provider</th>
-                                <th>Internal PO</th>
-                                <th>Receiver (WH)</th>
-                                <th class="text-center">Qty</th>
-                                <th class="text-center pe-4">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach($data_receive as $row): $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8'); ?>
-                            <tr>
-                                <td class="ps-4"><div class="fw-bold text-dark"><?= date('d M Y', strtotime($row['logistic_date'])) ?></div></td>
-                                <td><div class="badge-status badge-success-soft"><i class="bi bi-check-circle-fill me-1"></i> Received</div></td>
-                                <td>
-                                    <div class="fw-bold text-dark small mb-1"><?= htmlspecialchars($row['provider_name']) ?></div>
-                                    <div class="small text-muted" style="font-size:0.75rem;">Batch: <?= htmlspecialchars($row['batch_name']) ?></div>
-                                </td>
-                                <td><div class="font-monospace text-primary fw-bold" style="font-size:0.85rem;"><?= htmlspecialchars($row['provider_po']) ?></div></td>
-                                <td>
-                                    <div class="fw-bold text-dark small mb-1">Internal Warehouse</div>
-                                    <div class="small text-muted" style="font-size:0.75rem;">PIC: <?= htmlspecialchars($row['pic_name']) ?></div>
-                                </td>
-                                <td class="text-center fw-bold text-success fs-6">+<?= number_format($row['qty']) ?></td>
-                                <td class="text-center pe-4">
-                                    <button class="action-btn" onclick='editReceive(<?= $rowJson ?>)'><i class="bi bi-pencil"></i></button>
-                                    <a href="process_sim_tracking.php?action=delete_logistic&id=<?= $row['id'] ?>" class="action-btn text-danger border-danger-subtle" onclick="return confirm('Hapus data ini?')"><i class="bi bi-trash"></i></a>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-        </div>
+    <div class="animate-fade-in-up flex gap-3">
+        <button onclick="openReceiveModal()" class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition-all hover:bg-slate-50 dark:hover:bg-slate-700">
+            <i class="ph-bold ph-download-simple text-emerald-500"></i> Log Inbound
+        </button>
+        <button onclick="openDeliveryModal()" class="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-lg shadow-blue-500/30 active:scale-95 transition-all">
+            <i class="ph-bold ph-paper-plane-right"></i> Log Outbound
+        </button>
     </div>
 </div>
 
-<div class="modal fade" id="trackingModal" tabindex="5">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content modal-content-clean">
-            <div class="modal-header-clean">
-                <div class="modal-title-clean">
-                    <i class="bi bi-box-seam text-primary fs-4"></i> Shipment Status
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-0 bg-light" id="trackingResult">
-                <div class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <div class="mt-3 text-muted small fw-bold">Memuat data dari kurir...</div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="flex gap-2 border-b border-slate-200 dark:border-slate-700 mb-6 animate-fade-in-up">
+    <button onclick="switchTab('delivery')" id="tab-btn-delivery" class="px-6 py-3.5 text-sm font-bold border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 transition-colors flex items-center gap-2">
+        <i class="ph-fill ph-paper-plane-tilt"></i> Outbound (Sent)
+    </button>
+    <button onclick="switchTab('receive')" id="tab-btn-receive" class="px-6 py-3.5 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 transition-colors flex items-center gap-2 hover:text-slate-700 dark:hover:text-slate-300">
+        <i class="ph-fill ph-download-simple"></i> Inbound (Received)
+    </button>
 </div>
 
-<div class="modal fade" id="detailModal" tabindex="-1">
-    <div class="modal-dialog modal-md modal-dialog-centered">
-        <div class="modal-content modal-content-clean">
-            <div class="modal-header-clean pb-3">
-                <h5 class="modal-title-clean mb-0"><i class="bi bi-card-text text-primary me-2 fs-5"></i> Delivery Detail</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4 bg-light" id="detailContent"></div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="modalDelivery" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <form action="process_sim_tracking.php" method="POST" class="modal-content border-0 shadow">
-            <input type="hidden" name="action" id="del_action" value="create_logistic">
-            <input type="hidden" name="type" value="delivery">
-            <input type="hidden" name="id" id="del_id">
-            <div class="modal-header bg-primary text-white"><h6 class="modal-title fw-bold">Outbound Delivery Form</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body p-4">
-                <div class="row">
-                    <div class="col-md-6 border-end pe-4">
-                        <h6 class="text-primary border-bottom pb-2 mb-3 small fw-bold text-uppercase">Destination (Client)</h6>
-                        <div class="mb-3"><label class="small fw-bold text-muted">Date</label><input type="date" name="logistic_date" id="del_date" class="form-control form-control-sm" required></div>
-                        <div class="mb-3"><label class="small fw-bold text-muted">Client PO</label><select name="po_id" id="del_po_id" class="form-select form-select-sm" required><option value="">-- Select --</option><?php foreach($client_pos as $po) echo "<option value='{$po['id']}'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
-                        <div class="row"><div class="col-6 mb-3"><label class="small fw-bold text-muted">Recipient</label><input type="text" name="pic_name" id="del_pic" class="form-control form-control-sm"></div><div class="col-6 mb-3"><label class="small fw-bold text-muted">Phone</label><input type="text" name="pic_phone" id="del_phone" class="form-control form-control-sm"></div></div>
-                        <div class="mb-3"><label class="small fw-bold text-muted">Address</label><textarea name="delivery_address" id="del_address" class="form-control form-control-sm" rows="2"></textarea></div>
-                    </div>
-                    <div class="col-md-6 ps-4">
-                        <h6 class="text-primary border-bottom pb-2 mb-3 small fw-bold text-uppercase">Shipping Info</h6>
-                        <div class="row"><div class="col-6 mb-3"><label class="small fw-bold text-muted">Courier</label><input type="text" name="courier" id="del_courier" class="form-control form-control-sm"></div><div class="col-6 mb-3"><label class="small fw-bold text-muted">AWB / Resi</label><input type="text" name="awb" id="del_awb" class="form-control form-control-sm"></div></div>
-                        <div class="mb-3"><label class="small fw-bold text-muted">Qty</label><input type="number" name="qty" id="del_qty" class="form-control form-control-sm" required></div>
-                        <div class="mb-3"><label class="small fw-bold text-muted">Status</label><select name="status" id="del_status" class="form-select form-select-sm"><option value="Process">Process</option><option value="Shipped">Shipped</option><option value="Delivered">Delivered</option></select></div>
-                        <div class="p-3 bg-light rounded border"><label class="small fw-bold text-muted d-block mb-1 text-uppercase" style="font-size:0.65rem;">Proof of Delivery</label><div class="row g-2"><div class="col-6"><input type="date" name="received_date" id="del_recv_date" class="form-control form-control-sm"></div><div class="col-6"><input type="text" name="receiver_name" id="del_recv_name" class="form-control form-control-sm" placeholder="Accepted By"></div></div></div>
-                    </div>
+<div id="tab-content-delivery" class="rounded-3xl bg-white shadow-soft dark:bg-[#24303F] border border-slate-100 dark:border-slate-800 animate-fade-in-up relative overflow-hidden block">
+    <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+    <div class="border-b border-slate-100 dark:border-slate-800 p-6 bg-slate-50/50 dark:bg-slate-800/50">
+        <form method="GET" action="sim_tracking_receive.php" class="grid grid-cols-1 md:grid-cols-12 gap-5 items-end">
+            <div class="md:col-span-4">
+                <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-400">Search Tracking</label>
+                <div class="relative">
+                    <i class="ph ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+                    <input type="text" name="search_track" value="<?= e($search_track) ?>" class="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-12 pr-4 text-sm font-medium outline-none focus:border-blue-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200" placeholder="AWB, Receiver...">
                 </div>
             </div>
-            <div class="modal-footer bg-light"><button type="submit" class="btn btn-primary fw-bold px-4">Save Data</button></div>
+            <div class="md:col-span-4">
+                <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-400">Project Filter</label>
+                <div class="relative">
+                    <i class="ph ph-folder-open absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+                    <select name="filter_project" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-12 pr-10 text-sm font-medium outline-none focus:border-blue-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200 cursor-pointer">
+                        <option value="">All Projects</option>
+                        <?php foreach ($opt_projects as $p) echo "<option value='".e($p)."' ".($filter_project==$p?'selected':'').">".e($p)."</option>"; ?>
+                    </select>
+                    <i class="ph ph-caret-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                </div>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <?php if(!empty($search_track) || !empty($filter_project) || !empty($filter_courier)): ?>
+                    <a href="sim_tracking_receive.php" class="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center">Reset</a>
+                <?php endif; ?>
+                <button type="submit" class="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-blue-700 shadow-md flex items-center gap-2 transition-all active:scale-95"><i class="ph-bold ph-funnel"></i> Apply Filter</button>
+            </div>
         </form>
     </div>
+
+    <div class="overflow-x-auto w-full">
+        <table class="w-full text-left border-collapse table-modern" id="table-delivery">
+            <thead>
+                <tr>
+                    <th class="ps-8 w-[15%]">Status</th>
+                    <th class="w-[25%]">Project / Client</th>
+                    <th class="w-[20%]">Shipment / AWB</th>
+                    <th class="w-[15%]">Origin / Dest</th>
+                    <th class="text-right w-[10%]">Qty</th>
+                    <th class="text-center w-[15%] pe-8">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                <?php if(empty($data_delivery)): ?>
+                    <tr><td colspan="6" class="px-8 py-12 text-center text-slate-500 dark:text-slate-400"><p class="font-medium">No delivery records found.</p></td></tr>
+                <?php else: ?>
+                    <?php foreach($data_delivery as $row): 
+                        $st = strtolower($row['status'] ?? '');
+                        $statusClass = $st == 'delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+                        $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                    ?>
+                    <tr class="table-row-hover transition-colors">
+                        <td class="ps-8">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border <?= $statusClass ?>">
+                                <?= e($row['status']) ?>
+                            </span>
+                            <div class="mt-2 text-[10px] font-bold text-slate-500">Sent: <?= date('d/m/Y', strtotime($row['delivery_date'])) ?></div>
+                        </td>
+                        <td>
+                            <div class="flex flex-col">
+                                <span class="font-bold text-slate-800 dark:text-white text-sm"><?= e($row['client_name']) ?></span>
+                                <div class="flex flex-col gap-0.5 mt-1">
+                                    <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 rounded border border-blue-100 dark:border-blue-800 w-max">Client PO: <?= e($row['client_po']) ?></span>
+                                    <?php if(!empty($row['ref_provider_po'])): ?>
+                                    <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 rounded border border-emerald-100 dark:border-emerald-800 w-max">Prov PO: <?= e($row['ref_provider_po']) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1 block"><?= e($row['courier_name']) ?></span>
+                            <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
+                                <i class="ph-bold ph-crosshair text-indigo-500"></i> <?= e($row['tracking_number'] ?: 'NO-AWB') ?>
+                            </button>
+                        </td>
+                        <td>
+                            <div class="text-[11px]"><span class="text-slate-400 font-bold uppercase">From:</span> <span class="dark:text-slate-200">LinksField WH</span></div>
+                            <div class="text-[11px] mt-1"><span class="text-slate-400 font-bold uppercase">To:</span> <span class="dark:text-slate-200 line-clamp-1" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
+                        </td>
+                        <td class="text-right align-middle"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
+                        <td class="pe-8 text-center align-middle">
+                            <div class="flex items-center justify-center gap-1.5">
+                                <button onclick='viewDetail(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-bold ph-eye text-lg"></i></button>
+                                <button onclick='editDelivery(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-fill ph-pencil-simple text-lg"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
 </div>
 
-<div class="modal fade" id="modalReceive" tabindex="-1">
-    <div class="modal-dialog">
-        <form action="process_sim_tracking.php" method="POST" class="modal-content border-0 shadow">
-            <input type="hidden" name="action" id="recv_action" value="create_logistic">
-            <input type="hidden" name="type" value="receive">
-            <input type="hidden" name="id" id="recv_id">
-            <div class="modal-header bg-success text-white"><h6 class="modal-title fw-bold">Inbound Receive Form</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body p-4">
-                <div class="mb-3"><label class="small fw-bold text-muted">Date</label><input type="date" name="logistic_date" id="recv_date" class="form-control form-control-sm" required></div>
-                <div class="mb-3"><label class="small fw-bold text-muted">Provider PO</label><select name="po_id" id="recv_po_id" class="form-select form-select-sm" required><option value="">-- Select --</option><?php foreach($provider_pos as $po) echo "<option value='{$po['id']}'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
-                <div class="row"><div class="col-6 mb-3"><label class="small fw-bold text-muted">Receiver PIC</label><input type="text" name="pic_name" id="recv_pic" class="form-control form-control-sm"></div><div class="col-6 mb-3"><label class="small fw-bold text-muted">Qty</label><input type="number" name="qty" id="recv_qty" class="form-control form-control-sm" required></div></div>
+<div id="tab-content-receive" class="rounded-3xl bg-white shadow-soft dark:bg-[#24303F] border border-slate-100 dark:border-slate-800 animate-fade-in-up relative overflow-hidden hidden">
+    <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+    <div class="border-b border-slate-100 dark:border-slate-800 px-8 py-6 bg-slate-50/50 dark:bg-slate-800/50">
+        <h4 class="text-lg font-bold text-slate-800 dark:text-white">Warehouse Inbound Logs</h4>
+        <p class="text-xs text-slate-500 mt-1">Log history of physical SIM cards received at the internal warehouse.</p>
+    </div>
+    <div class="overflow-x-auto w-full">
+        <table class="w-full text-left border-collapse table-modern" id="table-receive">
+            <thead>
+                <tr>
+                    <th class="ps-8 w-[15%]">Date</th>
+                    <th class="w-[20%]">Supplier Origin</th>
+                    <th class="w-[15%]">Provider PO</th>
+                    <th class="w-[20%]">Linked Client PO</th>
+                    <th class="w-[10%]">WH PIC</th>
+                    <th class="text-right w-[10%]">Qty</th>
+                    <th class="pe-8 text-center w-[10%]">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                <?php foreach($data_receive as $row): 
+                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8'); 
+                ?>
+                <tr class="table-row-hover transition-colors">
+                    <td class="ps-8 align-top">
+                        <span class="font-bold text-slate-700 dark:text-slate-300 text-sm block"><?= date('d M Y', strtotime($row['logistic_date'])) ?></span>
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 mt-1 rounded text-[9px] font-black uppercase tracking-widest border bg-emerald-50 text-emerald-700 border-emerald-200">Arrived</span>
+                    </td>
+                    <td class="align-top">
+                        <span class="font-bold text-slate-800 dark:text-white text-sm block"><?= e($row['provider_name']) ?></span>
+                        <span class="text-[10px] uppercase font-black tracking-widest text-slate-400">Batch: <?= e($row['batch_name']) ?></span>
+                    </td>
+                    <td class="align-top"><code class="text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md border border-indigo-100 dark:border-indigo-800 shadow-sm"><?= e($row['provider_po']) ?></code></td>
+                    <td class="align-top">
+                        <?php if(!empty($row['linked_client_po'])): ?>
+                            <code class="text-xs text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 shadow-sm leading-relaxed"><?= e($row['linked_client_po']) ?></code>
+                        <?php else: ?>
+                            <span class="text-[10px] text-slate-400 italic font-medium px-2 py-1 border border-dashed border-slate-300 rounded-md">Not Linked</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="align-top"><span class="text-[11px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="ph-fill ph-user text-emerald-500"></i> <?= e($row['pic_name']) ?></span></td>
+                    <td class="text-right align-top"><span class="font-black text-emerald-600 dark:text-emerald-400 font-mono text-xl">+<?= number_format($row['qty']) ?></span></td>
+                    <td class="pe-8 text-center align-top">
+                        <div class="flex items-center justify-center gap-1.5">
+                            <button onclick='editReceive(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-all shadow-sm flex items-center justify-center"><i class="ph-fill ph-pencil-simple text-lg"></i></button>
+                            <a href="process_sim_tracking.php?action=delete_logistic&id=<?= $row['id'] ?>" onclick="return confirm('Delete this inbound data?')" class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-all shadow-sm flex items-center justify-center"><i class="ph-fill ph-trash text-lg"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="trackingModal" class="modal-container fixed inset-0 z-[110] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+    <div class="w-full max-w-2xl rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 modal-animate-in">
+        <div class="flex items-center justify-between border-b border-blue-500 px-7 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+            <h5 class="text-lg font-bold flex items-center gap-3"><i class="ph-bold ph-crosshair text-2xl"></i> Live Shipment Tracking</h5>
+            <button type="button" class="btn-close-modal text-white/70 hover:text-white transition-all"><i class="ph ph-x text-2xl"></i></button>
+        </div>
+        
+        <div class="p-8 bg-slate-50 dark:bg-slate-900/50 max-h-[60vh] overflow-y-auto custom-scrollbar text-slate-800 dark:text-white" id="trackingResult">
             </div>
-            <div class="modal-footer bg-light"><button type="submit" class="btn btn-success fw-bold px-4">Save Data</button></div>
+
+        <div class="border-t border-slate-100 dark:border-slate-800 p-5 bg-white dark:bg-slate-800 flex justify-end">
+            <button type="button" class="btn-close-modal px-8 py-2.5 rounded-xl text-sm font-bold text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-all shadow-sm">Close Panel</button>
+        </div>
+    </div>
+</div>
+
+<div id="detailModal" class="modal-container fixed inset-0 z-[110] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 modal-animate-in">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-7 py-5 bg-white dark:bg-[#24303F]">
+            <h5 class="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2"><i class="ph-fill ph-ticket text-blue-500 text-2xl"></i> Delivery Summary</h5>
+            <button type="button" class="btn-close-modal text-slate-400 hover:text-slate-700 transition-all"><i class="ph ph-x text-2xl"></i></button>
+        </div>
+        <div class="p-6 bg-slate-50/50 dark:bg-slate-900/30 text-slate-800 dark:text-white" id="detailContent"></div>
+    </div>
+</div>
+
+<div id="modalDelivery" class="modal-container fixed inset-0 z-[100] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+    <form action="process_sim_tracking.php" method="POST" class="w-full max-w-4xl rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col max-h-[95vh] border border-slate-200 dark:border-slate-700 modal-animate-in">
+        <input type="hidden" name="action" id="del_action" value="create_logistic">
+        <input type="hidden" name="type" value="delivery"><input type="hidden" name="id" id="del_id">
+        <div class="flex items-center justify-between border-b border-blue-500 px-7 py-5 bg-blue-600 text-white"><h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-paper-plane-right text-xl"></i> Outbound Shipment Form</h5><button type="button" class="btn-close-modal text-white/70 hover:text-white transition-all"><i class="ph ph-x text-xl"></i></button></div>
+        
+        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-slate-800 dark:text-white">
+                <div class="space-y-4">
+                    <h6 class="text-[11px] font-black text-blue-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Destination Target</h6>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Send Date</label><input type="date" name="logistic_date" id="del_date" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Target Client PO</label><select name="po_id" id="del_po_id" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="">-- Select Client PO --</option><?php foreach($client_pos as $po) echo "<option value='{$po['id']}' class='dark:bg-slate-800'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Recipient Name</label><input type="text" name="pic_name" id="del_pic" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Contact Phone</label><input type="text" name="pic_phone" id="del_phone" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                    </div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Full Delivery Address</label><textarea name="delivery_address" id="del_address" rows="3" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm resize-none"></textarea></div>
+                </div>
+
+                <div class="space-y-4">
+                    <h6 class="text-[11px] font-black text-indigo-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Logistics Provider</h6>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Courier Service</label><input type="text" name="courier" id="del_courier" placeholder="e.g. JNE, Sicepat" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm uppercase font-bold outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">AWB / Receipt Number</label><input type="text" name="awb" id="del_awb" placeholder="Input Resi" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm"></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Quantity Sent</label><input type="number" name="qty" id="del_qty" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-black text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Delivery Status</label><select name="status" id="del_status" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="Process" class="dark:bg-slate-800">Process (Packing)</option><option value="Shipped" class="dark:bg-slate-800">Shipped (In Transit)</option><option value="Delivered" class="dark:bg-slate-800">Delivered (Done)</option></select></div>
+                    </div>
+                    <div class="mt-4 p-4 bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl">
+                        <label class="block text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3"><i class="ph-fill ph-check-circle text-lg"></i> Proof of Delivery (POD)</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><input type="date" name="received_date" id="del_recv_date" class="w-full rounded-xl border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 py-2 px-3 text-xs outline-none focus:border-indigo-500 shadow-sm"></div>
+                            <div><input type="text" name="receiver_name" id="del_recv_name" placeholder="Accepted By (Name)" class="w-full rounded-xl border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 py-2 px-3 text-xs outline-none focus:border-indigo-500 shadow-sm"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="border-t border-slate-100 dark:border-slate-800 px-7 py-5 bg-white dark:bg-slate-800 flex justify-end gap-3 shrink-0 rounded-b-3xl">
+            <button type="button" class="btn-close-modal px-6 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all">Cancel</button>
+            <button type="submit" class="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white transition-all hover:bg-blue-700 shadow-md active:scale-95"><i class="ph-bold ph-floppy-disk mr-1"></i> Save Outbound</button>
+        </div>
+    </form>
+</div>
+
+<div id="modalReceive" class="modal-container fixed inset-0 z-[100] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 modal-animate-in">
+        <form action="process_sim_tracking.php" method="POST">
+            <input type="hidden" name="action" id="recv_action" value="create_logistic">
+            <input type="hidden" name="type" value="receive"><input type="hidden" name="id" id="recv_id">
+            <div class="flex items-center justify-between border-b border-emerald-500 px-6 py-4 bg-emerald-600 text-white"><h5 class="text-base font-bold flex items-center gap-2"><i class="ph-bold ph-download-simple text-xl"></i> Internal WH Receive</h5><button type="button" class="btn-close-modal h-8 w-8 flex items-center justify-center rounded-full bg-white/20 transition-colors"><i class="ph ph-x text-lg"></i></button></div>
+            <div class="p-6 bg-slate-50/50 dark:bg-slate-900/30 text-slate-800 dark:text-white">
+                <div class="mb-4"><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Receive Date</label><input type="date" name="logistic_date" id="recv_date" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-3 px-4 text-sm outline-none focus:border-emerald-500 shadow-sm"></div>
+                <div class="mb-4"><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Source Provider PO</label><select name="po_id" id="recv_po_id" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-3 px-4 text-sm font-bold outline-none focus:border-emerald-500 shadow-sm"><option value="">-- Select Source PO --</option><?php foreach($provider_pos as $po) echo "<option value='{$po['id']}' class='dark:bg-slate-800'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">WH PIC</label><input type="text" name="pic_name" id="recv_pic" placeholder="Internal Name" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-3 px-4 text-sm outline-none focus:border-emerald-500 shadow-sm"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Total Qty</label><input type="number" name="qty" id="recv_qty" required placeholder="0" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-3 px-4 text-sm font-black text-emerald-600 outline-none focus:border-emerald-500 shadow-sm"></div>
+                </div>
+            </div>
+            <div class="border-t border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-800 flex justify-end gap-2 shrink-0 rounded-b-3xl"><button type="button" class="btn-close-modal px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl">Cancel</button><button type="submit" class="rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 shadow-md active:scale-95">Save Inbound</button></div>
         </form>
     </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
+    function switchTab(tabId) {
+        if(tabId === 'delivery') {
+            $('#tab-btn-delivery').removeClass('border-transparent text-slate-500 dark:text-slate-400').addClass('border-blue-600 text-blue-600 dark:text-blue-400');
+            $('#tab-btn-receive').removeClass('border-blue-600 text-blue-600 dark:text-blue-400').addClass('border-transparent text-slate-500 dark:text-slate-400');
+            $('#tab-content-delivery').removeClass('hidden').addClass('block');
+            $('#tab-content-receive').removeClass('block').addClass('hidden');
+        } else {
+            $('#tab-btn-receive').removeClass('border-transparent text-slate-500 dark:text-slate-400').addClass('border-blue-600 text-blue-600 dark:text-blue-400');
+            $('#tab-btn-delivery').removeClass('border-blue-600 text-blue-600 dark:text-blue-400').addClass('border-transparent text-slate-500 dark:text-slate-400');
+            $('#tab-content-receive').removeClass('hidden').addClass('block');
+            $('#tab-content-delivery').removeClass('block').addClass('hidden');
+        }
+    }
+
     $(document).ready(function() {
-        $('#table-delivery').DataTable({ dom: 't<"d-none"ip>', pageLength: 50, searching: false, ordering: false });
-        $('#table-receive').DataTable({ dom: 't<"d-none"ip>', pageLength: 50, searching: false, ordering: false });
+        // FIX DOUBLE: Inisialisasi DataTable dengan parameter `dom` yang memastikan flex row & text (di Kanan Bawah)
+        $('#table-delivery').DataTable({ 
+            dom: 't<"bottom-pagination"p>',
+            pageLength: 50, 
+            searching: false, 
+            ordering: false,
+            language: {
+                paginate: { previous: "Previous", next: "Next" }
+            }
+        });
+        $('#table-receive').DataTable({ 
+            dom: 't<"bottom-pagination"p>',
+            pageLength: 50, 
+            searching: false, 
+            ordering: false,
+            language: {
+                paginate: { previous: "Previous", next: "Next" }
+            }
+        });
+
+        $('.btn-close-modal').click(function() {
+            $(this).closest('.modal-container').removeClass('flex').addClass('hidden');
+            $('body').css('overflow', 'auto');
+        });
+        $('.modal-container').click(function(e) {
+            if(e.target === this) { $(this).removeClass('flex').addClass('hidden'); $('body').css('overflow', 'auto'); }
+        });
     });
 
-    let modalReceive, modalDelivery, modalTracking, modalDetail;
-    document.addEventListener('DOMContentLoaded', function() {
-        modalReceive = new bootstrap.Modal(document.getElementById('modalReceive'));
-        modalDelivery = new bootstrap.Modal(document.getElementById('modalDelivery'));
-        modalTracking = new bootstrap.Modal(document.getElementById('trackingModal'));
-        modalDetail = new bootstrap.Modal(document.getElementById('detailModal'));
-    });
-
-    // --- TRACKING FUNCTION (FETCHES PART 1 API HTML) ---
+    // =========================================================================
+    // FIX TRACKING JAVASCRIPT: STRICT API DATA RENDERING
+    // =========================================================================
     function trackResi(resi, kurir) {
         if(!resi || !kurir) { alert('No tracking data available.'); return; }
         
-        modalTracking.show();
-        $('#trackingResult').html('<div class="text-center py-5 my-5"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div><div class="mt-3 text-muted fw-bold">Menghubungkan ke API Kurir...</div></div>');
+        $('body').css('overflow', 'hidden'); 
+        $('#trackingModal').removeClass('hidden').addClass('flex');
         
+        // Render Loading State
+        $('#trackingResult').html(`
+            <div class="flex flex-col items-center justify-center py-16">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
+                <p class="text-sm font-bold text-slate-500 tracking-widest uppercase">Connecting to Courier API...</p>
+            </div>
+        `);
+        
+        // Fetch ke backend wrapper API kita
         fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
-            .then(r => r.text())
-            .then(html => { 
-                $('#trackingResult').html(html);
+            .then(response => response.text())
+            .then(text => {
+                try {
+                    // Coba memparsing hasil fetch sebagai JSON
+                    let r = JSON.parse(text);
+                    
+                    if (r.status === 200 || r.status === 'success') {
+                        let d = r.data || r;
+                        let s = d.summary || {};
+                        let detail = d.detail || {};
+                        
+                        // MURNI DARI API: Variabel diambil dari detail API, tidak ada fallback dari database PHP
+                        let origName = detail.shipper || d.origin?.contact_name || '-';
+                        let origAddr = detail.origin || d.origin?.address || 'Origin Address Unavailable';
+                        
+                        let destName = detail.receiver || d.destination?.contact_name || '-';
+                        let destAddr = detail.destination || d.destination?.address || 'Destination Address Unavailable';
+
+                        let currentStatus = s.status || 'ON PROCESS';
+                        let service = s.service || kurir.toUpperCase();
+                        let lastDate = s.date || '';
+
+                        // Render Desain Symmetrical Header
+                        let header = `
+                            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 mb-8 shadow-sm relative overflow-hidden">
+                                <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                                <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-5 mb-5">
+                                    <div>
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Status</span>
+                                        <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">${currentStatus}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Service & Timestamp</span>
+                                        <div class="font-bold text-slate-800 dark:text-white text-sm">${service}</div>
+                                        <div class="text-xs font-medium text-slate-500 mt-0.5">${lastDate}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-start justify-between relative">
+                                    <div class="w-5/12 pr-4">
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5"><i class="ph-fill ph-map-pin text-blue-500"></i> SENDER / ORIGIN</span>
+                                        <div class="font-bold text-slate-800 dark:text-white text-sm mb-1">${origName}</div>
+                                        <div class="text-xs text-slate-500 leading-relaxed">${origAddr}</div>
+                                    </div>
+                                    <div class="w-2/12 flex justify-center text-slate-300 dark:text-slate-600 pt-3">
+                                        <i class="ph-bold ph-arrow-right text-3xl"></i>
+                                    </div>
+                                    <div class="w-5/12 pl-4 text-right">
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">RECEIVER / DESTINATION <i class="ph-fill ph-flag-checkered text-emerald-500"></i></span>
+                                        <div class="font-bold text-indigo-600 dark:text-indigo-400 text-sm mb-1">${destName}</div>
+                                        <div class="text-xs text-slate-500 leading-relaxed">${destAddr}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+
+                        // Render History Timeline
+                        let timeline = '<h6 class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-5 px-2 flex items-center gap-2"><i class="ph-fill ph-clock-counter-clockwise text-lg"></i> Shipment History Logs</h6><div class="relative border-l-2 border-slate-200 dark:border-slate-700 ml-4 space-y-6 pb-4">';
+                        
+                        let historyData = d.history || d.histories;
+                        if(historyData && historyData.length > 0) { 
+                            historyData.forEach((h, i) => {
+                                let active = i===0;
+                                let dotClass = active ? 'bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-900/30' : 'bg-slate-300 dark:bg-slate-600';
+                                let textClass = active ? 'text-blue-600 dark:text-blue-400 font-black' : 'text-slate-700 dark:text-slate-300 font-bold';
+                                let boxClass = active ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-800 dark:text-blue-300 shadow-sm' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400';
+                                
+                                let dateDisplay = h.date ? h.date.replace('T', ' ').substring(0, 16) : '-';
+                                let statusDesc = h.desc || h.message || '';
+                                let locationDesc = h.location ? `<br><i class="ph-bold ph-map-pin"></i> ${h.location}` : '';
+
+                                timeline += `
+                                <div class="relative pl-6">
+                                    <div class="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full ${dotClass} transition-all"></div>
+                                    <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">${dateDisplay}</span>
+                                    <div class="text-sm ${textClass} mb-2">${h.status || 'UPDATE'}</div>
+                                    <div class="text-xs p-3.5 rounded-xl border ${boxClass} leading-relaxed">${statusDesc} ${locationDesc}</div>
+                                </div>`;
+                            });
+                        } else { 
+                            timeline += '<div class="pl-6 text-sm text-slate-500 italic">No historical logs available from courier.</div>'; 
+                        }
+                        timeline += '</div>';
+
+                        $('#trackingResult').html(header + timeline);
+                    } else {
+                        // Jika JSON ter-parse tapi statusnya gagal / 400
+                        showTrackingError(r.message || 'Tracking data not found or invalid AWB number.');
+                    }
+                } catch(e) {
+                    // Jika output bukan JSON (misal API lama mereturn teks HTML "Data tidak ditemukan")
+                    if(text.includes('Data tidak ditemukan') || text.includes('Not Found') || text.includes('error')) {
+                        showTrackingError('Tracking Data Not Found. Please verify the AWB number and courier.');
+                    } else {
+                        // Fallback aman jika struktur lama masih mereturn HTML Valid
+                        $('#trackingResult').html(text);
+                    }
+                }
             })
             .catch(e => { 
-                $('#trackingResult').html('<div class="alert alert-danger text-center m-4 shadow-sm"><i class="bi bi-wifi-off fs-3 d-block mb-2"></i>Koneksi ke server kurir terputus.</div>'); 
+                $('#trackingResult').html(`
+                    <div class="text-center py-12 text-red-500">
+                        <i class="ph-fill ph-wifi-x text-6xl mb-4 block"></i>
+                        <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2">Connection Failed</h4>
+                        <p class="text-sm font-medium text-slate-500">Unable to reach the courier API server.</p>
+                    </div>
+                `); 
             });
     }
 
-    // --- DETAIL MODAL FUNCTION ---
-    function viewDetail(data) {
-        let html = `
-            <div class="text-center mb-4 mt-2">
-                <div class="d-inline-flex align-items-center justify-content-center bg-white shadow-sm rounded-circle mb-3" style="width:64px; height:64px; border: 1px solid #e5e7eb;">
-                    <i class="bi bi-box-seam text-primary fs-3"></i>
-                </div>
-                <h4 class="fw-bold mb-1 text-dark">${data.tracking_number || '-'}</h4>
-                <span class="badge bg-secondary text-uppercase px-3 py-1">${data.courier_name || '-'}</span>
+    // UI Error Builder untuk Tracking
+    function showTrackingError(msg) {
+        $('#trackingResult').html(`
+            <div class="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
+                <i class="ph-fill ph-warning-circle text-7xl mb-4 text-amber-400"></i>
+                <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2 text-center">Tracking Data Not Found</h4>
+                <p class="text-sm font-medium text-center leading-relaxed max-w-sm">
+                    ${msg}<br><br>
+                    <span class="text-[10px] uppercase tracking-widest opacity-70">Courier systems may take up to 24 hours to update new shipments.</span>
+                </p>
             </div>
-            <div class="bg-white p-3 rounded-3 mb-3 shadow-sm border border-light">
-                <div class="row text-center">
-                    <div class="col-6 border-end">
-                        <small class="text-muted d-block text-uppercase fw-bold mb-1" style="font-size:0.65rem; letter-spacing:0.5px;">SENDER</small>
-                        <span class="fw-bold text-dark" style="font-size:0.9rem;">PT LinksField</span>
-                    </div>
-                    <div class="col-6">
-                        <small class="text-muted d-block text-uppercase fw-bold mb-1" style="font-size:0.65rem; letter-spacing:0.5px;">RECEIVER</small>
-                        <span class="fw-bold text-primary" style="font-size:0.9rem;">${data.client_name || '-'}</span>
-                    </div>
-                </div>
-            </div>
-            <ul class="list-group list-group-flush border-top border-light shadow-sm rounded-3 overflow-hidden bg-white">
-                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3"><span class="text-muted small fw-bold">Client PO</span><span class="fw-bold font-monospace bg-light px-2 py-1 rounded border">${data.client_po || '-'}</span></li>
-                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3"><span class="text-muted small fw-bold">Recipient Name</span><span class="fw-bold text-dark">${data.receiver_name || '-'}</span></li>
-                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3"><span class="text-muted small fw-bold">Contact Phone</span><span class="fw-bold text-dark">${data.receiver_phone || '-'}</span></li>
-                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3"><span class="text-muted small fw-bold">Sent Date</span><span class="fw-bold text-dark">${data.delivery_date}</span></li>
-                <li class="list-group-item px-4 py-3"><span class="text-muted small fw-bold d-block mb-2">Delivery Address</span><div class="small bg-light border p-3 rounded-3 text-dark lh-base">${data.receiver_address || 'No address provided.'}</div></li>
-            </ul>`;
-        document.getElementById('detailContent').innerHTML = html;
-        modalDetail.show();
+        `);
     }
 
-    function openReceiveModal() { $('#recv_action').val('create_logistic'); $('#recv_id').val(''); $('#recv_date').val(new Date().toISOString().split('T')[0]); $('#recv_pic').val(''); $('#recv_po_id').val(''); $('#recv_qty').val(''); modalReceive.show(); }
-    function editReceive(d) { $('#recv_action').val('update_logistic'); $('#recv_id').val(d.id); $('#recv_date').val(d.logistic_date); $('#recv_pic').val(d.pic_name); $('#recv_po_id').val(d.po_id); $('#recv_qty').val(d.qty); modalReceive.show(); }
-    function openDeliveryModal() { $('#del_action').val('create_logistic'); $('#del_id').val(''); $('#del_date').val(new Date().toISOString().split('T')[0]); $('#del_po_id').val(''); $('#del_pic').val(''); $('#del_phone').val(''); $('#del_address').val(''); $('#del_courier').val(''); $('#del_awb').val(''); $('#del_qty').val(''); $('#del_status').val('Process'); $('#del_recv_date').val(''); $('#del_recv_name').val(''); modalDelivery.show(); }
-    function editDelivery(d) { $('#del_action').val('update_logistic'); $('#del_id').val(d.id); $('#del_date').val(d.delivery_date); $('#del_po_id').val(d.po_id); $('#del_pic').val(d.receiver_name); $('#del_phone').val(d.receiver_phone); $('#del_address').val(d.receiver_address); $('#del_courier').val(d.courier_name); $('#del_awb').val(d.tracking_number); $('#del_qty').val(d.qty); $('#del_status').val(d.status); $('#del_recv_date').val(d.delivered_date); $('#del_recv_name').val(d.receiver_name); modalDelivery.show(); }
+    function viewDetail(d) {
+        let html = `
+            <div class="text-center mb-6 mt-2 relative">
+                <div class="absolute top-1/2 left-0 w-full h-px bg-slate-200 dark:bg-slate-700 -z-10"></div>
+                <div class="inline-flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-full p-4 mb-4 relative z-10"><i class="ph-fill ph-package text-blue-600 text-4xl"></i></div>
+                <h4 class="text-2xl font-black text-slate-800 dark:text-white tracking-tight font-mono">${d.tracking_number || 'NO AWB'}</h4>
+                <span class="inline-block mt-2 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-md">${d.courier_name || 'UNKNOWN COURIER'}</span>
+            </div>
+            
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-5 shadow-sm">
+                <div class="flex justify-between items-center relative">
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600"><i class="ph-fill ph-arrow-right text-2xl"></i></div>
+                    <div class="w-1/2 pr-4">
+                        <label class="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">SENDER</label>
+                        <p class="font-bold text-slate-800 dark:text-white text-sm">PT LinksField</p>
+                    </div>
+                    <div class="w-1/2 pl-4 text-right">
+                        <label class="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">RECEIVER (CLIENT)</label>
+                        <p class="font-bold text-blue-600 text-sm truncate" title="${d.client_name || '-'}">${d.client_name || '-'}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm text-sm">
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Client PO Ref</span><span class="font-mono font-bold bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${d.client_po || '-'}</span></div>
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Recipient Name</span><span class="font-bold text-slate-800 dark:text-white">${d.receiver_name || '-'}</span></div>
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Contact Phone</span><span class="font-bold text-slate-800 dark:text-white">${d.receiver_phone || '-'}</span></div>
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Shipment Date</span><span class="font-bold text-slate-800 dark:text-white">${d.delivery_date}</span></div>
+                <div class="p-4 bg-slate-50 dark:bg-slate-900/50"><span class="font-bold text-slate-500 block mb-2">Delivery Address</span><p class="text-slate-700 dark:text-slate-300 leading-relaxed">${d.receiver_address || 'No address provided.'}</p></div>
+            </div>`;
+        $('#detailContent').html(html);
+        $('#detailModal').removeClass('hidden').addClass('flex'); $('body').css('overflow', 'hidden');
+    }
+
+    function openReceiveModal() { $('#recv_action').val('create_logistic'); $('#recv_id').val(''); $('#recv_date').val(new Date().toISOString().split('T')[0]); $('#recv_pic').val(''); $('#recv_po_id').val(''); $('#recv_qty').val(''); $('body').css('overflow', 'hidden'); $('#modalReceive').removeClass('hidden').addClass('flex'); }
+    function editReceive(d) { $('#recv_action').val('update_logistic'); $('#recv_id').val(d.id); $('#recv_date').val(d.logistic_date); $('#recv_pic').val(d.pic_name); $('#recv_po_id').val(d.po_id); $('#recv_qty').val(d.qty); $('body').css('overflow', 'hidden'); $('#modalReceive').removeClass('hidden').addClass('flex'); }
+    function openDeliveryModal() { $('#del_action').val('create_logistic'); $('#del_id').val(''); $('#del_date').val(new Date().toISOString().split('T')[0]); $('#del_po_id').val(''); $('#del_pic').val(''); $('#del_phone').val(''); $('#del_address').val(''); $('#del_courier').val(''); $('#del_awb').val(''); $('#del_qty').val(''); $('#del_status').val('Process'); $('#del_recv_date').val(''); $('#del_recv_name').val(''); $('body').css('overflow', 'hidden'); $('#modalDelivery').removeClass('hidden').addClass('flex'); }
+    function editDelivery(d) { $('#del_action').val('update_logistic'); $('#del_id').val(d.id); $('#del_date').val(d.delivery_date); $('#del_po_id').val(d.po_id); $('#del_pic').val(d.receiver_name); $('#del_phone').val(d.receiver_phone); $('#del_address').val(d.receiver_address); $('#del_courier').val(d.courier_name); $('#del_awb').val(d.tracking_number); $('#del_qty').val(d.qty); $('#del_status').val(d.status); $('#del_recv_date').val(d.delivered_date); $('#del_recv_name').val(d.receiver_name); $('body').css('overflow', 'hidden'); $('#modalDelivery').removeClass('hidden').addClass('flex'); }
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
