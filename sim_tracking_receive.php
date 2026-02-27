@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: Pure API Tracking Render & Symmetrical UI Error Handling
+// FIX: Separate PO Column & Reverted Tracking API to Original HTML Fetch
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -140,7 +140,7 @@ try {
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* DATATABLES PAGINATION (RIGHT ALIGNED) */
+    /* DATATABLES PAGINATION FIX (RIGHT ALIGNED & INLINE) */
     .dataTables_wrapper .dataTables_paginate {
         display: flex !important;
         flex-direction: row !important;
@@ -189,6 +189,7 @@ try {
         cursor: not-allowed !important;
         background-color: #f8fafc !important;
     }
+    /* Dark Mode Pagination */
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button { background-color: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background-color: #334155 !important; border-color: #475569 !important; color: #ffffff !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; }
@@ -205,7 +206,7 @@ try {
         </p>
     </div>
     <div class="animate-fade-in-up flex gap-3">
-        <button onclick="openReceiveModal()" class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition-all hover:bg-slate-50 dark:hover:bg-slate-700">
+        <button onclick="openReceiveModal()" class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition-all hover:bg-slate-50 dark:hover:bg-slate-700">
             <i class="ph-bold ph-download-simple text-emerald-500"></i> Log Inbound
         </button>
         <button onclick="openDeliveryModal()" class="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-lg shadow-blue-500/30 active:scale-95 transition-all">
@@ -258,17 +259,18 @@ try {
         <table class="w-full text-left border-collapse table-modern" id="table-delivery">
             <thead>
                 <tr>
-                    <th class="ps-8 w-[15%]">Status</th>
-                    <th class="w-[25%]">Project / Client</th>
-                    <th class="w-[20%]">Shipment / AWB</th>
-                    <th class="w-[15%]">Origin / Dest</th>
-                    <th class="text-right w-[10%]">Qty</th>
-                    <th class="text-center w-[15%] pe-8">Actions</th>
+                    <th class="ps-8 w-[12%]">Status</th>
+                    <th class="w-[18%]">Project / Client</th>
+                    <th class="w-[18%]">PO References</th>
+                    <th class="w-[18%]">Shipment / AWB</th>
+                    <th class="w-[14%]">Origin / Dest</th>
+                    <th class="text-right w-[8%]">Qty</th>
+                    <th class="text-center w-[12%] pe-8">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                 <?php if(empty($data_delivery)): ?>
-                    <tr><td colspan="6" class="px-8 py-12 text-center text-slate-500 dark:text-slate-400"><p class="font-medium">No delivery records found.</p></td></tr>
+                    <tr><td colspan="7" class="px-8 py-12 text-center text-slate-500 dark:text-slate-400"><p class="font-medium">No delivery records found.</p></td></tr>
                 <?php else: ?>
                     <?php foreach($data_delivery as $row): 
                         $st = strtolower($row['status'] ?? '');
@@ -276,35 +278,48 @@ try {
                         $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
                     ?>
                     <tr class="table-row-hover transition-colors">
-                        <td class="ps-8">
+                        <td class="ps-8 align-top">
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border <?= $statusClass ?>">
                                 <?= e($row['status']) ?>
                             </span>
                             <div class="mt-2 text-[10px] font-bold text-slate-500">Sent: <?= date('d/m/Y', strtotime($row['delivery_date'])) ?></div>
                         </td>
-                        <td>
+                        
+                        <td class="align-top">
                             <div class="flex flex-col">
                                 <span class="font-bold text-slate-800 dark:text-white text-sm"><?= e($row['client_name']) ?></span>
-                                <div class="flex flex-col gap-0.5 mt-1">
-                                    <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 rounded border border-blue-100 dark:border-blue-800 w-max">Client PO: <?= e($row['client_po']) ?></span>
-                                    <?php if(!empty($row['ref_provider_po'])): ?>
-                                    <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 rounded border border-emerald-100 dark:border-emerald-800 w-max">Prov PO: <?= e($row['ref_provider_po']) ?></span>
-                                    <?php endif; ?>
-                                </div>
+                                <span class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest"><i class="ph-fill ph-buildings"></i> Client Entity</span>
                             </div>
                         </td>
-                        <td>
+
+                        <td class="align-top">
+                            <div class="flex flex-col gap-1.5">
+                                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg border border-blue-100 dark:border-blue-800 w-max shadow-sm" title="Client PO">
+                                    <i class="ph-bold ph-receipt text-blue-500"></i> <?= e($row['client_po']) ?>
+                                </span>
+                                <?php if(!empty($row['ref_provider_po'])): ?>
+                                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 w-max shadow-sm" title="Provider PO">
+                                    <i class="ph-bold ph-truck text-emerald-500"></i> <?= e($row['ref_provider_po']) ?>
+                                </span>
+                                <?php else: ?>
+                                <span class="text-[10px] text-slate-400 italic">No Prov PO Link</span>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+
+                        <td class="align-top">
                             <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1 block"><?= e($row['courier_name']) ?></span>
                             <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
                                 <i class="ph-bold ph-crosshair text-indigo-500"></i> <?= e($row['tracking_number'] ?: 'NO-AWB') ?>
                             </button>
                         </td>
-                        <td>
+                        
+                        <td class="align-top">
                             <div class="text-[11px]"><span class="text-slate-400 font-bold uppercase">From:</span> <span class="dark:text-slate-200">LinksField WH</span></div>
                             <div class="text-[11px] mt-1"><span class="text-slate-400 font-bold uppercase">To:</span> <span class="dark:text-slate-200 line-clamp-1" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
                         </td>
-                        <td class="text-right align-middle"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
-                        <td class="pe-8 text-center align-middle">
+                        <td class="text-right align-top"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
+                        <td class="pe-8 text-center align-top">
                             <div class="flex items-center justify-center gap-1.5">
                                 <button onclick='viewDetail(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-bold ph-eye text-lg"></i></button>
                                 <button onclick='editDelivery(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-fill ph-pencil-simple text-lg"></i></button>
@@ -483,9 +498,9 @@ try {
     }
 
     $(document).ready(function() {
-        // FIX DOUBLE: Inisialisasi DataTable dengan parameter `dom` yang memastikan flex row & text (di Kanan Bawah)
+        // INI INISIALISASI DATATABLES DENGAN PAGINATION FIX (Kanan Bawah)
         $('#table-delivery').DataTable({ 
-            dom: 't<"bottom-pagination"p>',
+            dom: 't<"dataTables_wrapper"p>',
             pageLength: 50, 
             searching: false, 
             ordering: false,
@@ -494,7 +509,7 @@ try {
             }
         });
         $('#table-receive').DataTable({ 
-            dom: 't<"bottom-pagination"p>',
+            dom: 't<"dataTables_wrapper"p>',
             pageLength: 50, 
             searching: false, 
             ordering: false,
@@ -512,16 +527,16 @@ try {
         });
     });
 
-    // =========================================================================
-    // FIX TRACKING JAVASCRIPT: STRICT API DATA RENDERING
-    // =========================================================================
+    // =========================================================
+    // FIX TRACKING JAVASCRIPT: KEMBALI KE ORIGINAL HTML FETCH
+    // =========================================================
     function trackResi(resi, kurir) {
         if(!resi || !kurir) { alert('No tracking data available.'); return; }
         
         $('body').css('overflow', 'hidden'); 
         $('#trackingModal').removeClass('hidden').addClass('flex');
         
-        // Render Loading State
+        // Show Loading UI
         $('#trackingResult').html(`
             <div class="flex flex-col items-center justify-center py-16">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
@@ -529,129 +544,20 @@ try {
             </div>
         `);
         
-        // Fetch ke backend wrapper API kita
+        // Kembalikan ke fungsi orisinil dari developer sebelumnya (Langsung render hasil HTML dari backend)
         fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
-            .then(response => response.text())
-            .then(text => {
-                try {
-                    // Coba memparsing hasil fetch sebagai JSON
-                    let r = JSON.parse(text);
-                    
-                    if (r.status === 200 || r.status === 'success') {
-                        let d = r.data || r;
-                        let s = d.summary || {};
-                        let detail = d.detail || {};
-                        
-                        // MURNI DARI API: Variabel diambil dari detail API, tidak ada fallback dari database PHP
-                        let origName = detail.shipper || d.origin?.contact_name || '-';
-                        let origAddr = detail.origin || d.origin?.address || 'Origin Address Unavailable';
-                        
-                        let destName = detail.receiver || d.destination?.contact_name || '-';
-                        let destAddr = detail.destination || d.destination?.address || 'Destination Address Unavailable';
-
-                        let currentStatus = s.status || 'ON PROCESS';
-                        let service = s.service || kurir.toUpperCase();
-                        let lastDate = s.date || '';
-
-                        // Render Desain Symmetrical Header
-                        let header = `
-                            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 mb-8 shadow-sm relative overflow-hidden">
-                                <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-                                <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-5 mb-5">
-                                    <div>
-                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Status</span>
-                                        <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">${currentStatus}</div>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Service & Timestamp</span>
-                                        <div class="font-bold text-slate-800 dark:text-white text-sm">${service}</div>
-                                        <div class="text-xs font-medium text-slate-500 mt-0.5">${lastDate}</div>
-                                    </div>
-                                </div>
-                                
-                                <div class="flex items-start justify-between relative">
-                                    <div class="w-5/12 pr-4">
-                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5"><i class="ph-fill ph-map-pin text-blue-500"></i> SENDER / ORIGIN</span>
-                                        <div class="font-bold text-slate-800 dark:text-white text-sm mb-1">${origName}</div>
-                                        <div class="text-xs text-slate-500 leading-relaxed">${origAddr}</div>
-                                    </div>
-                                    <div class="w-2/12 flex justify-center text-slate-300 dark:text-slate-600 pt-3">
-                                        <i class="ph-bold ph-arrow-right text-3xl"></i>
-                                    </div>
-                                    <div class="w-5/12 pl-4 text-right">
-                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">RECEIVER / DESTINATION <i class="ph-fill ph-flag-checkered text-emerald-500"></i></span>
-                                        <div class="font-bold text-indigo-600 dark:text-indigo-400 text-sm mb-1">${destName}</div>
-                                        <div class="text-xs text-slate-500 leading-relaxed">${destAddr}</div>
-                                    </div>
-                                </div>
-                            </div>`;
-
-                        // Render History Timeline
-                        let timeline = '<h6 class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-5 px-2 flex items-center gap-2"><i class="ph-fill ph-clock-counter-clockwise text-lg"></i> Shipment History Logs</h6><div class="relative border-l-2 border-slate-200 dark:border-slate-700 ml-4 space-y-6 pb-4">';
-                        
-                        let historyData = d.history || d.histories;
-                        if(historyData && historyData.length > 0) { 
-                            historyData.forEach((h, i) => {
-                                let active = i===0;
-                                let dotClass = active ? 'bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-900/30' : 'bg-slate-300 dark:bg-slate-600';
-                                let textClass = active ? 'text-blue-600 dark:text-blue-400 font-black' : 'text-slate-700 dark:text-slate-300 font-bold';
-                                let boxClass = active ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-800 dark:text-blue-300 shadow-sm' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400';
-                                
-                                let dateDisplay = h.date ? h.date.replace('T', ' ').substring(0, 16) : '-';
-                                let statusDesc = h.desc || h.message || '';
-                                let locationDesc = h.location ? `<br><i class="ph-bold ph-map-pin"></i> ${h.location}` : '';
-
-                                timeline += `
-                                <div class="relative pl-6">
-                                    <div class="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full ${dotClass} transition-all"></div>
-                                    <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">${dateDisplay}</span>
-                                    <div class="text-sm ${textClass} mb-2">${h.status || 'UPDATE'}</div>
-                                    <div class="text-xs p-3.5 rounded-xl border ${boxClass} leading-relaxed">${statusDesc} ${locationDesc}</div>
-                                </div>`;
-                            });
-                        } else { 
-                            timeline += '<div class="pl-6 text-sm text-slate-500 italic">No historical logs available from courier.</div>'; 
-                        }
-                        timeline += '</div>';
-
-                        $('#trackingResult').html(header + timeline);
-                    } else {
-                        // Jika JSON ter-parse tapi statusnya gagal / 400
-                        showTrackingError(r.message || 'Tracking data not found or invalid AWB number.');
-                    }
-                } catch(e) {
-                    // Jika output bukan JSON (misal API lama mereturn teks HTML "Data tidak ditemukan")
-                    if(text.includes('Data tidak ditemukan') || text.includes('Not Found') || text.includes('error')) {
-                        showTrackingError('Tracking Data Not Found. Please verify the AWB number and courier.');
-                    } else {
-                        // Fallback aman jika struktur lama masih mereturn HTML Valid
-                        $('#trackingResult').html(text);
-                    }
-                }
+            .then(r => r.text())
+            .then(html => { 
+                $('#trackingResult').html(html); 
             })
             .catch(e => { 
                 $('#trackingResult').html(`
-                    <div class="text-center py-12 text-red-500">
-                        <i class="ph-fill ph-wifi-x text-6xl mb-4 block"></i>
-                        <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2">Connection Failed</h4>
-                        <p class="text-sm font-medium text-slate-500">Unable to reach the courier API server.</p>
+                    <div class="text-center py-10">
+                        <i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i>
+                        <span class="text-red-600 font-bold">Failed to fetch API</span>
                     </div>
                 `); 
             });
-    }
-
-    // UI Error Builder untuk Tracking
-    function showTrackingError(msg) {
-        $('#trackingResult').html(`
-            <div class="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
-                <i class="ph-fill ph-warning-circle text-7xl mb-4 text-amber-400"></i>
-                <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2 text-center">Tracking Data Not Found</h4>
-                <p class="text-sm font-medium text-center leading-relaxed max-w-sm">
-                    ${msg}<br><br>
-                    <span class="text-[10px] uppercase tracking-widest opacity-70">Courier systems may take up to 24 hours to update new shipments.</span>
-                </p>
-            </div>
-        `);
     }
 
     function viewDetail(d) {
