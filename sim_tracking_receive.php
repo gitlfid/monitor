@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: Separate PO Column & Reverted Tracking API to Original HTML Fetch
+// FIX: Pagination Layout, Original Tracking API Logic, & Duplicate Rows
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -140,28 +140,27 @@ try {
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* DATATABLES PAGINATION FIX (RIGHT ALIGNED & INLINE) */
+    /* ===================================================== */
+    /* FIX: DATATABLES PAGINATION (RIGHT ALIGNED HORIZONTAL) */
+    /* ===================================================== */
     .dataTables_wrapper .dataTables_paginate {
         display: flex !important;
         flex-direction: row !important;
         justify-content: flex-end !important;
         align-items: center !important;
         gap: 0.5rem !important;
-        margin-top: 1.5rem !important;
-        margin-bottom: 1.5rem !important;
-        padding-right: 2rem !important;
+        padding: 1.5rem !important;
     }
     .dataTables_wrapper .dataTables_paginate span {
         display: flex !important;
         flex-direction: row !important;
-        gap: 0.3rem !important;
+        gap: 0.25rem !important;
     }
     .dataTables_wrapper .dataTables_paginate .paginate_button {
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
         padding: 0.5rem 1rem !important;
-        min-width: 2.5rem !important;
         border-radius: 0.5rem !important;
         border: 1px solid #e2e8f0 !important;
         background-color: #ffffff !important;
@@ -259,18 +258,17 @@ try {
         <table class="w-full text-left border-collapse table-modern" id="table-delivery">
             <thead>
                 <tr>
-                    <th class="ps-8 w-[12%]">Status</th>
-                    <th class="w-[18%]">Project / Client</th>
-                    <th class="w-[18%]">PO References</th>
-                    <th class="w-[18%]">Shipment / AWB</th>
-                    <th class="w-[14%]">Origin / Dest</th>
-                    <th class="text-right w-[8%]">Qty</th>
-                    <th class="text-center w-[12%] pe-8">Actions</th>
+                    <th class="ps-8 w-[15%]">Status</th>
+                    <th class="w-[25%]">Project / Client</th>
+                    <th class="w-[20%]">Shipment / AWB</th>
+                    <th class="w-[15%]">Origin / Dest</th>
+                    <th class="text-right w-[10%]">Qty</th>
+                    <th class="text-center w-[15%] pe-8">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                 <?php if(empty($data_delivery)): ?>
-                    <tr><td colspan="7" class="px-8 py-12 text-center text-slate-500 dark:text-slate-400"><p class="font-medium">No delivery records found.</p></td></tr>
+                    <tr><td colspan="6" class="px-8 py-12 text-center text-slate-500 dark:text-slate-400"><p class="font-medium">No delivery records found.</p></td></tr>
                 <?php else: ?>
                     <?php foreach($data_delivery as $row): 
                         $st = strtolower($row['status'] ?? '');
@@ -284,43 +282,34 @@ try {
                             </span>
                             <div class="mt-2 text-[10px] font-bold text-slate-500">Sent: <?= date('d/m/Y', strtotime($row['delivery_date'])) ?></div>
                         </td>
-                        
                         <td class="align-top">
                             <div class="flex flex-col">
-                                <span class="font-bold text-slate-800 dark:text-white text-sm"><?= e($row['client_name']) ?></span>
-                                <span class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest"><i class="ph-fill ph-buildings"></i> Client Entity</span>
+                                <span class="font-bold text-slate-800 dark:text-white text-sm mb-2"><?= e($row['client_name']) ?></span>
+                                <div class="flex flex-col gap-1.5">
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg border border-blue-100 dark:border-blue-800 w-max" title="Client PO">
+                                        <i class="ph-bold ph-receipt text-blue-500"></i> <?= e($row['client_po']) ?>
+                                    </span>
+                                    <?php if(!empty($row['ref_provider_po'])): ?>
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 w-max" title="Provider PO">
+                                        <i class="ph-bold ph-truck text-emerald-500"></i> <?= e($row['ref_provider_po']) ?>
+                                    </span>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </td>
-
                         <td class="align-top">
-                            <div class="flex flex-col gap-1.5">
-                                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg border border-blue-100 dark:border-blue-800 w-max shadow-sm" title="Client PO">
-                                    <i class="ph-bold ph-receipt text-blue-500"></i> <?= e($row['client_po']) ?>
-                                </span>
-                                <?php if(!empty($row['ref_provider_po'])): ?>
-                                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 w-max shadow-sm" title="Provider PO">
-                                    <i class="ph-bold ph-truck text-emerald-500"></i> <?= e($row['ref_provider_po']) ?>
-                                </span>
-                                <?php else: ?>
-                                <span class="text-[10px] text-slate-400 italic">No Prov PO Link</span>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-
-                        <td class="align-top">
-                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1 block"><?= e($row['courier_name']) ?></span>
-                            <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
+                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1.5 block"><?= e($row['courier_name']) ?></span>
+                            <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
                                 <i class="ph-bold ph-crosshair text-indigo-500"></i> <?= e($row['tracking_number'] ?: 'NO-AWB') ?>
                             </button>
                         </td>
-                        
                         <td class="align-top">
                             <div class="text-[11px]"><span class="text-slate-400 font-bold uppercase">From:</span> <span class="dark:text-slate-200">LinksField WH</span></div>
-                            <div class="text-[11px] mt-1"><span class="text-slate-400 font-bold uppercase">To:</span> <span class="dark:text-slate-200 line-clamp-1" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
+                            <div class="text-[11px] mt-1.5"><span class="text-slate-400 font-bold uppercase">To:</span> <span class="dark:text-slate-200 line-clamp-1" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
                         </td>
                         <td class="text-right align-top"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
                         <td class="pe-8 text-center align-top">
-                            <div class="flex items-center justify-center gap-1.5">
+                            <div class="flex items-center justify-center gap-1.5 mt-0.5">
                                 <button onclick='viewDetail(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-bold ph-eye text-lg"></i></button>
                                 <button onclick='editDelivery(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-fill ph-pencil-simple text-lg"></i></button>
                             </div>
@@ -498,7 +487,7 @@ try {
     }
 
     $(document).ready(function() {
-        // INI INISIALISASI DATATABLES DENGAN PAGINATION FIX (Kanan Bawah)
+        // FIX DATATABLES PAGINATION POSITIONING (RIGHT BOTTOM)
         $('#table-delivery').DataTable({ 
             dom: 't<"dataTables_wrapper"p>',
             pageLength: 50, 
@@ -527,16 +516,16 @@ try {
         });
     });
 
-    // =========================================================
-    // FIX TRACKING JAVASCRIPT: KEMBALI KE ORIGINAL HTML FETCH
-    // =========================================================
+    // ====================================================================
+    // FIX TRACKING API (Reverted to JQuery Post for HTML Render parsing)
+    // ====================================================================
     function trackResi(resi, kurir) {
         if(!resi || !kurir) { alert('No tracking data available.'); return; }
         
         $('body').css('overflow', 'hidden'); 
         $('#trackingModal').removeClass('hidden').addClass('flex');
         
-        // Show Loading UI
+        // Render Loading State
         $('#trackingResult').html(`
             <div class="flex flex-col items-center justify-center py-16">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
@@ -544,20 +533,34 @@ try {
             </div>
         `);
         
-        // Kembalikan ke fungsi orisinil dari developer sebelumnya (Langsung render hasil HTML dari backend)
-        fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
-            .then(r => r.text())
-            .then(html => { 
-                $('#trackingResult').html(html); 
-            })
-            .catch(e => { 
+        // Gunakan jQuery AJAX seperti original untuk memastikan fetching HTML bekerja dengan benar
+        $.ajax({
+            url: `ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`,
+            method: 'GET',
+            success: function(html_response) {
+                // Tampilkan respons HTML jika berhasil mendapatkan renderan dari backend
+                // Tetapi jika respon HTML nya adalah error / tidak ditemukan, ganti dengan UI Modern
+                if(html_response.includes('Data tidak ditemukan') || html_response.includes('Not Found')) {
+                    $('#trackingResult').html(`
+                        <div class="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
+                            <i class="ph-fill ph-warning-circle text-6xl mb-4 text-amber-400 block"></i>
+                            <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2 text-center">Data tidak ditemukan.</h4>
+                            <p class="text-sm font-medium text-center">Pastikan nomor resi dan kurir benar.</p>
+                        </div>
+                    `);
+                } else {
+                    $('#trackingResult').html(html_response);
+                }
+            },
+            error: function() {
                 $('#trackingResult').html(`
                     <div class="text-center py-10">
                         <i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i>
                         <span class="text-red-600 font-bold">Failed to fetch API</span>
                     </div>
-                `); 
-            });
+                `);
+            }
+        });
     }
 
     function viewDetail(d) {
