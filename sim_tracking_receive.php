@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: No Duplicate Rows, Right-Aligned Inline Pagination, Deprecation Fix
+// FIX: Tracking API JS Render, No Duplicate Rows, Right-Aligned Pagination
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -27,7 +27,6 @@ if (!function_exists('e')) {
 // --- A. DATA RECEIVE (INBOUND) ---
 $data_receive = [];
 try {
-    // FIX DOUBLE: Menggunakan GROUP BY l.id agar data tidak terduplikasi
     $sql_recv = "SELECT l.*, 
             po.po_number as provider_po, 
             po.batch_name,
@@ -79,7 +78,6 @@ if (!empty($filter_courier)) $where_clause .= " AND l.courier = :courier";
 $data_delivery = [];
 try {
     if ($db) {
-        // FIX DOUBLE: Menggunakan GROUP BY l.id
         $stmt = $db->prepare("SELECT l.*, 
                 po.po_number as client_po, 
                 po.batch_name,
@@ -142,58 +140,17 @@ try {
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* ===================================================== */
-    /* FIX: DATATABLES PAGINATION (RIGHT ALIGNED & INLINE)   */
-    /* ===================================================== */
+    /* DataTables Pagination Alignment */
     .dataTables_wrapper .dataTables_paginate {
-        display: flex !important;
-        flex-direction: row !important;
-        justify-content: flex-end !important;
-        align-items: center !important;
-        gap: 0.5rem !important;
-        margin-top: 1.5rem !important;
-        margin-bottom: 1.5rem !important;
-        padding-right: 2rem !important;
+        display: flex !important; flex-direction: row !important; justify-content: flex-end !important; align-items: center !important; gap: 0.5rem !important; margin-top: 1.5rem !important; margin-bottom: 1.5rem !important; padding-right: 2rem !important;
     }
-    .dataTables_wrapper .dataTables_paginate span {
-        display: flex !important;
-        flex-direction: row !important;
-        gap: 0.3rem !important;
-    }
+    .dataTables_wrapper .dataTables_paginate span { display: flex !important; flex-direction: row !important; gap: 0.3rem !important; }
     .dataTables_wrapper .dataTables_paginate .paginate_button {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 0.5rem 1rem !important;
-        min-width: 2.5rem !important;
-        border-radius: 0.5rem !important;
-        border: 1px solid #e2e8f0 !important;
-        background-color: #ffffff !important;
-        color: #475569 !important;
-        font-size: 0.875rem !important;
-        font-weight: 600 !important;
-        cursor: pointer !important;
-        text-decoration: none !important;
-        transition: all 0.2s ease !important;
-        margin: 0 !important;
+        display: inline-flex !important; align-items: center !important; justify-content: center !important; padding: 0.5rem 1rem !important; min-width: 2.5rem !important; border-radius: 0.5rem !important; border: 1px solid #e2e8f0 !important; background-color: #ffffff !important; color: #475569 !important; font-size: 0.875rem !important; font-weight: 600 !important; cursor: pointer !important; text-decoration: none !important; transition: all 0.2s ease !important; margin: 0 !important;
     }
-    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
-        background-color: #f8fafc !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
-    }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-        background-color: #3b82f6 !important;
-        border-color: #3b82f6 !important;
-        color: #ffffff !important;
-        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
-    }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
-        opacity: 0.5 !important;
-        cursor: not-allowed !important;
-        background-color: #f8fafc !important;
-    }
-    /* Dark Mode Pagination */
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; color: #ffffff !important; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { opacity: 0.5 !important; cursor: not-allowed !important; background-color: #f8fafc !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button { background-color: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background-color: #334155 !important; border-color: #475569 !important; color: #ffffff !important; }
     .dark .dataTables_wrapper .dataTables_paginate .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; }
@@ -210,7 +167,7 @@ try {
         </p>
     </div>
     <div class="animate-fade-in-up flex gap-3">
-        <button onclick="openReceiveModal()" class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition-all hover:bg-slate-50 dark:hover:bg-slate-700">
+        <button onclick="openReceiveModal()" class="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition-all">
             <i class="ph-bold ph-download-simple text-emerald-500"></i> Log Inbound
         </button>
         <button onclick="openDeliveryModal()" class="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-lg shadow-blue-500/30 active:scale-95 transition-all">
@@ -384,10 +341,10 @@ try {
             <h5 class="text-lg font-bold flex items-center gap-3"><i class="ph-bold ph-crosshair text-2xl"></i> Live Shipment Tracking</h5>
             <button type="button" class="btn-close-modal text-white/70 hover:text-white transition-all"><i class="ph ph-x text-2xl"></i></button>
         </div>
-        <div class="p-8 bg-slate-50 dark:bg-slate-900/50 max-h-[60vh] overflow-y-auto custom-scrollbar text-slate-800 dark:text-white" id="trackingResult">
+        <div class="p-8 bg-slate-50 dark:bg-slate-900/50 max-h-[60vh] overflow-y-auto custom-scrollbar" id="trackingResult">
             </div>
         <div class="border-t border-slate-100 dark:border-slate-800 p-5 bg-white dark:bg-slate-800 flex justify-end">
-            <button type="button" class="btn-close-modal px-8 py-2.5 rounded-xl text-sm font-bold text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm">Close Tracker</button>
+            <button type="button" class="btn-close-modal px-8 py-2.5 rounded-xl text-sm font-bold text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-all shadow-sm">Close Panel</button>
         </div>
     </div>
 </div>
@@ -475,68 +432,183 @@ try {
         if(tabId === 'delivery') {
             $('#tab-btn-delivery').removeClass('border-transparent text-slate-500 dark:text-slate-400').addClass('border-blue-600 text-blue-600 dark:text-blue-400');
             $('#tab-btn-receive').removeClass('border-blue-600 text-blue-600 dark:text-blue-400').addClass('border-transparent text-slate-500 dark:text-slate-400');
-            $('#tab-content-delivery').show(); $('#tab-content-receive').hide();
+            $('#tab-content-delivery').removeClass('hidden').addClass('block');
+            $('#tab-content-receive').removeClass('block').addClass('hidden');
         } else {
             $('#tab-btn-receive').removeClass('border-transparent text-slate-500 dark:text-slate-400').addClass('border-blue-600 text-blue-600 dark:text-blue-400');
             $('#tab-btn-delivery').removeClass('border-blue-600 text-blue-600 dark:text-blue-400').addClass('border-transparent text-slate-500 dark:text-slate-400');
-            $('#tab-content-receive').show(); $('#tab-content-delivery').hide();
+            $('#tab-content-receive').removeClass('hidden').addClass('block');
+            $('#tab-content-delivery').removeClass('block').addClass('hidden');
         }
     }
 
     $(document).ready(function() {
-        // Init DataTables dengan fix dom p
-        $('#table-delivery').DataTable({ dom: 't<"bottom-pagination"p>', pageLength: 50, searching: false, ordering: false, language: { paginate: { previous: "Previous", next: "Next" } }});
-        $('#table-receive').DataTable({ dom: 't<"bottom-pagination"p>', pageLength: 50, searching: false, ordering: false, language: { paginate: { previous: "Previous", next: "Next" } }});
+        // FIX DOUBLE: Inisialisasi DataTable dengan parameter `dom` yang memastikan flex row & text (di Kanan Bawah)
+        $('#table-delivery').DataTable({ 
+            dom: 't<"bottom-pagination"p>',
+            pageLength: 50, 
+            searching: false, 
+            ordering: false,
+            language: {
+                paginate: { previous: "Previous", next: "Next" }
+            }
+        });
+        $('#table-receive').DataTable({ 
+            dom: 't<"bottom-pagination"p>',
+            pageLength: 50, 
+            searching: false, 
+            ordering: false,
+            language: {
+                paginate: { previous: "Previous", next: "Next" }
+            }
+        });
 
         $('.btn-close-modal').click(function() {
             $(this).closest('.modal-container').removeClass('flex').addClass('hidden');
             $('body').css('overflow', 'auto');
         });
-        $('.modal-container').click(function(e) {
-            if(e.target === this) { $(this).removeClass('flex').addClass('hidden'); $('body').css('overflow', 'auto'); }
-        });
     });
 
+    // ==========================================
+    // TRACKING JS (FIXED: SYMMETRICAL UI RENDER)
+    // ==========================================
     function trackResi(resi, kurir) {
         if(!resi || !kurir) { alert('No tracking data available.'); return; }
         
-        $('body').css('overflow', 'hidden'); $('#trackingModal').removeClass('hidden').addClass('flex');
-        $('#trackingResult').html('<div class="flex flex-col items-center justify-center py-16"><div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div><p class="text-sm font-bold text-slate-500 tracking-widest uppercase">Connecting to Courier API...</p></div>');
+        $('body').css('overflow', 'hidden'); 
+        $('#trackingModal').removeClass('hidden').addClass('flex');
+        
+        $('#trackingResult').html(`
+            <div class="flex flex-col items-center justify-center py-16">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
+                <p class="text-sm font-bold text-slate-500 tracking-widest uppercase">Connecting to Courier API...</p>
+            </div>
+        `);
         
         fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
-            .then(r => r.text())
-            .then(html => { 
-                // Jika response balikan berupa "Data tidak ditemukan", gunakan UI Symmetrical buatan Tailwind
-                if(html.includes('Data tidak ditemukan') || html.includes('Not Found')) {
-                    $('#trackingResult').html(`
-                        <div class="text-center py-12 text-slate-500 dark:text-slate-400">
-                            <i class="ph-fill ph-warning-circle text-6xl mb-4 text-amber-400 block"></i>
-                            <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2">Tracking Data Not Found</h4>
-                            <p class="text-sm font-medium">Please verify the AWB number and the selected courier.<br>Data might take up to 24 hours to be available on courier system.</p>
-                        </div>
-                    `);
+            .then(response => {
+                // Determine if response is JSON or HTML
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json().then(data => ({type: 'json', data: data}));
                 } else {
-                    $('#trackingResult').html(html); 
+                    return response.text().then(text => ({type: 'text', data: text}));
                 }
             })
-            .catch(e => { $('#trackingResult').html('<div class="text-center py-10"><i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i><span class="text-red-600 font-bold">Failed to fetch API</span></div>'); });
+            .then(result => {
+                if (result.type === 'json') {
+                    let r = result.data;
+                    if (r.status === 200 || r.status === 'success') {
+                        let d = r.data;
+                        let s = d.summary || d;
+
+                        let origAddr = d.origin?.address || '';
+                        if(origAddr === 'IND') origAddr = 'INDONESIA';
+
+                        let destAddr = d.destination?.address || '';
+                        if(destAddr === 'IND') destAddr = 'INDONESIA';
+
+                        let header = `
+                            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 mb-8 shadow-sm relative overflow-hidden">
+                                <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                                <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-5 mb-5">
+                                    <div>
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Status</span>
+                                        <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">${s.status || 'IN TRANSIT'}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Service & Timestamp</span>
+                                        <div class="font-bold text-slate-800 dark:text-white text-sm">${s.service || '-'}</div>
+                                        <div class="text-xs font-medium text-slate-500 mt-0.5">${s.date || ''}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-start justify-between relative">
+                                    <div class="w-5/12 pr-4">
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5"><i class="ph-fill ph-map-pin text-blue-500"></i> ORIGIN</span>
+                                        <div class="font-bold text-slate-800 dark:text-white text-sm mb-1">${d.origin?.contact_name || 'PT LinksField'}</div>
+                                        <div class="text-xs text-slate-500 leading-relaxed">${origAddr}</div>
+                                    </div>
+                                    <div class="w-2/12 flex justify-center text-slate-300 dark:text-slate-600 pt-3">
+                                        <i class="ph-bold ph-arrow-right text-3xl"></i>
+                                    </div>
+                                    <div class="w-5/12 pl-4 text-right">
+                                        <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">DESTINATION <i class="ph-fill ph-flag-checkered text-emerald-500"></i></span>
+                                        <div class="font-bold text-indigo-600 dark:text-indigo-400 text-sm mb-1">${d.destination?.contact_name || '-'}</div>
+                                        <div class="text-xs text-slate-500 leading-relaxed">${destAddr}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+
+                        let timeline = '<h6 class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-5 px-2 flex items-center gap-2"><i class="ph-fill ph-clock-counter-clockwise text-lg"></i> Shipment History Logs</h6><div class="relative border-l-2 border-slate-200 dark:border-slate-700 ml-4 space-y-6 pb-4">';
+                        
+                        let historyData = d.history || d.histories;
+                        if(historyData && historyData.length > 0) { 
+                            historyData.forEach((h, i) => {
+                                let active = i===0;
+                                let dotClass = active ? 'bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-900/30' : 'bg-slate-300 dark:bg-slate-600';
+                                let textClass = active ? 'text-blue-600 dark:text-blue-400 font-black' : 'text-slate-700 dark:text-slate-300 font-bold';
+                                let boxClass = active ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-800 dark:text-blue-300 shadow-sm' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400';
+                                let dateDisplay = h.date ? h.date.replace('T', ' ').substring(0, 16) : '-';
+                                let statusDesc = h.desc || h.message || h.status || '';
+
+                                timeline += `
+                                <div class="relative pl-6">
+                                    <div class="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full ${dotClass} transition-all"></div>
+                                    <span class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">${dateDisplay}</span>
+                                    <div class="text-sm ${textClass} mb-2">${h.status || 'UPDATE'}</div>
+                                    <div class="text-xs p-3.5 rounded-xl border ${boxClass} leading-relaxed">${statusDesc}</div>
+                                </div>`;
+                            });
+                        } else { 
+                            timeline += '<div class="pl-6 text-sm text-slate-500 italic">No historical logs available from courier.</div>'; 
+                        }
+                        timeline += '</div>';
+
+                        $('#trackingResult').html(header + timeline);
+                    } else {
+                        showTrackingError(r.message || 'Please verify the AWB number and the selected courier.');
+                    }
+                } else {
+                    // Fallback If PHP directly returns HTML string
+                    let html = result.data;
+                    if(html.includes('Data tidak ditemukan') || html.includes('Not Found') || html.includes('error')) {
+                        showTrackingError('Please verify the AWB number and the selected courier.<br>Data might take up to 24 hours to be available on courier system.');
+                    } else {
+                        $('#trackingResult').html(html);
+                    }
+                }
+            })
+            .catch(e => { 
+                $('#trackingResult').html('<div class="text-center py-10"><i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i><span class="text-red-600 font-bold">Failed to fetch API</span></div>'); 
+            });
+    }
+
+    function showTrackingError(msg) {
+        $('#trackingResult').html(`
+            <div class="text-center py-12 text-slate-500 dark:text-slate-400">
+                <i class="ph-fill ph-warning-circle text-6xl mb-4 text-amber-400 block"></i>
+                <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2">Tracking Data Not Found</h4>
+                <p class="text-sm font-medium leading-relaxed">${msg}</p>
+            </div>
+        `);
     }
 
     function viewDetail(d) {
         let html = `
             <div class="text-center mb-6 mt-2 relative">
-                <div class="absolute top-1/2 left-0 w-full h-px bg-slate-200 -z-10"></div>
-                <div class="inline-flex items-center justify-center bg-white border border-slate-200 shadow-sm rounded-full p-4 mb-4 relative z-10"><i class="ph-fill ph-package text-blue-600 text-4xl"></i></div>
-                <h4 class="text-2xl font-black text-slate-800 tracking-tight font-mono">${d.tracking_number || 'NO AWB'}</h4>
+                <div class="absolute top-1/2 left-0 w-full h-px bg-slate-200 dark:bg-slate-700 -z-10"></div>
+                <div class="inline-flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-full p-4 mb-4 relative z-10"><i class="ph-fill ph-package text-blue-600 text-4xl"></i></div>
+                <h4 class="text-2xl font-black text-slate-800 dark:text-white tracking-tight font-mono">${d.tracking_number || 'NO AWB'}</h4>
                 <span class="inline-block mt-2 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-md">${d.courier_name || 'UNKNOWN COURIER'}</span>
             </div>
             
-            <div class="bg-white border border-slate-200 rounded-2xl p-5 mb-5 shadow-sm">
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-5 shadow-sm">
                 <div class="flex justify-between items-center relative">
-                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-300"><i class="ph-fill ph-arrow-right text-2xl"></i></div>
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600"><i class="ph-fill ph-arrow-right text-2xl"></i></div>
                     <div class="w-1/2 pr-4">
                         <label class="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">SENDER</label>
-                        <p class="font-bold text-slate-800 text-sm">PT LinksField</p>
+                        <p class="font-bold text-slate-800 dark:text-white text-sm">PT LinksField</p>
                     </div>
                     <div class="w-1/2 pl-4 text-right">
                         <label class="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">RECEIVER (CLIENT)</label>
@@ -545,12 +617,12 @@ try {
                 </div>
             </div>
             
-            <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm text-sm">
-                <div class="flex justify-between items-center p-4 border-b border-slate-100"><span class="font-bold text-slate-500">Client PO Ref</span><span class="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-700">${d.client_po || '-'}</span></div>
-                <div class="flex justify-between items-center p-4 border-b border-slate-100"><span class="font-bold text-slate-500">Recipient Name</span><span class="font-bold text-slate-800">${d.receiver_name || '-'}</span></div>
-                <div class="flex justify-between items-center p-4 border-b border-slate-100"><span class="font-bold text-slate-500">Contact Phone</span><span class="font-bold text-slate-800">${d.receiver_phone || '-'}</span></div>
-                <div class="flex justify-between items-center p-4 border-b border-slate-100"><span class="font-bold text-slate-500">Shipment Date</span><span class="font-bold text-slate-800">${d.delivery_date}</span></div>
-                <div class="p-4 bg-slate-50"><span class="font-bold text-slate-500 block mb-2">Delivery Address</span><p class="text-slate-700 leading-relaxed">${d.receiver_address || 'No address provided.'}</p></div>
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm text-sm">
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Client PO Ref</span><span class="font-mono font-bold bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${d.client_po || '-'}</span></div>
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Recipient Name</span><span class="font-bold text-slate-800 dark:text-white">${d.receiver_name || '-'}</span></div>
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Contact Phone</span><span class="font-bold text-slate-800 dark:text-white">${d.receiver_phone || '-'}</span></div>
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Shipment Date</span><span class="font-bold text-slate-800 dark:text-white">${d.delivery_date}</span></div>
+                <div class="p-4 bg-slate-50 dark:bg-slate-900/50"><span class="font-bold text-slate-500 block mb-2">Delivery Address</span><p class="text-slate-700 dark:text-slate-300 leading-relaxed">${d.receiver_address || 'No address provided.'}</p></div>
             </div>`;
         $('#detailContent').html(html);
         $('#detailModal').removeClass('hidden').addClass('flex'); $('body').css('overflow', 'hidden');
