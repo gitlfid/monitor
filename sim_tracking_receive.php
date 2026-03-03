@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: Pure Raw Fetch for Tracking API (No JS Validation / Blocking)
+// FIX: Exact Copy of Original Fetch Logic for Tracking API
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -397,7 +397,7 @@ try {
         <input type="hidden" name="type" value="delivery"><input type="hidden" name="id" id="del_id">
         <div class="flex items-center justify-between border-b border-blue-500 px-7 py-5 bg-blue-600 text-white shrink-0"><h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-paper-plane-right text-xl"></i> Outbound Shipment Form</h5><button type="button" class="btn-close-modal text-white/70 hover:text-white transition-all"><i class="ph ph-x text-xl"></i></button></div>
         
-        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar flex-1">
+        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-slate-800 dark:text-white">
                 <div class="space-y-4">
                     <h6 class="text-[11px] font-black text-blue-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Destination Target</h6>
@@ -500,15 +500,15 @@ try {
     });
 
     // ====================================================================
-    // FIX TRACKING API: TANPA VALIDASI JS APAPUN (RAW FETCH)
+    // MURNI COPY PASTE DARI REFERENCE ANDA (sim_tracking_receive (3).php)
+    // Tidak ada modifikasi atau filter dari pihak Javascript
     // ====================================================================
     function trackResi(resi, kurir) {
-        if(!resi) { alert('No tracking data available.'); return; }
+        if(!resi || !kurir) { alert('No tracking data available.'); return; }
         
         $('body').css('overflow', 'hidden'); 
         $('#trackingModal').removeClass('hidden').addClass('flex');
         
-        // Render Loading State
         $('#trackingResult').html(`
             <div class="flex flex-col items-center justify-center py-16">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
@@ -516,20 +516,14 @@ try {
             </div>
         `);
         
-        // Menggunakan murni RAW Fetch persis seperti kode pertama kali Anda buat.
-        // Tidak ada logic JSON, includes error, atau apapun. Menampilkan bulat-bulat dari backend.
+        // Pure Fetch Logic (Sama Persis Seperti File Rujukan)
         fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
             .then(r => r.text())
-            .then(html => { 
-                $('#trackingResult').html(html); 
+            .then(d => { 
+                document.getElementById('trackingResult').innerHTML = d; 
             })
             .catch(e => { 
-                $('#trackingResult').html(`
-                    <div class="text-center py-10">
-                        <i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i>
-                        <span class="text-red-600 font-bold">Error connecting to server.</span>
-                    </div>
-                `); 
+                document.getElementById('trackingResult').innerHTML = '<div class="text-center py-10 text-red-500 font-bold">Error tracking.</div>'; 
             });
     }
 
