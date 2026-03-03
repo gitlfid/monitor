@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: Removed Strict JS Validation for Tracking API (Show Raw Output)
+// FIX: Pure Raw Fetch for Tracking API (No JS Validation / Blocking)
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -146,7 +146,7 @@ try {
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* DATATABLES PAGINATION FIX */
+    /* DATATABLES PAGINATION FIX (Right Aligned) */
     .dataTables_wrapper .dataTables_paginate {
         display: flex !important;
         flex-direction: row !important;
@@ -335,7 +335,6 @@ try {
                         <span class="text-[10px] uppercase font-black tracking-widest text-slate-400">Batch: <?= e($row['batch_name']) ?></span>
                     </td>
                     <td class="align-top"><code class="text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md border border-indigo-100 dark:border-indigo-800 shadow-sm"><?= e($row['provider_po']) ?></code></td>
-                    
                     <td class="align-top">
                         <?php if(!empty($row['linked_client_po'])): ?>
                             <div class="flex flex-col gap-1.5">
@@ -351,7 +350,6 @@ try {
                             <span class="text-[10px] text-slate-400 italic font-medium px-2 py-1 border border-dashed border-slate-300 rounded-md">Not Linked</span>
                         <?php endif; ?>
                     </td>
-
                     <td class="align-top"><span class="text-[11px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="ph-fill ph-user text-emerald-500"></i> <?= e($row['pic_name']) ?></span></td>
                     <td class="text-right align-top"><span class="font-black text-emerald-600 dark:text-emerald-400 font-mono text-xl">+<?= number_format($row['qty']) ?></span></td>
                     <td class="pe-8 text-center align-top">
@@ -399,7 +397,7 @@ try {
         <input type="hidden" name="type" value="delivery"><input type="hidden" name="id" id="del_id">
         <div class="flex items-center justify-between border-b border-blue-500 px-7 py-5 bg-blue-600 text-white shrink-0"><h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-paper-plane-right text-xl"></i> Outbound Shipment Form</h5><button type="button" class="btn-close-modal text-white/70 hover:text-white transition-all"><i class="ph ph-x text-xl"></i></button></div>
         
-        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar">
+        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar flex-1">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-slate-800 dark:text-white">
                 <div class="space-y-4">
                     <h6 class="text-[11px] font-black text-blue-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Destination Target</h6>
@@ -502,7 +500,7 @@ try {
     });
 
     // ====================================================================
-    // FIX TRACKING API: MURNI FETCH (NO STRING VALIDATION)
+    // FIX TRACKING API: TANPA VALIDASI JS APAPUN (RAW FETCH)
     // ====================================================================
     function trackResi(resi, kurir) {
         if(!resi) { alert('No tracking data available.'); return; }
@@ -510,6 +508,7 @@ try {
         $('body').css('overflow', 'hidden'); 
         $('#trackingModal').removeClass('hidden').addClass('flex');
         
+        // Render Loading State
         $('#trackingResult').html(`
             <div class="flex flex-col items-center justify-center py-16">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
@@ -517,27 +516,21 @@ try {
             </div>
         `);
         
-        // Panggil fungsi JQuery AJAX: HANYA MENCETAK APA ADANYA DARI BACKEND
-        $.ajax({
-            url: 'ajax_track_delivery.php',
-            method: 'GET',
-            data: {
-                resi: resi.trim(),
-                kurir: kurir ? kurir.trim() : '' // Biarkan backend yang memproses kurirnya
-            },
-            success: function(response) {
-                // Cetak hasil murni 100% dari file ajax_track_delivery.php
-                $('#trackingResult').html(response);
-            },
-            error: function() {
+        // Menggunakan murni RAW Fetch persis seperti kode pertama kali Anda buat.
+        // Tidak ada logic JSON, includes error, atau apapun. Menampilkan bulat-bulat dari backend.
+        fetch(`ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`)
+            .then(r => r.text())
+            .then(html => { 
+                $('#trackingResult').html(html); 
+            })
+            .catch(e => { 
                 $('#trackingResult').html(`
                     <div class="text-center py-10">
                         <i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i>
-                        <span class="text-red-600 font-bold">Failed to connect to backend</span>
+                        <span class="text-red-600 font-bold">Error connecting to server.</span>
                     </div>
-                `);
-            }
-        });
+                `); 
+            });
     }
 
     function viewDetail(d) {
