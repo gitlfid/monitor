@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: Tracking API False Positive Fix & Lowercase Courier Param
+// FIX: Removed Strict JS Validation for Tracking API (Show Raw Output)
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -31,11 +31,17 @@ try {
             po.po_number as provider_po, 
             po.batch_name,
             COALESCE(c.company_name, po.manual_company_name) as provider_name,
-            (SELECT po_number FROM sim_tracking_po WHERE id = po.link_client_po_id LIMIT 1) as linked_client_po
+            GROUP_CONCAT(DISTINCT linked_client.po_number SEPARATOR ', ') as linked_client_po,
+            (SELECT COALESCE(proj.project_name, spo.manual_project_name) 
+             FROM sim_tracking_po spo 
+             LEFT JOIN projects proj ON spo.project_id = proj.id 
+             WHERE spo.id = po.link_client_po_id LIMIT 1) as linked_project_name
             FROM sim_tracking_logistics l
             LEFT JOIN sim_tracking_po po ON l.po_id = po.id
             LEFT JOIN companies c ON po.company_id = c.id
+            LEFT JOIN sim_tracking_po linked_client ON po.link_client_po_id = linked_client.id
             WHERE l.type = 'receive'
+            GROUP BY l.id
             ORDER BY l.logistic_date DESC, l.id DESC";
     if ($db) {
         $stmt = $db->query($sql_recv);
@@ -80,6 +86,7 @@ try {
                 po.po_number as client_po, 
                 po.batch_name,
                 COALESCE(c.company_name, po.manual_company_name) as client_name,
+                COALESCE(proj.project_name, po.manual_project_name) as project_name,
                 l.logistic_date as delivery_date,
                 l.awb as tracking_number,
                 l.courier as courier_name,
@@ -87,11 +94,14 @@ try {
                 l.pic_phone as receiver_phone,
                 l.delivery_address as receiver_address,
                 l.received_date as delivered_date,
-                (SELECT po_number FROM sim_tracking_po WHERE link_client_po_id = po.id LIMIT 1) as ref_provider_po
+                GROUP_CONCAT(DISTINCT provider_po.po_number SEPARATOR ', ') as ref_provider_po
                 FROM sim_tracking_logistics l
                 LEFT JOIN sim_tracking_po po ON l.po_id = po.id
                 LEFT JOIN companies c ON po.company_id = c.id
+                LEFT JOIN projects proj ON po.project_id = proj.id
+                LEFT JOIN sim_tracking_po provider_po ON provider_po.link_client_po_id = po.id
                 $where_clause
+                GROUP BY l.id
                 ORDER BY l.logistic_date DESC, l.id DESC");
         
         if (!empty($search_track)) $stmt->bindValue(':search', "%$search_track%");
@@ -106,7 +116,7 @@ try {
 // --- C. DATA PO OPTIONS ---
 $provider_pos = []; $client_pos = [];
 try {
-    $stmt = $db->query("SELECT po.id, po.po_number, po.type, COALESCE(c.company_name, po.manual_company_name) as company_name, c.pic_name, c.pic_phone FROM sim_tracking_po po LEFT JOIN companies c ON po.company_id = c.id ORDER BY po.id DESC");
+    $stmt = $db->query("SELECT po.id, po.po_number, po.type, COALESCE(c.company_name, po.manual_company_name) as company_name FROM sim_tracking_po po LEFT JOIN companies c ON po.company_id = c.id ORDER BY po.id DESC");
     if($stmt) {
         $all = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach($all as $p) {
@@ -123,15 +133,9 @@ try {
     @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     .modal-animate-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     
-    /* Highlight Auto-fill Input */
-    .input-highlight { animation: highlightInput 1s ease-out; }
-    @keyframes highlightInput { 0% { background-color: #eff6ff; border-color: #3b82f6; } 100% { background-color: #ffffff; border-color: #e2e8f0; } }
-    .dark .input-highlight { animation: highlightInputDark 1s ease-out; }
-    @keyframes highlightInputDark { 0% { background-color: rgba(59,130,246,0.2); border-color: #3b82f6; } 100% { background-color: #1e293b; border-color: #334155; } }
-
     /* Table Styling */
-    .table-modern thead th { background: #f8fafc; color: #64748b; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.25rem; border-bottom: 1px solid #e2e8f0; }
-    .table-modern tbody td { padding: 1.25rem; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
+    .table-modern thead th { background: #f8fafc; color: #64748b; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.25rem 1.25rem; border-bottom: 1px solid #e2e8f0; }
+    .table-modern tbody td { padding: 1.5rem 1.25rem; vertical-align: top; border-bottom: 1px solid #f1f5f9; }
     .table-row-hover:hover { background-color: rgba(248, 250, 252, 0.8); }
     .dark .table-modern thead th { background: #1e293b; border-color: #334155; color: #94a3b8; }
     .dark .table-modern tbody td { border-color: #334155; }
@@ -142,60 +146,28 @@ try {
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* DATATABLES PAGINATION (RIGHT ALIGNED & INLINE) */
-    .bottom-pagination {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        padding: 1.5rem;
-    }
-    .dataTables_paginate {
+    /* DATATABLES PAGINATION FIX */
+    .dataTables_wrapper .dataTables_paginate {
         display: flex !important;
         flex-direction: row !important;
+        justify-content: flex-end !important;
         align-items: center !important;
         gap: 0.5rem !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+        padding-right: 2rem !important;
     }
-    .dataTables_paginate span {
-        display: flex !important;
-        flex-direction: row !important;
-        gap: 0.3rem !important;
+    .dataTables_wrapper .dataTables_paginate span { display: flex !important; flex-direction: row !important; gap: 0.3rem !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        display: inline-flex !important; align-items: center !important; justify-content: center !important; padding: 0.5rem 1rem !important; min-width: 2.5rem !important; border-radius: 0.5rem !important; border: 1px solid #e2e8f0 !important; background-color: #ffffff !important; color: #475569 !important; font-size: 0.875rem !important; font-weight: 600 !important; cursor: pointer !important; text-decoration: none !important; transition: all 0.2s ease !important; margin: 0 !important;
     }
-    .paginate_button {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 0.5rem 1rem !important;
-        border-radius: 0.5rem !important;
-        border: 1px solid #e2e8f0 !important;
-        background-color: #ffffff !important;
-        color: #475569 !important;
-        font-size: 0.875rem !important;
-        font-weight: 600 !important;
-        cursor: pointer !important;
-        text-decoration: none !important;
-        transition: all 0.2s ease !important;
-        margin: 0 !important;
-    }
-    .paginate_button:hover:not(.current):not(.disabled) {
-        background-color: #f8fafc !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
-    }
-    .paginate_button.current {
-        background-color: #3b82f6 !important;
-        border-color: #3b82f6 !important;
-        color: #ffffff !important;
-        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
-    }
-    .paginate_button.disabled {
-        opacity: 0.5 !important;
-        cursor: not-allowed !important;
-        background-color: #f8fafc !important;
-    }
-    .dark .paginate_button { background-color: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-    .dark .paginate_button:hover:not(.current):not(.disabled) { background-color: #334155 !important; border-color: #475569 !important; color: #ffffff !important; }
-    .dark .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; }
-    .dark .paginate_button.disabled { background-color: #0f172a !important; border-color: #1e293b !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; color: #ffffff !important; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { opacity: 0.5 !important; cursor: not-allowed !important; background-color: #f8fafc !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button { background-color: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) { background-color: #334155 !important; border-color: #475569 !important; color: #ffffff !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; }
+    .dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { background-color: #0f172a !important; border-color: #1e293b !important; }
 </style>
 
 <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -286,12 +258,21 @@ try {
                             <div class="mt-2 text-[10px] font-bold text-slate-500">Sent: <?= date('d/m/Y', strtotime($row['delivery_date'])) ?></div>
                         </td>
                         <td class="align-top">
-                            <div class="flex flex-col">
+                            <div class="flex flex-col gap-1.5">
                                 <span class="font-bold text-slate-800 dark:text-white text-sm"><?= e($row['client_name']) ?></span>
-                                <div class="flex flex-col gap-0.5 mt-1">
-                                    <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 rounded border border-blue-100 dark:border-blue-800 w-max">Client PO: <?= e($row['client_po']) ?></span>
+                                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                    <i class="ph-fill ph-folder-open text-amber-500 text-sm"></i> 
+                                    <?= !empty($row['project_name']) ? e($row['project_name']) : 'No Project' ?>
+                                </span>
+                                
+                                <div class="flex flex-col gap-1 mt-1">
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800 w-max" title="Client PO">
+                                        <i class="ph-bold ph-receipt text-blue-500"></i> <?= e($row['client_po']) ?>
+                                    </span>
                                     <?php if(!empty($row['ref_provider_po'])): ?>
-                                    <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 rounded border border-emerald-100 dark:border-emerald-800 w-max">Prov PO: <?= e($row['ref_provider_po']) ?></span>
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800 w-max" title="Provider PO">
+                                        <i class="ph-bold ph-truck text-emerald-500"></i> <?= e($row['ref_provider_po']) ?>
+                                    </span>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -354,13 +335,23 @@ try {
                         <span class="text-[10px] uppercase font-black tracking-widest text-slate-400">Batch: <?= e($row['batch_name']) ?></span>
                     </td>
                     <td class="align-top"><code class="text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md border border-indigo-100 dark:border-indigo-800 shadow-sm"><?= e($row['provider_po']) ?></code></td>
+                    
                     <td class="align-top">
                         <?php if(!empty($row['linked_client_po'])): ?>
-                            <code class="text-xs text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 shadow-sm leading-relaxed"><?= e($row['linked_client_po']) ?></code>
+                            <div class="flex flex-col gap-1.5">
+                                <code class="text-xs text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 shadow-sm w-max">
+                                    <?= e($row['linked_client_po']) ?>
+                                </code>
+                                <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                    <i class="ph-fill ph-folder-open text-amber-500 text-xs"></i> 
+                                    <?= !empty($row['linked_project_name']) ? e($row['linked_project_name']) : 'No Project' ?>
+                                </span>
+                            </div>
                         <?php else: ?>
                             <span class="text-[10px] text-slate-400 italic font-medium px-2 py-1 border border-dashed border-slate-300 rounded-md">Not Linked</span>
                         <?php endif; ?>
                     </td>
+
                     <td class="align-top"><span class="text-[11px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5"><i class="ph-fill ph-user text-emerald-500"></i> <?= e($row['pic_name']) ?></span></td>
                     <td class="text-right align-top"><span class="font-black text-emerald-600 dark:text-emerald-400 font-mono text-xl">+<?= number_format($row['qty']) ?></span></td>
                     <td class="pe-8 text-center align-top">
@@ -412,24 +403,24 @@ try {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-slate-800 dark:text-white">
                 <div class="space-y-4">
                     <h6 class="text-[11px] font-black text-blue-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Destination Target</h6>
-                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Send Date *</label><input type="date" name="logistic_date" id="del_date" required class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
-                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Target Client PO *</label><select name="po_id" id="del_po_id" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="">-- Select Client PO --</option><?php foreach($client_pos as $po) echo "<option value='{$po['id']}' class='dark:bg-slate-800'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Send Date</label><input type="date" name="logistic_date" id="del_date" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Target Client PO</label><select name="po_id" id="del_po_id" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="">-- Select Client PO --</option><?php foreach($client_pos as $po) echo "<option value='{$po['id']}' class='dark:bg-slate-800'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Recipient Name</label><input type="text" name="pic_name" id="del_pic" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Contact Phone</label><input type="text" name="pic_phone" id="del_phone" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Recipient Name</label><input type="text" name="pic_name" id="del_pic" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Contact Phone</label><input type="text" name="pic_phone" id="del_phone" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
                     </div>
-                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Full Delivery Address</label><textarea name="delivery_address" id="del_address" rows="3" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm resize-none"></textarea></div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Full Delivery Address</label><textarea name="delivery_address" id="del_address" rows="3" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm resize-none"></textarea></div>
                 </div>
 
                 <div class="space-y-4">
                     <h6 class="text-[11px] font-black text-indigo-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Logistics Provider</h6>
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Courier Service</label><input type="text" name="courier" id="del_courier" placeholder="e.g. JNE, Sicepat" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm uppercase font-bold outline-none focus:border-blue-500 shadow-sm"></div>
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">AWB / Receipt Number</label><input type="text" name="awb" id="del_awb" placeholder="Input Resi" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Courier Service</label><input type="text" name="courier" id="del_courier" placeholder="e.g. JNE, Sicepat" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm uppercase font-bold outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">AWB / Receipt Number</label><input type="text" name="awb" id="del_awb" placeholder="Input Resi" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm"></div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Quantity Sent</label><input type="number" name="qty" id="del_qty" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-black text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 shadow-sm"></div>
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Delivery Status</label><select name="status" id="del_status" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="Process" class="dark:bg-slate-800">Process (Packing)</option><option value="Shipped" class="dark:bg-slate-800">Shipped (In Transit)</option><option value="Delivered" class="dark:bg-slate-800">Delivered (Done)</option></select></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Quantity Sent</label><input type="number" name="qty" id="del_qty" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-black text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Delivery Status</label><select name="status" id="del_status" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="Process" class="dark:bg-slate-800">Process (Packing)</option><option value="Shipped" class="dark:bg-slate-800">Shipped (In Transit)</option><option value="Delivered" class="dark:bg-slate-800">Delivered (Done)</option></select></div>
                     </div>
                     <div class="mt-4 p-4 bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl">
                         <label class="block text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3"><i class="ph-fill ph-check-circle text-lg"></i> Proof of Delivery (POD)</label>
@@ -511,10 +502,10 @@ try {
     });
 
     // ====================================================================
-    // FIX TRACKING API: Murni FETCH HTML + Hapus Strict Validation 'error'
+    // FIX TRACKING API: MURNI FETCH (NO STRING VALIDATION)
     // ====================================================================
     function trackResi(resi, kurir) {
-        if(!resi || !kurir) { alert('No tracking data available.'); return; }
+        if(!resi) { alert('No tracking data available.'); return; }
         
         $('body').css('overflow', 'hidden'); 
         $('#trackingModal').removeClass('hidden').addClass('flex');
@@ -526,36 +517,23 @@ try {
             </div>
         `);
         
-        // Panggil fungsi AJAX dengan parameter URL yang di-trim dan kurir di-lowercase
+        // Panggil fungsi JQuery AJAX: HANYA MENCETAK APA ADANYA DARI BACKEND
         $.ajax({
             url: 'ajax_track_delivery.php',
             method: 'GET',
             data: {
                 resi: resi.trim(),
-                kurir: kurir.trim().toLowerCase() // Penting untuk API kurir lokal
+                kurir: kurir ? kurir.trim() : '' // Biarkan backend yang memproses kurirnya
             },
             success: function(response) {
-                // Pastikan tipe data dikonversi ke string untuk validasi
-                let html_response = String(response);
-
-                // HAPUS VALIDASI html_response.includes('error') yang merusak render hasil resi normal
-                if(html_response.includes('Data tidak ditemukan') || html_response.includes('Not Found') || html_response.trim() === '') {
-                    $('#trackingResult').html(`
-                        <div class="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
-                            <i class="ph-fill ph-warning-circle text-6xl mb-4 text-amber-400 block"></i>
-                            <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2 text-center">Tracking Data Not Found.</h4>
-                            <p class="text-sm font-medium text-center">Please verify the AWB number and the selected courier.<br>Data might take up to 24 hours to be available on courier system.</p>
-                        </div>
-                    `);
-                } else {
-                    $('#trackingResult').html(html_response);
-                }
+                // Cetak hasil murni 100% dari file ajax_track_delivery.php
+                $('#trackingResult').html(response);
             },
             error: function() {
                 $('#trackingResult').html(`
                     <div class="text-center py-10">
                         <i class="ph-fill ph-wifi-x text-5xl text-red-500 mb-3 block"></i>
-                        <span class="text-red-600 font-bold">Failed to fetch API</span>
+                        <span class="text-red-600 font-bold">Failed to connect to backend</span>
                     </div>
                 `);
             }
@@ -586,6 +564,7 @@ try {
             </div>
             
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm text-sm">
+                <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500 block">Project Name</span><span class="font-bold text-slate-800 dark:text-white flex items-center gap-1"><i class="ph-fill ph-folder-open text-amber-500"></i> ${d.project_name || 'No Project'}</span></div>
                 <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Client PO Ref</span><span class="font-mono font-bold bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${d.client_po || '-'}</span></div>
                 <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Recipient Name</span><span class="font-bold text-slate-800 dark:text-white">${d.receiver_name || '-'}</span></div>
                 <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700"><span class="font-bold text-slate-500">Contact Phone</span><span class="font-bold text-slate-800 dark:text-white">${d.receiver_phone || '-'}</span></div>
