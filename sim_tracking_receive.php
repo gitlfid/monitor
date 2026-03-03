@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_receive.php
 // DESC: Logistics & Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: English Translation for Tracking Error Modal
+// FIX: Tracking API False Positive Fix & Lowercase Courier Param
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -27,7 +27,6 @@ if (!function_exists('e')) {
 // --- A. DATA RECEIVE (INBOUND) ---
 $data_receive = [];
 try {
-    // FIX DUPLICATE: Menggunakan Subquery untuk mendapatkan Client PO
     $sql_recv = "SELECT l.*, 
             po.po_number as provider_po, 
             po.batch_name,
@@ -77,7 +76,6 @@ if (!empty($filter_courier)) $where_clause .= " AND l.courier = :courier";
 $data_delivery = [];
 try {
     if ($db) {
-        // FIX DUPLICATE: Menggunakan Subquery untuk mengambil Provider PO
         $stmt = $db->prepare("SELECT l.*, 
                 po.po_number as client_po, 
                 po.batch_name,
@@ -108,7 +106,6 @@ try {
 // --- C. DATA PO OPTIONS ---
 $provider_pos = []; $client_pos = [];
 try {
-    // Modified to include pic_name and pic_phone for Auto-fill functionality
     $stmt = $db->query("SELECT po.id, po.po_number, po.type, COALESCE(c.company_name, po.manual_company_name) as company_name, c.pic_name, c.pic_phone FROM sim_tracking_po po LEFT JOIN companies c ON po.company_id = c.id ORDER BY po.id DESC");
     if($stmt) {
         $all = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -145,9 +142,7 @@ try {
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* ===================================================== */
-    /* FIX: DATATABLES PAGINATION (RIGHT ALIGNED & INLINE)   */
-    /* ===================================================== */
+    /* DATATABLES PAGINATION (RIGHT ALIGNED & INLINE) */
     .bottom-pagination {
         display: flex;
         justify-content: flex-end;
@@ -302,14 +297,14 @@ try {
                             </div>
                         </td>
                         <td class="align-top">
-                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1 block"><?= e($row['courier_name']) ?></span>
+                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1.5 block"><?= e($row['courier_name']) ?></span>
                             <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
                                 <i class="ph-bold ph-crosshair text-indigo-500"></i> <?= e($row['tracking_number'] ?: 'NO-AWB') ?>
                             </button>
                         </td>
                         <td class="align-top">
                             <div class="text-[11px]"><span class="text-slate-400 font-bold uppercase">From:</span> <span class="dark:text-slate-200">LinksField WH</span></div>
-                            <div class="text-[11px] mt-1"><span class="text-slate-400 font-bold uppercase">To:</span> <span class="dark:text-slate-200 line-clamp-1" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
+                            <div class="text-[11px] mt-1.5"><span class="text-slate-400 font-bold uppercase">To:</span> <span class="dark:text-slate-200 line-clamp-1" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
                         </td>
                         <td class="text-right align-top"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
                         <td class="pe-8 text-center align-top">
@@ -413,52 +408,42 @@ try {
         <input type="hidden" name="type" value="delivery"><input type="hidden" name="id" id="del_id">
         <div class="flex items-center justify-between border-b border-blue-500 px-7 py-5 bg-blue-600 text-white shrink-0"><h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-paper-plane-right text-xl"></i> Outbound Shipment Form</h5><button type="button" class="btn-close-modal text-white/70 hover:text-white transition-all"><i class="ph ph-x text-xl"></i></button></div>
         
-        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar flex-1">
+        <div class="overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/50 custom-scrollbar">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-slate-800 dark:text-white">
                 <div class="space-y-4">
                     <h6 class="text-[11px] font-black text-blue-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Destination Target</h6>
                     <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Send Date *</label><input type="date" name="logistic_date" id="del_date" required class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
-                    
-                    <div>
-                        <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Target Client PO *</label>
-                        <select name="po_id" id="del_po_id" required onchange="autoFillDelivery()" class="w-full rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50/30 dark:bg-blue-900/20 py-2.5 px-4 text-sm font-bold text-blue-700 dark:text-blue-400 outline-none focus:border-blue-500 shadow-sm cursor-pointer transition-all">
-                            <option value="">-- Select Client PO --</option>
-                            <?php foreach($client_pos as $po): ?>
-                                <option value="<?= $po['id'] ?>" data-company="<?= e($po['company_name']) ?>" data-pic="<?= e($po['pic_name']) ?>" data-phone="<?= e($po['pic_phone']) ?>"><?= e($po['company_name']) ?> - <?= e($po['po_number']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Target Client PO *</label><select name="po_id" id="del_po_id" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="">-- Select Client PO --</option><?php foreach($client_pos as $po) echo "<option value='{$po['id']}' class='dark:bg-slate-800'>{$po['company_name']} - {$po['po_number']}</option>"; ?></select></div>
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Recipient Name</label><input type="text" name="pic_name" id="del_pic" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm transition-all duration-300"></div>
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Contact Phone</label><input type="text" name="pic_phone" id="del_phone" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm transition-all duration-300"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Recipient Name</label><input type="text" name="pic_name" id="del_pic" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Contact Phone</label><input type="text" name="pic_phone" id="del_phone" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm"></div>
                     </div>
-                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Full Delivery Address</label><textarea name="delivery_address" id="del_address" rows="3" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm resize-none transition-all duration-300"></textarea></div>
+                    <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Full Delivery Address</label><textarea name="delivery_address" id="del_address" rows="3" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm outline-none focus:border-blue-500 shadow-sm resize-none"></textarea></div>
                 </div>
 
                 <div class="space-y-4">
                     <h6 class="text-[11px] font-black text-indigo-500 uppercase tracking-widest border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">Logistics Provider</h6>
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Courier Service</label><input type="text" name="courier" id="del_courier" placeholder="e.g. JNE, Sicepat" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-sm uppercase font-bold outline-none focus:border-indigo-500 shadow-sm"></div>
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">AWB / Receipt No</label><input type="text" name="awb" id="del_awb" placeholder="Input Resi" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-sm font-mono font-bold outline-none focus:border-indigo-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Courier Service</label><input type="text" name="courier" id="del_courier" placeholder="e.g. JNE, Sicepat" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm uppercase font-bold outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">AWB / Receipt Number</label><input type="text" name="awb" id="del_awb" placeholder="Input Resi" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-mono font-bold outline-none focus:border-blue-500 shadow-sm"></div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Quantity Sent *</label><input type="number" name="qty" id="del_qty" required class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-indigo-50 dark:bg-slate-900/50 py-3 px-4 text-sm font-black text-indigo-600 outline-none focus:border-indigo-500 shadow-sm"></div>
-                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Delivery Status</label><select name="status" id="del_status" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-sm font-bold outline-none focus:border-indigo-500 shadow-sm"><option value="Process">Process (Packing)</option><option value="Shipped">Shipped (In Transit)</option><option value="Delivered">Delivered (Done)</option></select></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Quantity Sent</label><input type="number" name="qty" id="del_qty" required class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-black text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 shadow-sm"></div>
+                        <div><label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Delivery Status</label><select name="status" id="del_status" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 px-4 text-sm font-bold outline-none focus:border-blue-500 shadow-sm"><option value="Process" class="dark:bg-slate-800">Process (Packing)</option><option value="Shipped" class="dark:bg-slate-800">Shipped (In Transit)</option><option value="Delivered" class="dark:bg-slate-800">Delivered (Done)</option></select></div>
                     </div>
-                    <div class="mt-4 p-5 bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl">
+                    <div class="mt-4 p-4 bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl">
                         <label class="block text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3"><i class="ph-fill ph-check-circle text-lg"></i> Proof of Delivery (POD)</label>
                         <div class="grid grid-cols-2 gap-4">
-                            <div><input type="date" name="received_date" id="del_recv_date" class="w-full rounded-xl border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 py-2.5 px-3 text-xs outline-none focus:border-indigo-500 shadow-sm"></div>
-                            <div><input type="text" name="receiver_name" id="del_recv_name" placeholder="Accepted By (Name)" class="w-full rounded-xl border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 py-2.5 px-3 text-xs outline-none focus:border-indigo-500 shadow-sm"></div>
+                            <div><input type="date" name="received_date" id="del_recv_date" class="w-full rounded-xl border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 py-2 px-3 text-xs outline-none focus:border-indigo-500 shadow-sm"></div>
+                            <div><input type="text" name="receiver_name" id="del_recv_name" placeholder="Accepted By (Name)" class="w-full rounded-xl border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 py-2 px-3 text-xs outline-none focus:border-indigo-500 shadow-sm"></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="border-t border-slate-100 dark:border-slate-800 px-8 py-5 bg-white dark:bg-slate-800 flex justify-end gap-3 shrink-0 rounded-b-3xl">
-            <button type="button" class="btn-close-modal px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all">Cancel</button>
-            <button type="submit" class="rounded-xl bg-blue-600 px-8 py-3 text-sm font-bold text-white transition-all hover:bg-blue-700 shadow-md active:scale-95 flex items-center gap-2"><i class="ph-bold ph-paper-plane-tilt"></i> Execute Outbound</button>
+        <div class="border-t border-slate-100 dark:border-slate-800 px-7 py-5 bg-white dark:bg-slate-800 flex justify-end gap-3 shrink-0 rounded-b-3xl">
+            <button type="button" class="btn-close-modal px-6 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all">Cancel</button>
+            <button type="submit" class="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white transition-all hover:bg-blue-700 shadow-md active:scale-95"><i class="ph-bold ph-floppy-disk mr-1"></i> Save Outbound</button>
         </div>
     </form>
 </div>
@@ -520,28 +505,14 @@ try {
             $(this).closest('.modal-container').removeClass('flex').addClass('hidden');
             $('body').css('overflow', 'auto');
         });
+        $('.modal-container').click(function(e) {
+            if(e.target === this) { $(this).removeClass('flex').addClass('hidden'); $('body').css('overflow', 'auto'); }
+        });
     });
 
-    // --- AUTO FILL LOGIC FOR DELIVERY FORM ---
-    function autoFillDelivery() {
-        const selected = $('#del_po_id').find(':selected');
-        if(!selected.val()) {
-            $('#del_pic').val(''); $('#del_phone').val(''); $('#del_address').val(''); return;
-        }
-        const pic = selected.data('pic') || '';
-        const phone = selected.data('phone') || '';
-        const company = selected.data('company') || '';
-        
-        const autoAddress = company ? `TO: ${company}\nATTN: ${pic}\n\n` : '';
-
-        $('#del_pic').val(pic).addClass('input-highlight');
-        $('#del_phone').val(phone).addClass('input-highlight');
-        $('#del_address').val(autoAddress).addClass('input-highlight');
-
-        setTimeout(() => { $('#del_pic, #del_phone, #del_address').removeClass('input-highlight'); }, 1000);
-    }
-
-    // --- ORIGINAL TRACKING LOGIC (AJAX HTML FETCH) ---
+    // ====================================================================
+    // FIX TRACKING API: Murni FETCH HTML + Hapus Strict Validation 'error'
+    // ====================================================================
     function trackResi(resi, kurir) {
         if(!resi || !kurir) { alert('No tracking data available.'); return; }
         
@@ -555,18 +526,25 @@ try {
             </div>
         `);
         
-        // Panggil fungsi JQuery AJAX seperti versi original
+        // Panggil fungsi AJAX dengan parameter URL yang di-trim dan kurir di-lowercase
         $.ajax({
-            url: `ajax_track_delivery.php?resi=${resi}&kurir=${kurir}`,
+            url: 'ajax_track_delivery.php',
             method: 'GET',
-            success: function(html_response) {
-                // Tangani jika respon dari backend berbunyi "Data tidak ditemukan" 
-                if(html_response.includes('Data tidak ditemukan') || html_response.includes('Not Found') || html_response.includes('error')) {
+            data: {
+                resi: resi.trim(),
+                kurir: kurir.trim().toLowerCase() // Penting untuk API kurir lokal
+            },
+            success: function(response) {
+                // Pastikan tipe data dikonversi ke string untuk validasi
+                let html_response = String(response);
+
+                // HAPUS VALIDASI html_response.includes('error') yang merusak render hasil resi normal
+                if(html_response.includes('Data tidak ditemukan') || html_response.includes('Not Found') || html_response.trim() === '') {
                     $('#trackingResult').html(`
                         <div class="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
                             <i class="ph-fill ph-warning-circle text-6xl mb-4 text-amber-400 block"></i>
                             <h4 class="font-black text-xl text-slate-800 dark:text-white mb-2 text-center">Tracking Data Not Found.</h4>
-                            <p class="text-sm font-medium text-center">Please verify the AWB number and the selected courier.</p>
+                            <p class="text-sm font-medium text-center">Please verify the AWB number and the selected courier.<br>Data might take up to 24 hours to be available on courier system.</p>
                         </div>
                     `);
                 } else {
