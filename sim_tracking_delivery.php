@@ -2,7 +2,7 @@
 // =========================================================================
 // FILE: sim_tracking_delivery.php
 // DESC: Outbound Delivery Tracking (Ultra-Modern Tailwind CSS)
-// FIX: AJAX Form Submit (Prevent 500 Error), Strict Modal Overlay
+// FEAT: Auto-fill Form, Secure AJAX Submit, Tracking API Render
 // =========================================================================
 ini_set('display_errors', 0); 
 error_reporting(E_ALL);
@@ -69,6 +69,7 @@ try {
                 LEFT JOIN sim_tracking_po po ON l.po_id = po.id
                 LEFT JOIN companies c ON po.company_id = c.id
                 $where_clause
+                GROUP BY l.id
                 ORDER BY l.logistic_date DESC, l.id DESC");
         
         if (!empty($search_track)) $stmt->bindValue(':search', "%$search_track%");
@@ -108,11 +109,14 @@ try {
     .custom-scrollbar::-webkit-scrollbar { width: 6px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-    /* DATA TABLES PAGINATION FIX */
-    .dataTables_wrapper .dataTables_paginate { display: flex !important; justify-content: flex-end !important; align-items: center !important; gap: 0.5rem !important; margin: 1.5rem 2rem 1.5rem 0 !important; }
-    .dataTables_wrapper .dataTables_paginate span { display: flex !important; gap: 0.3rem !important; }
+    /* DATA TABLES PAGINATION FIX (Horizontal Right) */
+    .dataTables_wrapper .dataTables_paginate { display: flex !important; flex-direction: row !important; justify-content: flex-end !important; align-items: center !important; gap: 0.5rem !important; margin: 1.5rem 2rem 1.5rem 0 !important; }
+    .dataTables_wrapper .dataTables_paginate span { display: flex !important; flex-direction: row !important; gap: 0.3rem !important; }
     .paginate_button { display: inline-flex !important; align-items: center !important; justify-content: center !important; padding: 0.5rem 1rem !important; border-radius: 0.5rem !important; border: 1px solid #e2e8f0 !important; background-color: #ffffff !important; color: #475569 !important; font-size: 0.875rem !important; font-weight: 600 !important; cursor: pointer !important; transition: all 0.2s ease !important; margin: 0 !important; }
     .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; color: #ffffff !important; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important; }
+    .paginate_button:hover:not(.current):not(.disabled) { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+    .paginate_button.disabled { opacity: 0.5 !important; cursor: not-allowed !important; background-color: #f8fafc !important; }
+    
     .dark .paginate_button { background-color: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
     .dark .paginate_button.current { background-color: #3b82f6 !important; border-color: #3b82f6 !important; }
     
@@ -121,17 +125,17 @@ try {
     @keyframes highlightInput { 0% { background-color: #eff6ff; border-color: #3b82f6; } 100% { background-color: #ffffff; border-color: #e2e8f0; } }
     .dark .input-highlight { animation: highlightInputDark 1s ease-out; }
     @keyframes highlightInputDark { 0% { background-color: rgba(59,130,246,0.2); border-color: #3b82f6; } 100% { background-color: #1e293b; border-color: #334155; } }
-
-    /* Modal Strict Overlay Fix (Mencegah Modal hancur/nyangkut di bawah) */
+    
+    /* Strict Modal Overlay */
     .strict-overlay { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 99999 !important; }
 </style>
 
 <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
     <div class="animate-fade-in-up">
-        <h2 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">
+        <h2 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight dark:from-blue-400 dark:to-indigo-400">
             Outbound Delivery
         </h2>
-        <p class="text-sm font-medium text-slate-500 mt-1.5 flex items-center gap-1.5">
+        <p class="text-sm font-medium text-slate-500 mt-1.5 flex items-center gap-1.5 dark:text-slate-400">
             <i class="ph ph-paper-plane-tilt text-lg text-blue-500"></i> Manage outbound shipments to clients.
         </p>
     </div>
@@ -140,6 +144,15 @@ try {
             <i class="ph-bold ph-plus text-lg"></i> Create Outbound
         </button>
     </div>
+</div>
+
+<div class="flex gap-2 border-b border-slate-200 dark:border-slate-700 mb-6 animate-fade-in-up">
+    <a href="sim_tracking_delivery.php" class="px-6 py-3.5 text-sm font-bold border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 transition-colors flex items-center gap-2">
+        <i class="ph-fill ph-paper-plane-tilt"></i> Outbound (Sent)
+    </a>
+    <a href="sim_tracking_receive.php" class="px-6 py-3.5 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex items-center gap-2">
+        <i class="ph-fill ph-download-simple"></i> Inbound (Received)
+    </a>
 </div>
 
 <div class="rounded-3xl bg-white shadow-soft dark:bg-[#24303F] border border-slate-100 dark:border-slate-800 animate-fade-in-up relative overflow-hidden block">
@@ -166,7 +179,7 @@ try {
             </div>
             <div class="md:col-span-4 flex justify-end gap-2">
                 <?php if(!empty($search_track) || !empty($filter_project) || !empty($filter_courier)): ?>
-                    <a href="sim_tracking_delivery.php" class="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center">Reset</a>
+                    <a href="sim_tracking_delivery.php" class="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center">Reset</a>
                 <?php endif; ?>
                 <button type="submit" class="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-blue-700 shadow-md flex items-center gap-2 active:scale-95 transition-all"><i class="ph-bold ph-funnel"></i> Apply Filter</button>
             </div>
@@ -181,52 +194,61 @@ try {
                     <th class="w-[20%]">Project / Client</th>
                     <th class="w-[18%]">PO References</th>
                     <th class="w-[18%]">Shipment / AWB</th>
-                    <th class="w-[12%]">Dest</th>
-                    <th class="text-right w-[8%]">Qty</th>
+                    <th class="w-[15%]">Dest</th>
+                    <th class="text-right w-[6%]">Qty</th>
                     <th class="text-center w-[12%] pe-8">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                <?php foreach($data_delivery as $row): 
-                    $st = strtolower($row['status'] ?? '');
-                    $statusClass = $st == 'delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
-                    $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
-                ?>
-                <tr class="table-row-hover transition-colors">
-                    <td class="ps-8 align-top">
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border shadow-sm <?= $statusClass ?>"><?= e($row['status']) ?></span>
-                        <div class="mt-2 text-[10px] font-bold text-slate-500">Sent: <?= date('d/m/Y', strtotime($row['delivery_date'])) ?></div>
-                    </td>
-                    <td class="align-top">
-                        <div class="flex flex-col">
-                            <span class="font-bold text-slate-800 dark:text-white text-sm"><?= e($row['client_name']) ?></span>
-                            <span class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest"><i class="ph-fill ph-buildings"></i> Client Entity</span>
-                        </div>
-                    </td>
-                    <td class="align-top">
-                        <div class="flex flex-col gap-1.5">
-                            <span class="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg border border-blue-100 dark:border-blue-800 w-max shadow-sm" title="Client PO"><i class="ph-bold ph-receipt text-blue-500"></i> <?= e($row['client_po']) ?></span>
-                            <?php if(!empty($row['ref_provider_po'])): ?>
-                            <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 w-max shadow-sm" title="Provider PO"><i class="ph-bold ph-truck text-emerald-500"></i> <?= e($row['ref_provider_po']) ?></span>
-                            <?php endif; ?>
-                        </div>
-                    </td>
-                    <td class="align-top">
-                        <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1.5 block"><?= e($row['courier_name']) ?></span>
-                        <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 hover:bg-indigo-50 transition-all shadow-sm"><i class="ph-bold ph-crosshair text-indigo-500"></i> <?= e($row['tracking_number'] ?: 'NO-AWB') ?></button>
-                    </td>
-                    <td class="align-top"><div class="text-[11px]"><span class="text-slate-400 font-bold uppercase block mb-0.5">To:</span> <span class="dark:text-slate-200 font-bold line-clamp-2" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div></td>
-                    <td class="text-right align-top"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
-                    <td class="pe-8 text-center align-top">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <button onclick='viewDetail(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-blue-600 transition-all shadow-sm flex justify-center items-center"><i class="ph-bold ph-eye text-lg"></i></button>
-                            <button onclick='editDelivery(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-amber-600 transition-all shadow-sm flex justify-center items-center"><i class="ph-fill ph-pencil-simple text-lg"></i></button>
-                            
-                            <a href="process_sim_tracking.php?action=delete_logistic&id=<?= $row['id'] ?>" onclick="return confirm('Delete this outbound data?')" class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-red-600 transition-all shadow-sm flex items-center justify-center"><i class="ph-fill ph-trash text-lg"></i></a>
-                        </div>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
+                <?php if(empty($data_delivery)): ?>
+                    <tr><td colspan="7" class="px-8 py-12 text-center text-slate-500 dark:text-slate-400"><div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 mb-3"><i class="ph-fill ph-package text-3xl opacity-50"></i></div><p class="font-medium">No delivery records found.</p></td></tr>
+                <?php else: ?>
+                    <?php foreach($data_delivery as $row): 
+                        $st = strtolower($row['status'] ?? '');
+                        $statusClass = 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800'; 
+                        if(strpos($st, 'shipped')!==false) $statusClass = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800';
+                        if(strpos($st, 'delivered')!==false) $statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800';
+                        $rowJson = htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8');
+                    ?>
+                    <tr class="table-row-hover transition-colors">
+                        <td class="ps-8 align-top">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border shadow-sm <?= $statusClass ?>"><?= e($row['status']) ?></span>
+                            <div class="mt-2 text-[10px] font-bold text-slate-500">Sent: <?= date('d/m/Y', strtotime($row['delivery_date'])) ?></div>
+                        </td>
+                        <td class="align-top">
+                            <div class="flex flex-col">
+                                <span class="font-bold text-slate-800 dark:text-white text-sm leading-tight"><?= e($row['client_name']) ?></span>
+                                <span class="text-[10px] font-bold text-slate-400 mt-1.5 flex items-center gap-1.5"><i class="ph-fill ph-folder-open text-amber-500"></i> <?= !empty($row['project_name']) ? e($row['project_name']) : 'No Project' ?></span>
+                            </div>
+                        </td>
+                        <td class="align-top">
+                            <div class="flex flex-col gap-1.5">
+                                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg border border-blue-100 dark:border-blue-800 w-max shadow-sm" title="Client PO"><i class="ph-bold ph-receipt text-blue-500"></i> <?= e($row['client_po']) ?></span>
+                                <?php if(!empty($row['ref_provider_po'])): ?>
+                                <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 w-max shadow-sm" title="Provider PO"><i class="ph-bold ph-truck text-emerald-500"></i> <?= e($row['ref_provider_po']) ?></span>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                        <td class="align-top">
+                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1.5 block"><?= e($row['courier_name']) ?></span>
+                            <button onclick='trackResi("<?= e($row['tracking_number']) ?>", "<?= e($row['courier_name']) ?>")' class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-bold border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm">
+                                <i class="ph-bold ph-crosshair text-indigo-500"></i> <?= e($row['tracking_number'] ?: 'NO-AWB') ?>
+                            </button>
+                        </td>
+                        <td class="align-top">
+                            <div class="text-[11px]"><span class="text-slate-400 font-bold uppercase block mb-0.5">To:</span> <span class="dark:text-slate-200 font-bold line-clamp-2" title="<?= e($row['receiver_name']) ?>"><?= e($row['receiver_name']) ?></span></div>
+                        </td>
+                        <td class="text-right align-top"><span class="font-black text-slate-800 dark:text-white font-mono text-xl"><?= number_format($row['qty']) ?></span></td>
+                        <td class="pe-8 text-center align-top">
+                            <div class="flex items-center justify-center gap-1.5">
+                                <button onclick='viewDetail(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-bold ph-eye text-lg"></i></button>
+                                <button onclick='editDelivery(<?= $rowJson ?>)' class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-fill ph-pencil-simple text-lg"></i></button>
+                                <button onclick="deleteData(<?= $row['id'] ?>)" class="h-9 w-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-all shadow-sm flex justify-center items-center"><i class="ph-fill ph-trash text-lg"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -236,6 +258,7 @@ try {
     <form id="formDelivery" action="process_sim_tracking.php" method="POST" class="w-full max-w-4xl rounded-3xl bg-white dark:bg-[#24303F] shadow-2xl flex flex-col max-h-[95vh] border border-slate-200 dark:border-slate-700 modal-animate-in">
         <input type="hidden" name="action" id="del_action" value="create_logistic">
         <input type="hidden" name="type" value="delivery"><input type="hidden" name="id" id="del_id">
+        
         <div class="flex items-center justify-between border-b border-blue-500 px-8 py-6 bg-blue-600 text-white shrink-0 rounded-t-3xl">
             <div>
                 <h5 class="text-lg font-bold flex items-center gap-2"><i class="ph-bold ph-paper-plane-right text-2xl"></i> Automated Outbound Form</h5>
@@ -313,7 +336,7 @@ try {
         <div class="p-8 bg-slate-50 dark:bg-slate-900/50 max-h-[60vh] overflow-y-auto custom-scrollbar text-slate-800 dark:text-white" id="trackingResult">
             </div>
         <div class="border-t border-slate-100 dark:border-slate-800 p-5 bg-white dark:bg-slate-800 flex justify-end">
-            <button type="button" class="btn-close-modal px-8 py-2.5 rounded-xl text-sm font-bold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-all shadow-sm">Close Panel</button>
+            <button type="button" class="btn-close-modal px-8 py-2.5 rounded-xl text-sm font-bold text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-all shadow-sm">Close Panel</button>
         </div>
     </div>
 </div>
@@ -330,7 +353,9 @@ try {
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> <script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script> 
+
+<script>
     $(document).ready(function() {
         $('#table-delivery').DataTable({ 
             dom: 't<"dataTables_wrapper"p>',
@@ -371,7 +396,7 @@ try {
     // AJAX FORM SUBMIT (MENCEGAH ERROR 500 & PAGE REFRESH)
     // ========================================================
     $('#formDelivery').on('submit', function(e) {
-        e.preventDefault(); // Hentikan fungsi submit default html
+        e.preventDefault();
         
         let form = $(this);
         let btn = form.find('button[type="submit"]');
@@ -387,29 +412,32 @@ try {
             success: function(res) {
                 btn.prop('disabled', false).html(originalText);
                 if(res.status === 'success') {
-                    Swal.fire({
-                        title: 'Success!',
-                        text: res.message || 'Delivery data saved successfully.',
-                        icon: 'success',
-                        confirmButtonColor: '#3b82f6'
-                    }).then(() => {
-                        window.location.reload(); 
-                    });
+                    Swal.fire({ title: 'Success!', text: res.message, icon: 'success', confirmButtonColor: '#3b82f6' })
+                        .then(() => { window.location.reload(); });
                 } else {
-                    Swal.fire('Error!', res.message || 'Failed to save data.', 'error');
+                    Swal.fire('Error!', res.message, 'error');
                 }
             },
             error: function(xhr) {
                 btn.prop('disabled', false).html(originalText);
-                Swal.fire({
-                    title: 'Server Error (500)',
-                    text: 'Silakan cek input form, pastikan tidak ada format tanggal atau qty yang salah/kosong.',
-                    icon: 'error',
-                    confirmButtonColor: '#ef4444'
-                });
+                Swal.fire({ title: 'Server Error', text: 'Gagal menghubungi server.', icon: 'error', confirmButtonColor: '#ef4444' });
             }
         });
     });
+
+    // DELETE DATA FUNCTION
+    function deleteData(id) { 
+        Swal.fire({
+            title: 'Delete record?', text: "This action cannot be undone.", icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#64748b', confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.post('process_sim_tracking.php', {action:'delete_logistic', id:id}, function(){
+                    Swal.fire('Deleted!', 'Record has been removed.', 'success').then(() => window.location.reload());
+                }, 'json');
+            }
+        });
+    }
 
     // ========================================================
     // ORIGINAL TRACKING JS (HTML FETCH FROM BACKEND)
